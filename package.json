@@ -1,0 +1,92 @@
+{
+  "name": "ai-novel-studio",
+  "version": "0.2.0",
+  "description": "AI 小说创作工作台 - AI Novel Production Engine Desktop",
+  "main": "out/main/index.js",
+  "author": "ai-novel-studio",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:desktop": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "db:smoke": "node scripts/db-smoke.mjs",
+    "calibrate": "node --experimental-strip-types scripts/calibrate.ts",
+    "dist": "electron-vite build && electron-builder --win",
+    "dist:dir": "electron-vite build && electron-builder --win --dir",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@tanstack/react-query": "5.101.4",
+    "@uiw/react-codemirror": "^4.25.11",
+    "epub-gen-memory": "^1.1.2",
+    "express": "5.2.1",
+    "gpt-tokenizer": "^3.4.0",
+    "lucide-react": "^1.31.0",
+    "openai": "^7.4.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "^7.9.0",
+    "zod": "4.4.3",
+    "zustand": "5.0.14"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "43.3.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "eslint": "^9.30.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.35.0",
+    "vite": "7.3.6",
+    "vitest": "^3.2.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "electron-winstaller"
+    ]
+  },
+  "build": {
+    "appId": "com.ai-novel-studio.app",
+    "productName": "AI-Novel-Studio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "asarUnpack": [],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "resources/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AI 小说创作工作台"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
+    }
+  }
+}

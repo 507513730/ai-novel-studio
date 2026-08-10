@@ -1,0 +1,240 @@
+import { DatabaseSync } from 'node:sqlite'
+
+export const TASK_TYPES = [
+  'prose',
+  'planning',
+  'review',
+  'analysis',
+  'summary',
+  'extraction',
+  'director',
+  'chat',
+  'embedding'
+] as const
+
+export type TaskType = (typeof TASK_TYPES)[number]
+
+export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
+export const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash'
+export const DEEPSEEK_PRO_MODEL = 'deepseek-v4-pro'
+
+export function seedIfEmpty(db: DatabaseSync): void {
+  const providerCount = (
+    db.prepare('SELECT COUNT(*) AS c FROM provider').get() as { c: number }
+  ).c
+
+  if (providerCount > 0) return
+
+  db.exec('BEGIN')
+  try {
+    db.prepare(
+      'INSERT INTO provider (name, base_url, api_key_encrypted, is_custom) VALUES (?, ?, ?, ?)'
+    ).run('DeepSeek', DEEPSEEK_BASE_URL, '', 0)
+
+    const providerId = (db.prepare('SELECT id FROM provider WHERE name = ?').get('DeepSeek') as {
+      id: number
+    }).id
+
+    const routes: Array<{
+      task: TaskType
+      model: string
+      thinking: boolean
+      effort: 'low' | 'high' | 'max'
+      temperature: number | null
+      maxTokens: number
+      // P2.2 🟡7：planning/review/analysis/summary/director/embedding 为预留路由
+      //（当前实现统一走 extraction/prose/chat，P3/P4 拆书/写法引擎启用时消费）
+      reserved?: boolean
+    }> = [
+      { task: 'prose', model: DEEPSEEK_DEFAULT_MODEL, thinking: false, effort: 'high', temperature: 0.9, maxTokens: 8192 },
+      { task: 'planning', model: DEEPSEEK_DEFAULT_MODEL, thinking: true, effort: 'high', temperature: null, maxTokens: 8192, reserved: true },
+      { task: 'review', model: DEEPSEEK_DEFAULT_MODEL, thinking: true, effort: 'max', temperature: null, maxTokens: 8192, reserved: true },
+      { task: 'analysis', model: DEEPSEEK_DEFAULT_MODEL, thinking: true, effort: 'max', temperature: null, maxTokens: 8192, reserved: true },
+      { task: 'summary', model: DEEPSEEK_DEFAULT_MODEL, thinking: false, effort: 'high', temperature: 0.3, maxTokens: 4096, reserved: true },
+      { task: 'extraction', model: DEEPSEEK_DEFAULT_MODEL, thinking: false, effort: 'high', temperature: 0.2, maxTokens: 4096 },
+      { task: 'director', model: DEEPSEEK_DEFAULT_MODEL, thinking: true, effort: 'high', temperature: null, maxTokens: 8192, reserved: true },
+      { task: 'chat', model: DEEPSEEK_DEFAULT_MODEL, thinking: false, effort: 'high', temperature: 0.7, maxTokens: 8192 },
+      { task: 'embedding', model: DEEPSEEK_DEFAULT_MODEL, thinking: false, effort: 'high', temperature: null, maxTokens: 1024, reserved: true }
+    ]
+
+    const insertRoute = db.prepare(
+      `INSERT INTO model_route
+       (task_type, provider_id, model, thinking_enabled, reasoning_effort, temperature, max_tokens, fallback_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+
+    for (const r of routes) {
+      // fallback: 主模型同款（同 provider），预留 pro 升级位由用户/校准实验刷新
+      const fallback = JSON.stringify([
+        { providerId, model: r.model },
+        { providerId, model: DEEPSEEK_PRO_MODEL }
+      ])
+      insertRoute.run(
+        r.task,
+        providerId,
+        r.model,
+        r.thinking ? 1 : 0,
+        r.effort,
+        r.temperature,
+        r.maxTokens,
+        fallback
+      )
+    }
+
+    seedGenrePresets(db)
+    seedAntiAiRules(db)
+    seedAgents(db)
+
+    db.exec('COMMIT')
+    console.log('[seed] provider + model routes + genre presets + anti-AI rules seeded')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+}
+
+function seedGenrePresets(db: DatabaseSync): void {
+  const insert = db.prepare(
+    `INSERT INTO genre_asset (name, genre_type, propulsion_json, payoff_json, conflict_json, beat_templates_json)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  )
+
+  const presets: Array<{
+    name: string
+    genreType: string
+    propulsion: string[]
+    payoff: string[]
+    conflict: string[]
+    beats: string[]
+  }> = [
+    {
+      name: '都市',
+      genreType: '都市',
+      propulsion: ['职场升级', '资产积累', '身份揭示'],
+      payoff: ['打脸反转', '身份震惊', '实力碾压'],
+      conflict: ['同行竞争', '家族争斗', '商业围猎'],
+      beats: ['黄金三章：开局冲突→金手指/优势→首个打脸兑现', '断章钩子：新威胁上门/身份疑点抛出']
+    },
+    {
+      name: '玄幻',
+      genreType: '玄幻',
+      propulsion: ['境界突破', '机缘争夺', '势力扩张'],
+      payoff: ['越级碾压', '秘境得宝', '宗门震撼'],
+      conflict: ['资源争夺', '宗门仇恨', '天道大劫'],
+      beats: ['黄金三章：废材/绝境开局→觉醒/机缘→初战立威', '断章钩子：强敌将至/遗迹开启']
+    },
+    {
+      name: '仙侠',
+      genreType: '仙侠',
+      propulsion: ['筑基炼气', '因果轮回', '大道领悟'],
+      payoff: ['顿悟突破', '恩怨了结', '天道显化'],
+      conflict: ['正邪之争', '师门恩怨', '红尘劫难'],
+      beats: ['黄金三章：身世悬念→拜师/得法→首劫降临', '断章钩子：旧敌重现/心魔暗生']
+    },
+    {
+      name: '科幻',
+      genreType: '科幻',
+      propulsion: ['技术解密', '文明接触', '危机升级'],
+      payoff: ['技术震撼', '真相揭示', '绝地翻盘'],
+      conflict: ['人与AI', '星际战争', '资源枯竭'],
+      beats: ['黄金三章：异常事件→线索浮现→危机确认', '断章钩子：更大的异常/系统警告']
+    },
+    {
+      name: '悬疑',
+      genreType: '悬疑',
+      propulsion: ['线索收集', '嫌疑人筛除', '案件串联'],
+      payoff: ['反转揭晓', '真相大白', '连环案归并'],
+      conflict: ['凶手对抗', '伪证误导', '时间压力'],
+      beats: ['黄金三章：命案开场→第一线索→嫌疑人登场', '断章钩子：新线索推翻旧结论/下一个目标预告']
+    },
+    {
+      name: '言情',
+      genreType: '言情',
+      propulsion: ['误会发酵', '身份交错', '感情升温'],
+      payoff: ['心意揭晓', '误会解除', '破镜重圆'],
+      conflict: ['家庭阻力', '第三者介入', '事业爱情两难'],
+      beats: ['黄金三章：相遇冲突→心动瞬间→阻碍浮现', '断章钩子：意外之吻/旧情再现']
+    }
+  ]
+
+  for (const p of presets) {
+    insert.run(
+      p.name,
+      p.genreType,
+      JSON.stringify(p.propulsion),
+      JSON.stringify(p.payoff),
+      JSON.stringify(p.conflict),
+      JSON.stringify(p.beats)
+    )
+  }
+}
+
+function seedAntiAiRules(db: DatabaseSync): void {
+  const existing = (db.prepare('SELECT COUNT(*) AS c FROM prompt_asset').get() as { c: number }).c
+  if (existing > 0) return
+
+  const insert = db.prepare(
+    'INSERT INTO prompt_asset (name, task_type, template, slots_json, notes) VALUES (?, ?, ?, ?, ?)'
+  )
+  insert.run(
+    '反AI规则-DeepSeek高频腔词',
+    'anti_ai_lexicon',
+    JSON.stringify([
+      '仿佛', '眼底闪过', '缓缓', '不由得', '刹那间', '微微一怔', '深邃', '喃喃自语',
+      '眼神一凛', '嘴角勾起', '周身气势', '一股寒意', '心中暗道', '定睛一看', '若有所思',
+      '轻叹一声', '沉默片刻', '空气仿佛凝固', '瞳孔猛地一缩'
+    ]),
+    '{}',
+    'DeepSeek V4 系模型高频 AI 腔词（审查修订 #9 / P4 反 AI 规则预置）'
+  )
+  insert.run(
+    '反AI规则-通用模板句',
+    'anti_ai_template',
+    JSON.stringify([
+      '在接下来的日子里', '就这样，时间一天天过去', '让我们把目光转向', '总而言之',
+      '值得一提的是', '不难发现', '众所周知', '仿佛在诉说着什么'
+    ]),
+    '{}',
+    '通用 AI 模板句/解释腔/空泛表达'
+  )
+}
+
+// P5-2：五内置 Agent（主编/审校/角色顾问/世界观顾问/文风顾问）
+function seedAgents(db: DatabaseSync): void {
+  const existing = (db.prepare('SELECT COUNT(*) AS c FROM agent').get() as { c: number }).c
+  if (existing > 0) return
+  const insert = db.prepare(
+    'INSERT INTO agent (name, role, system_prompt, tools_json, enabled) VALUES (?, ?, ?, ?, 1)'
+  )
+  const agents: Array<{ name: string; role: string; prompt: string }> = [
+    {
+      name: '主编',
+      role: 'editor',
+      prompt: '你是本书的主编。负责把控剧情节奏、爽点安排、章节衔接与整体走向。给出创作约束时聚焦：本章推进、钩子、与前文衔接。'
+    },
+    {
+      name: '审校',
+      role: 'reviewer',
+      prompt: '你是本书的审校编辑。负责剧情逻辑、时间线、伏笔系统与文字质量的审核。输出问题清单时标注严重度（high/medium/low）、章节位置、具体问题与修改建议。'
+    },
+    {
+      name: '角色顾问',
+      role: 'character_advisor',
+      prompt: '你是本书的角色顾问。负责角色人设与行为一致性（不 OOC）、角色成长弧与关系网的合理性。'
+    },
+    {
+      name: '世界观顾问',
+      role: 'world_advisor',
+      prompt: '你是本书的世界观顾问。负责力量体系、地理、势力规则的自我一致性，防止设定矛盾。'
+    },
+    {
+      name: '文风顾问',
+      role: 'style_advisor',
+      prompt: '你是本书的文风顾问。负责写法风格一致性、反 AI 腔词检测、句法节奏的把控。'
+    }
+  ]
+  for (const a of agents) {
+    insert.run(a.name, a.role, a.prompt, JSON.stringify([]))
+  }
+  console.log('[seed] 5 built-in agents seeded')
+}

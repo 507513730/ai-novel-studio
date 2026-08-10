@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["shared/src/*"],
+      "@/*": ["client/src/*"]
+    }
+  },
+  "include": [
+    "electron",
+    "client/src",
+    "server/src",
+    "shared/src",
+    "electron.vite.config.ts"
+  ]
+}

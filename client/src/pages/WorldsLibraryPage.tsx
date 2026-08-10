@@ -1,0 +1,117 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Globe2, Save, Trash2, Copy } from 'lucide-react'
+import { resourcesApi, novelApi } from '../api'
+import { ErrorMsg } from '../components/ErrorMsg'
+import { useToast } from '../components/Toast'
+
+// P17-2：世界样本库（从书保存样本 / 应用样本到书）
+export function WorldsLibraryPage(): React.JSX.Element {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const { toast } = useToast()
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [saveFrom, setSaveFrom] = useState(0)
+  const [saveName, setSaveName] = useState('')
+
+  const templates = useQuery({ queryKey: ['world-templates'], queryFn: resourcesApi.worldTemplates })
+  const novels = useQuery<{ novels: Array<{ id: number; title: string }> }>({ queryKey: ['novels'], queryFn: novelApi.list })
+
+  const saveFromNovel = async (): Promise<void> => {
+    if (!saveFrom || !saveName.trim() || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await resourcesApi.worldTemplateFromNovel(saveFrom, saveName.trim())
+      setSaveName('')
+      toast('ok', '已保存为世界样本')
+      void queryClient.invalidateQueries({ queryKey: ['world-templates'] })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg)
+      toast('error', msg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const apply = async (templateId: number, novelId: number): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await resourcesApi.worldTemplateApply(templateId, novelId)
+      toast('ok', '已应用世界样本')
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (id: number): Promise<void> => {
+    if (!window.confirm('删除该世界样本？')) return
+    try {
+      await resourcesApi.worldTemplateDelete(id)
+      void queryClient.invalidateQueries({ queryKey: ['world-templates'] })
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
+      <div className="row" style={{ marginBottom: 16 }}>
+        <Globe2 size={20} />
+        <h1 style={{ marginLeft: 8 }}>世界样本库</h1>
+      </div>
+      {error && <ErrorMsg error={error} />}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <h2 style={{ marginBottom: 8 }}>从书保存为样本</h2>
+        <div className="row">
+          <select style={{ flex: 2 }} value={saveFrom} onChange={(e) => setSaveFrom(Number(e.target.value))}>
+            <option value={0}>选择书…</option>
+            {novels.data?.novels.map((n) => <option key={n.id} value={n.id}>{n.title || `#${n.id}`}</option>)}
+          </select>
+          <input style={{ flex: 3 }} placeholder="样本名" value={saveName} onChange={(e) => setSaveName(e.target.value)} />
+          <button className="primary" disabled={busy || !saveFrom || !saveName.trim()} onClick={() => void saveFromNovel()}>
+            <Save size={14} style={{ verticalAlign: -1, marginRight: 4 }} />保存
+          </button>
+        </div>
+      </div>
+      <div className="col" style={{ gap: 8 }}>
+        {templates.data?.templates.map((t) => (
+          <div key={t.id} className="panel" style={{ background: 'var(--bg-card)', padding: 12 }}>
+            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <strong>{t.name}</strong>
+                <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
+                  手册 {Object.keys(t.manual).length} 项 · 势力 {t.factions.length} · 地点 {Object.keys(t.map).length}
+                </span>
+              </div>
+              <div className="row">
+                <select
+                  style={{ width: 160, padding: '4px 8px', fontSize: 12 }}
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      if (window.confirm('应用样本将覆盖目标书的世界观，继续？')) void apply(t.id, Number(e.target.value))
+                      e.target.value = ''
+                    }
+                  }}
+                >
+                  <option value="" disabled>应用样本到…</option>
+                  {novels.data?.novels.map((n) => <option key={n.id} value={n.id}>{n.title || `#${n.id}`}</option>)}
+                </select>
+                <button className="sm" title="在浏览器打开示例" onClick={() => navigate('/')}><Copy size={12} /></button>
+                <button className="sm danger" onClick={() => void remove(t.id)}><Trash2 size={12} /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {!templates.isLoading && templates.data?.templates.length === 0 && <p className="muted">暂无世界样本。</p>}
+      </div>
+    </div>
+  )
+}
