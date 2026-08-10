@@ -1,8 +1,9 @@
-import { DatabaseSync } from 'node:sqlite'
-import { SYSTEM_PROSE, SYSTEM_REVIEW, SYSTEM_BACKFILL, SYSTEM_FIX, SYSTEM_PATCH } from '../prompts'
+import type { DatabaseSync } from 'node:sqlite'
+import { getSystemPrompt } from '../prompts/promptAsset'
 import { getBoundStyleRules } from './styleEngine'
 import { smartContextText, type SmartContext } from './smartContext'
 import type { LlmMessage } from './llm'
+import { TfidfRetriever } from './retrieval'
 
 // 前缀冻结组装器（PLAN §3.3）
 // [冻结前缀区] 系统提示 → 书级合约(framing) → 世界观手册 → 角色账本(按参与者筛选)
@@ -183,7 +184,30 @@ export function getCharactersForChapter(
  * P4 外部资料直塞注入（替代 RAG 的低成本方案）：
  * kb_doc 中 status='direct' 的文档注入冻结前缀区（复用缓存机制）
  */
-function getExternalMaterials(db: DatabaseSync, novelId: number, maxChars = 6000): string {
+// P17-5B：知识库检索（TF-IDF，按相关性 Top-K 注入可变区）
+const kbCache = new Map<number, { version: number; retriever: TfidfRetriever }>()
+
+export function getKnowledgeRetrieval(db: DatabaseSync, novelId: number, query: string): string | null {
+  if (!query.trim()) return null
+  const docs = db
+    .prepare("SELECT id, title, content FROM kb_doc WHERE novel_id = ? AND content != '' ORDER BY id")
+    .all(novelId) as Array<{ id: number; title: string; content: string }>
+  if (docs.length === 0) return null
+
+  let cached = kbCache.get(novelId)
+  if (!cached) {
+    cached = { version: 0, retriever: new TfidfRetriever() }
+    kbCache.set(novelId, cached)
+  }
+  if (cached.version !== docs.length) {
+    cached.retriever.indexNow(docs.map((d) => ({ id: d.id, title: d.title, content: d.content })))
+    cached.version = docs.length
+  }
+  const hits = cached.retriever.searchNow(query, 3)
+  if (hits.length === 0) return null
+  const parts = hits.map((h) => `- 《${h.title}》：${h.content.slice(0, 400)}`)
+  return `【知识库检索（按相关性）】\n${parts.join('\n')}`
+}function getExternalMaterials(db: DatabaseSync, novelId: number, maxChars = 6000): string {
   const rows = db
     .prepare(
       "SELECT title, content FROM kb_doc WHERE novel_id = ? AND status = 'direct' ORDER BY id LIMIT 5"
@@ -339,7 +363,7 @@ export function buildChapterWriteContext(
   const genreConstraints = getGenreConstraints(db, novelId)
 
   // 冻结前缀区（按优先级：合约 > 世界观 > 角色 > 外部资料；B1 include 过滤）
-  let frozenText = SYSTEM_PROSE
+  let frozenText = getSystemPrompt('prose')
   if (frozen.contract && has('contract')) frozenText += '\n\n' + frozen.contract
   if (frozen.world && has('world')) frozenText += '\n\n' + frozen.world
   if (frozen.characters && has('characters')) frozenText += '\n\n【角色账本】\n' + frozen.characters
@@ -361,6 +385,11 @@ export function buildChapterWriteContext(
   const chapterSpotlight = getCharactersForChapter(db, novelId, chapterId)
   if (chapterSpotlight && has('characters')) {
     variableText += chapterSpotlight + '\n\n'
+  }
+  // P17-5B：知识库检索注入（TF-IDF 按相关性 Top-K，无相关不注入省 token）
+  if (has('kb')) {
+    const kbRetrieval = getKnowledgeRetrieval(db, novelId, `${chapter?.title ?? ''} ${chapter?.summary ?? ''} ${chapter?.goal_json ?? ''}`)
+    if (kbRetrieval) variableText += kbRetrieval + '\n\n'
   }
   variableText += taskSheet
   if (summaryText && has('summary')) variableText += '\n\n' + summaryText
@@ -422,7 +451,7 @@ export function buildChapterReviewContext(
     ? `【本章任务单】\n章节名：${chapter.title}\n摘要：${chapter.summary}\n目标：${chapter.goal_json}`
     : ''
   const text = [
-    SYSTEM_REVIEW,
+    getSystemPrompt('review'),
     frozen.contract,
     frozen.world ? `\n${frozen.world}` : '',
     frozen.characters ? `\n【角色账本】\n${frozen.characters}` : '',
@@ -444,7 +473,7 @@ export function buildBackfillContext(
     .get(chapterId) as { title: string; summary: string } | undefined
   const frozen = buildFrozenContext(db, novelId)
   const text = [
-    SYSTEM_BACKFILL,
+    getSystemPrompt('backfill'),
     frozen.contract,
     frozen.world ? `\n${frozen.world}` : '',
     frozen.characters ? `\n【角色账本】\n${frozen.characters}` : '',
@@ -463,7 +492,7 @@ export function buildFixContext(
   issues: unknown[]
 ): LlmMessage[] {
   const text = [
-    SYSTEM_FIX,
+    getSystemPrompt('fix'),
     `【审核问题清单】\n${JSON.stringify(issues, null, 2)}`,
     `【原章节正文】\n${content}`,
     // P14 D：必须含 "json" 字样（json_object response_format 硬要求，DeepSeek/网关 400 规则）
@@ -485,7 +514,7 @@ export function buildPatchContext(
   issues: unknown[]
 ): LlmMessage[] {
   const text = [
-    SYSTEM_PATCH,
+    getSystemPrompt('patch'),
     `【审核问题清单】\n${JSON.stringify(issues, null, 2)}`,
     `【原章节正文】\n${content}`,
     '\n请输出 {"patches": [...]}（纯 JSON，不要解释）。'

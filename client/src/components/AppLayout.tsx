@@ -21,7 +21,8 @@ import {
   Route,
   Gauge,
   Globe2,
-  Database
+  Database,
+  Braces
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { novelApi } from '../api'
@@ -117,6 +118,7 @@ export function AppLayout(): React.JSX.Element {
         { to: '/story-modes', label: '推进模式库', icon: Gauge },
         { to: '/worlds', label: '世界样本库', icon: Globe2 },
         { to: '/knowledge', label: '知识库', icon: Database },
+        { to: '/prompt-workbench', label: '提示词工作台', icon: Braces },
         { to: '/book-analysis', label: '拆书', icon: Search },
         { to: '/genres', label: '流派管理', icon: Tags },
         { to: bookPath(novelId, '/'), label: '工作台（设定/世界/角色）', icon: PanelLeft, requiresNovel: true },

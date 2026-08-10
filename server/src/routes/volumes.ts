@@ -2,7 +2,8 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
-import { SYSTEM_VOLUMES, SYSTEM_BEATS, SYSTEM_CHAPTERS, CHAPTER_TITLE_RULE, JSON_FORMAT } from '../prompts'
+import { JSON_FORMAT, CHAPTER_TITLE_RULE } from '../prompts'
+import { getSystemPrompt } from '../prompts/promptAsset'
 
 // P12 A4：单章细化（单章端点与批量端点共用；质量门禁：关键字段非空）
 async function refineOne(
@@ -170,7 +171,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_VOLUMES}\n${JSON_FORMAT}\n\n书名：${novel?.title ?? ''}\n书级合约：${novel?.framing_json ?? ''}\n角色：${characters
+              content: `${getSystemPrompt('volumes')}\n${JSON_FORMAT}\n\n书名：${novel?.title ?? ''}\n书级合约：${novel?.framing_json ?? ''}\n角色：${characters
                 .map((c) => {
                   const profile = JSON.parse(c.profile_json) as { identity?: string }
                   return `${c.name}：${profile.identity ?? ''}`
@@ -276,7 +277,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_BEATS}\n${JSON_FORMAT}\n\n卷名：${volume.title}\n卷战略：${volume.strategy_json}\n卷骨架：${volume.skeleton_json}\n卷内 ${strategy.chaptersPerVolume ?? 20} 章。\n\n请输出 {"beats": [{"title","purpose","emotionCurve","scenes":[]}]}，6-12 个 beat。`
+              content: `${getSystemPrompt('beats')}\n${JSON_FORMAT}\n\n卷名：${volume.title}\n卷战略：${volume.strategy_json}\n卷骨架：${volume.skeleton_json}\n卷内 ${strategy.chaptersPerVolume ?? 20} 章。\n\n请输出 {"beats": [{"title","purpose","emotionCurve","scenes":[]}]}，6-12 个 beat。`
             }
           ],
           maxTokens: 4096
@@ -471,7 +472,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_CHAPTERS}\n${JSON_FORMAT}\n${CHAPTER_TITLE_RULE}\n\n卷名：${volume.title}\n卷战略：${volume.strategy_json}\n卷骨架：${volume.skeleton_json}\n节奏板：${JSON.stringify(beats)}\n本章节数：${count}。\n\n请输出 {"chapters": [{"title","summary","goal"}]}，正好 ${count} 章，按节奏板顺序分配 beat（字段可加 "beatIndex"）。`
+              content: `${getSystemPrompt('chapters')}\n${JSON_FORMAT}\n${CHAPTER_TITLE_RULE}\n\n卷名：${volume.title}\n卷战略：${volume.strategy_json}\n卷骨架：${volume.skeleton_json}\n节奏板：${JSON.stringify(beats)}\n本章节数：${count}。\n\n请输出 {"chapters": [{"title","summary","goal"}]}，正好 ${count} 章，按节奏板顺序分配 beat（字段可加 "beatIndex"）。`
             }
           ],
           maxTokens: 8192

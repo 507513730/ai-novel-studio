@@ -2,7 +2,8 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
-import { SYSTEM_DIRECTION, SYSTEM_TITLES, SYSTEM_PLANNING, SYSTEM_MACRO, JSON_FORMAT } from '../prompts'
+import { JSON_FORMAT } from '../prompts'
+import { getSystemPrompt } from '../prompts/promptAsset'
 
 interface DirectionScheme {
   title: string
@@ -222,7 +223,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_DIRECTION}\n${JSON_FORMAT}\n\n灵感：${novel.inspiration}${contextLine}\n\n请输出 {"directions": [2 套方案]}，每套含 title/sellingPoint/genre/coreSetting/mainline/first30/readerFeeling。`
+              content: `${getSystemPrompt('direction')}\n${JSON_FORMAT}\n\n灵感：${novel.inspiration}${contextLine}\n\n请输出 {"directions": [2 套方案]}，每套含 title/sellingPoint/genre/coreSetting/mainline/first30/readerFeeling。`
             }
           ],
           maxTokens: 4096
@@ -262,7 +263,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_TITLES}\n${JSON_FORMAT}\n\n方向方案：${JSON.stringify(input.direction, null, 2)}\n\n请输出 {"titles": [{"title": "书名", "reason": "理由"}]}，共 10 个。`
+              content: `${getSystemPrompt('titles')}\n${JSON_FORMAT}\n\n方向方案：${JSON.stringify(input.direction, null, 2)}\n\n请输出 {"titles": [{"title": "书名", "reason": "理由"}]}，共 10 个。`
             }
           ],
           maxTokens: 2048
@@ -302,7 +303,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_PLANNING}\n${JSON_FORMAT}\n\n灵感：${novel?.inspiration ?? ''}\n方向：${JSON.stringify(direction)}\n补充：${input.notes}\n\n请输出 {"summary": "故事梗概", "sellingPoint": "卖点", "readerFeeling": "目标读者感受", "first30Promise": "前30章承诺"}`
+              content: `${getSystemPrompt('planning')}\n${JSON_FORMAT}\n\n灵感：${novel?.inspiration ?? ''}\n方向：${JSON.stringify(direction)}\n补充：${input.notes}\n\n请输出 {"summary": "故事梗概", "sellingPoint": "卖点", "readerFeeling": "目标读者感受", "first30Promise": "前30章承诺"}`
             }
           ],
           maxTokens: 2048
@@ -352,7 +353,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_PLANNING}\n${JSON_FORMAT}\n\n灵感：${novel.inspiration}\n当前 framing：${JSON.stringify(framing, null, 2)}\n\n只重写「${FIELD_LABEL[input.field]}」字段（80-200字），其余字段保持原样。\n\n请输出 {"value": "重写后的${FIELD_LABEL[input.field]}"}`
+              content: `${getSystemPrompt('planning')}\n${JSON_FORMAT}\n\n灵感：${novel.inspiration}\n当前 framing：${JSON.stringify(framing, null, 2)}\n\n只重写「${FIELD_LABEL[input.field]}」字段（80-200字），其余字段保持原样。\n\n请输出 {"value": "重写后的${FIELD_LABEL[input.field]}"}`
             }
           ],
           maxTokens: 1024
@@ -394,7 +395,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_MACRO}\n${JSON_FORMAT}\n\n书名：${novel.title}\n设定：${novel.framing_json}\n\n请输出 {"storyEngine": "故事引擎（核心张力）", "longConflict": "长期对立", "payoffSummary": "推进与兑现摘要", "theme": "主题"}`
+              content: `${getSystemPrompt('macro')}\n${JSON_FORMAT}\n\n书名：${novel.title}\n设定：${novel.framing_json}\n\n请输出 {"storyEngine": "故事引擎（核心张力）", "longConflict": "长期对立", "payoffSummary": "推进与兑现摘要", "theme": "主题"}`
             }
           ],
           maxTokens: 2048

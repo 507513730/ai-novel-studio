@@ -2,7 +2,8 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
-import { SYSTEM_WORLD, SYSTEM_CHARACTERS, JSON_FORMAT } from '../prompts'
+import { JSON_FORMAT } from '../prompts'
+import { getSystemPrompt } from '../prompts/promptAsset'
 
 export function createWorldsRouter(db: DatabaseSync): Router {
   const router = Router()
@@ -80,7 +81,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_WORLD}\n${JSON_FORMAT}\n\n${base}\n\n第一步请只输出世界观手册（力量体系、核心规则、社会结构、历史脉络），格式 {"category": "描述"}，4-6 个 category，每项 50-120 字。`
+              content: `${getSystemPrompt('world')}\n${JSON_FORMAT}\n\n${base}\n\n第一步请只输出世界观手册（力量体系、核心规则、社会结构、历史脉络），格式 {"category": "描述"}，4-6 个 category，每项 50-120 字。`
             }
           ],
           maxTokens: 2048
@@ -103,7 +104,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_WORLD}\n${JSON_FORMAT}\n\n${base}\n\n世界观手册：${JSON.stringify(manual)}\n\n第二步请输出势力清单，格式 {"factions": [{"name": "势力名", "desc": "描述", "stance": "立场"}]}，4-8 个势力。`
+              content: `${getSystemPrompt('world')}\n${JSON_FORMAT}\n\n${base}\n\n世界观手册：${JSON.stringify(manual)}\n\n第二步请输出势力清单，格式 {"factions": [{"name": "势力名", "desc": "描述", "stance": "立场"}]}，4-8 个势力。`
             }
           ],
           maxTokens: 2048
@@ -127,7 +128,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_WORLD}\n${JSON_FORMAT}\n\n${base}\n\n第三步请输出关键地点清单，格式 {"place": "描述"}，3-5 个地点，每项 30-80 字。`
+              content: `${getSystemPrompt('world')}\n${JSON_FORMAT}\n\n${base}\n\n第三步请输出关键地点清单，格式 {"place": "描述"}，3-5 个地点，每项 30-80 字。`
             }
           ],
           maxTokens: 2048
@@ -281,7 +282,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_CHARACTERS}\n${JSON_FORMAT}\n\n${base}\n\n第一步：请只输出核心阵容（主角 + 2-3 个重要配角 + 1-2 个反派），共 4-6 个角色。格式 {"characters": [{"name","role","identity","personality","goal","weakness","relation"}]}`
+              content: `${getSystemPrompt('characters')}\n${JSON_FORMAT}\n\n${base}\n\n第一步：请只输出核心阵容（主角 + 2-3 个重要配角 + 1-2 个反派），共 4-6 个角色。格式 {"characters": [{"name","role","identity","personality","goal","weakness","relation"}]}`
             }
           ],
           maxTokens: 4096
@@ -298,7 +299,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${SYSTEM_CHARACTERS}\n${JSON_FORMAT}\n\n${base}\n\n核心阵容：${JSON.stringify(core.map((c) => ({ name: c.name, role: c.role })))}\n\n第二步：请输出扩展配角与功能性角色（同门/同僚/市井人物/宿敌爪牙等），共 3-5 个，与核心阵容不重复。格式同上 {"characters": [...]}`
+              content: `${getSystemPrompt('characters')}\n${JSON_FORMAT}\n\n${base}\n\n核心阵容：${JSON.stringify(core.map((c) => ({ name: c.name, role: c.role })))}\n\n第二步：请输出扩展配角与功能性角色（同门/同僚/市井人物/宿敌爪牙等），共 3-5 个，与核心阵容不重复。格式同上 {"characters": [...]}`
             }
           ],
           maxTokens: 4096

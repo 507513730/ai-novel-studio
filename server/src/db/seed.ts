@@ -1,4 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
+import { SYSTEM_PROMPT_KEYS } from '../prompts/promptAsset'
+import * as PROMPTS from '../prompts'
 
 export const TASK_TYPES = [
   'prose',
@@ -19,6 +21,7 @@ export const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash'
 export const DEEPSEEK_PRO_MODEL = 'deepseek-v4-pro'
 
 export function seedIfEmpty(db: DatabaseSync): void {
+  seedSystemPrompts(db) // P17-5A?????????????
   const providerCount = (
     db.prepare('SELECT COUNT(*) AS c FROM provider').get() as { c: number }
   ).c
@@ -83,6 +86,7 @@ export function seedIfEmpty(db: DatabaseSync): void {
 
     seedGenrePresets(db)
     seedAntiAiRules(db)
+    seedSystemPrompts(db)
     seedAgents(db)
 
     db.exec('COMMIT')
@@ -237,4 +241,30 @@ function seedAgents(db: DatabaseSync): void {
     insert.run(a.name, a.role, a.prompt, JSON.stringify([]))
   }
   console.log('[seed] 5 built-in agents seeded')
+}
+// P17-5A：系统提示词资产化（14 条，task_type='sys_<key>'；可在提示词工作台编辑）
+function seedSystemPrompts(db: DatabaseSync): void {
+  const existing = (db.prepare("SELECT COUNT(*) AS c FROM prompt_asset WHERE task_type LIKE 'sys_%'").get() as { c: number }).c
+  if (existing > 0) return
+  const insert = db.prepare('INSERT INTO prompt_asset (name, task_type, template, slots_json, notes) VALUES (?, ?, ?, ?, ?)')
+  const texts = {
+    prose: PROMPTS.SYSTEM_PROSE,
+    direction: PROMPTS.SYSTEM_DIRECTION,
+    titles: PROMPTS.SYSTEM_TITLES,
+    world: PROMPTS.SYSTEM_WORLD,
+    characters: PROMPTS.SYSTEM_CHARACTERS,
+    volumes: PROMPTS.SYSTEM_VOLUMES,
+    beats: PROMPTS.SYSTEM_BEATS,
+    chapters: PROMPTS.SYSTEM_CHAPTERS,
+    review: PROMPTS.SYSTEM_REVIEW,
+    fix: PROMPTS.SYSTEM_FIX,
+    patch: PROMPTS.SYSTEM_PATCH,
+    backfill: PROMPTS.SYSTEM_BACKFILL,
+    planning: PROMPTS.SYSTEM_PLANNING,
+    macro: PROMPTS.SYSTEM_MACRO
+  }
+  for (const key of SYSTEM_PROMPT_KEYS) {
+    insert.run('系统提示-' + key, 'sys_' + key, texts[key], '{}', 'P17-5A 提示词资产化（可在提示词工作台编辑）')
+  }
+  console.log('[seed] system prompts (14) seeded')
 }

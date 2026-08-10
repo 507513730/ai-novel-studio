@@ -21,6 +21,7 @@ import { GenresPage } from './pages/GenresPage'
 import { StoryModesPage } from './pages/StoryModesPage'
 import { WorldsLibraryPage } from './pages/WorldsLibraryPage'
 import { KnowledgePage } from './pages/KnowledgePage'
+import { PromptWorkbenchPage } from './pages/PromptWorkbenchPage'
 import { NovelGate } from './components/NovelGate'
 import { AppLayout } from './components/AppLayout'
 import { getApiBaseUrl, setApiBaseUrl, apiFetch } from './api'
@@ -121,6 +122,7 @@ export function App(): React.JSX.Element {
           <Route path="/story-modes" element={<StoryModesPage />} />
           <Route path="/worlds" element={<WorldsLibraryPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
+          <Route path="/prompt-workbench" element={<PromptWorkbenchPage />} />
           <Route path="/hub" element={<CreativeHubPage />} />
           <Route path="/director" element={<NovelGate title="自动导演" desc="从灵感推进到可写章节（11 阶段）。选择一本书进入。请先创建或选择小说。" target={(n) => `/novels/${n}/director`} />} />
           <Route path="/chapters" element={<NovelGate title="章节执行" desc="逐章生成、审核、修复、回灌。选择一本书进入。请先创建或选择小说。" target={(n) => `/novels/${n}/chapters`} />} />
