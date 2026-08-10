@@ -15,7 +15,7 @@
     "test": "vitest run",
     "db:smoke": "node scripts/db-smoke.mjs",
     "calibrate": "node --experimental-strip-types scripts/calibrate.ts",
-    "dist": "electron-vite build && electron-builder --win",
+    "dist": "electron-vite build && electron-builder --win --publish never",
     "dist:dir": "electron-vite build && electron-builder --win --dir",
     "postinstall": "electron-builder install-app-deps"
   },
