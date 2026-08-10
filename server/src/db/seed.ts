@@ -1,6 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { SYSTEM_PROMPT_KEYS } from '../prompts/promptAsset'
-import * as PROMPTS from '../prompts'
+import * as PROMPTS from '../prompts/index.ts'
 
 export const TASK_TYPES = [
   'prose',
@@ -263,7 +262,8 @@ function seedSystemPrompts(db: DatabaseSync): void {
     planning: PROMPTS.SYSTEM_PLANNING,
     macro: PROMPTS.SYSTEM_MACRO
   }
-  for (const key of SYSTEM_PROMPT_KEYS) {
+  const keys: Array<keyof typeof texts> = ['prose','direction','titles','world','characters','volumes','beats','chapters','review','fix','patch','backfill','planning','macro']
+  for (const key of keys) {
     insert.run('系统提示-' + key, 'sys_' + key, texts[key], '{}', 'P17-5A 提示词资产化（可在提示词工作台编辑）')
   }
   console.log('[seed] system prompts (14) seeded')
