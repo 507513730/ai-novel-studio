@@ -10,41 +10,78 @@ import { buildFrozenContext } from './context'
 
 export type AnalysisDepth = 'quick' | 'standard' | 'full'
 
+export interface Evidence {
+  chapterId: number
+  quote: string
+}
+
+export interface Dimension {
+  summary: string
+  evidence: Evidence[]
+}
+
 export interface AnalysisReport {
   depth: AnalysisDepth
-  genre: string
-  structure: string
-  characters: string
-  world: string
-  style: string
+  genre: Dimension
+  structure: Dimension
+  characters: Dimension
+  world: Dimension
+  style: Dimension
   strengths: string[]
   weaknesses: string[]
 }
 
+// P18 D2：五维结构化输出（结论 + 章节证据引用，quote 必须原文逐字）
 const PROMPTS: Record<AnalysisDepth, string> = {
   quick: `你是拆书分析师。快速拆解以下小说（重点：题材定位、主线结构、人物亮点），输出 JSON：
-{"genre": "题材定位", "structure": "剧情结构（100-200字）", "characters": "人物系统（100-200字）", "world": "世界设定（50-100字）", "style": "写法技法（50-100字）", "strengths": ["优点"], "weaknesses": ["缺点"]}`,
+{"genre": {"summary": "题材定位", "evidence": [{"chapterId": 数字, "quote": "原文逐字片段"}]}, "structure": {"summary": "剧情结构", "evidence": []}, "characters": {"summary": "人物系统", "evidence": []}, "world": {"summary": "世界设定", "evidence": []}, "style": {"summary": "写法技法", "evidence": []}, "strengths": ["优点"], "weaknesses": ["缺点"]}
+约束：每维 evidence 引用的 chapterId 必须是【第 N 章】标记中的 N，quote 必须摘自该章原文逐字，最多 3 条；无对应原文的维度 evidence 可为空数组。`,
   standard: `你是拆书分析师。标准拆解以下小说（五维：题材定位/剧情结构/人物系统/世界设定/写法技法），每维 200-400 字，输出 JSON：
-{"genre": "题材定位", "structure": "剧情结构", "characters": "人物系统", "world": "世界设定", "style": "写法技法", "strengths": ["优点"], "weaknesses": ["缺点"]}`,
+{"genre": {"summary": "题材定位", "evidence": [{"chapterId": 数字, "quote": "原文逐字片段"}]}, "structure": {"summary": "剧情结构", "evidence": []}, "characters": {"summary": "人物系统", "evidence": []}, "world": {"summary": "世界设定", "evidence": []}, "style": {"summary": "写法技法", "evidence": []}, "strengths": ["优点"], "weaknesses": ["缺点"]}
+约束：每维 evidence 引用的 chapterId 必须是【第 N 章】标记中的 N，quote 必须摘自该章原文逐字，最多 3 条；无对应原文的维度 evidence 可为空数组。`,
   full: `你是资深拆书分析师。完整拆解以下小说（五维深度分析，每维 400-800 字，含：题材的市场定位与同类对比、剧情结构的起承转合与伏笔系统、人物系统的弧光与关系网、世界设定的规则自洽性、写法技法的句式/节奏/对话特征），输出 JSON：
-{"genre": "题材定位", "structure": "剧情结构", "characters": "人物系统", "world": "世界设定", "style": "写法技法", "strengths": ["优点"], "weaknesses": ["缺点"]}`
+{"genre": {"summary": "题材定位", "evidence": [{"chapterId": 数字, "quote": "原文逐字片段"}]}, "structure": {"summary": "剧情结构", "evidence": []}, "characters": {"summary": "人物系统", "evidence": []}, "world": {"summary": "世界设定", "evidence": []}, "style": {"summary": "写法技法", "evidence": []}, "strengths": ["优点"], "weaknesses": ["缺点"]}
+约束：每维 evidence 引用的 chapterId 必须是【第 N 章】标记中的 N，quote 必须摘自该章原文逐字，最多 3 条；无对应原文的维度 evidence 可为空数组。`
 }
 
 export function analysisPrompt(depth: AnalysisDepth, chaptersText: string): string {
   return `${PROMPTS[depth]}\n\n【小说内容】\n${chaptersText}\n\n只输出 JSON。`
 }
 
-function parseReport(obj: unknown): AnalysisReport | null {
+// P18 D2：维度解析（兼容旧 string 格式 → {summary, evidence: []}）
+function parseDim(v: unknown, validIds: Set<number>): Dimension {
+  if (typeof v === 'string') return { summary: v, evidence: [] }
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>
+    const summary = typeof o.summary === 'string' ? o.summary : ''
+    const evidence: Evidence[] = []
+    if (Array.isArray(o.evidence)) {
+      for (const e of o.evidence) {
+        const x = e as Record<string, unknown>
+        const cid = Number(x.chapterId)
+        if (Number.isInteger(cid) && validIds.has(cid) && typeof x.quote === 'string' && x.quote.trim()) {
+          evidence.push({ chapterId: cid, quote: x.quote.trim().slice(0, 200) })
+        }
+      }
+    }
+    return { summary, evidence }
+  }
+  return { summary: '', evidence: [] }
+}
+
+function parseReport(obj: unknown, validIds: Set<number>): AnalysisReport | null {
   if (!obj || typeof obj !== 'object') return null
   const r = obj as Record<string, unknown>
-  if (typeof r.genre !== 'string' || typeof r.structure !== 'string') return null
+  const genre = parseDim(r.genre, validIds)
+  const structure = parseDim(r.structure, validIds)
+  if (!genre.summary || !structure.summary) return null
   return {
     depth: 'standard',
-    genre: String(r.genre),
-    structure: String(r.structure),
-    characters: String(r.characters ?? ''),
-    world: String(r.world ?? ''),
-    style: String(r.style ?? ''),
+    genre,
+    structure,
+    characters: parseDim(r.characters, validIds),
+    world: parseDim(r.world, validIds),
+    style: parseDim(r.style, validIds),
     strengths: Array.isArray(r.strengths) ? r.strengths.map(String) : [],
     weaknesses: Array.isArray(r.weaknesses) ? r.weaknesses.map(String) : []
   }
@@ -61,16 +98,17 @@ export async function runBookAnalysis(
   if (!novel) throw new Error('novel not found')
   const frozen = buildFrozenContext(db, novelId)
 
-  // 取正文（按深度限制章节数，控制 token）
+  // 取正文（按深度限制章节数，控制 token）；P18 D2：带 id + 章节编号供证据引用
   const chapterLimit = depth === 'quick' ? 3 : depth === 'standard' ? 10 : 30
   const chapters = db
     .prepare(
-      "SELECT title, content FROM chapter WHERE novel_id = ? AND content != '' ORDER BY id LIMIT ?"
+      "SELECT id, title, content FROM chapter WHERE novel_id = ? AND content != '' ORDER BY id LIMIT ?"
     )
-    .all(novelId, chapterLimit) as Array<{ title: string; content: string }>
+    .all(novelId, chapterLimit) as Array<{ id: number; title: string; content: string }>
 
+  const validIds = new Set(chapters.map((c) => c.id))
   const chaptersText = chapters
-    .map((c) => `【${c.title}】\n${c.content.slice(0, 1500)}`)
+    .map((c) => `【第 ${c.id} 章】${c.title}\n${c.content.slice(0, 1500)}`)
     .join('\n\n')
 
   const report = await callLlmJson<AnalysisReport>(
@@ -87,7 +125,7 @@ export async function runBookAnalysis(
       maxTokens: 8192
     },
     (obj) => {
-      const r = parseReport(obj)
+      const r = parseReport(obj, validIds)
       if (r) r.depth = depth
       return r
     },

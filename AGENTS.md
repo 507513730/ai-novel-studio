@@ -86,3 +86,6 @@ docs/          校准报告 + P9 体验修复明细
 45. **图标/静态渲染纪律**（P16 P3/D45）：Playwright 中 `img` 加载 `file://` SVG/PNG 被 Chromium 拦截（导致全白截图）——渲染图形必须用内联 <svg> 元素或 data URI；应用图标源文件（SVG）必须入库 resources/icon-sources/。
 46. **提示词资产纪律**（P17-5A/D50）：新增或修改系统提示词必须走 prompt_asset（sys_* ），禁止新增 SYSTEM_* 代码常量；提示词工作台编辑后删除 invalidatePromptCache。
 47. **检索后端接口纪律**（P17-5B/D51）：知识库检索统一走 Retriever 接口（TfidfRetriever 默认 / EmbeddingRetriever 预留）；新后端实现接口不侵入上下文组装逻辑；引入 embedding 供应商时在设置页切换后端。
+48. **备份恢复纪律**（P18 B/D54）：备份 = 复制 db 三件套到目录（含 backup-info.json）；恢复必须校验 db 存在 → 替换 → 退出；恢复/清除前必须 ConfirmDialog。
+49. **角色模板纪律**（P18 D1/D55）：模板库统一走 base_character 表；应用到书 = INSERT character（roster），重名 409；不往书内 character 直接写模板。
+50. **证据回溯纪律**（P18 D2/D56）：拆书类生成任务的结论必须带章节证据引用（{summary, evidence[{chapterId, quote}]}）；prompt 注入章节编号、quote 逐字约束、解析器校验 chapterId；旧格式数据降级兼容。

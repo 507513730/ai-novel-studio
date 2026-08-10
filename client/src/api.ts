@@ -233,7 +233,15 @@ export const resourcesApi = {
   worldTemplateDelete: (id: number): Promise<{ ok: boolean }> => j(`/world-templates/${id}`, { method: 'DELETE' }),
   knowledge: (): Promise<{ docs: Array<{ id: number; novelId: number; title: string; source: string; status: string; novelTitle: string; createdAt: string }> }> =>
     j('/knowledge'),
-  knowledgeDelete: (id: number): Promise<{ ok: boolean }> => j(`/knowledge/${id}`, { method: 'DELETE' })
+  knowledgeDelete: (id: number): Promise<{ ok: boolean }> => j(`/knowledge/${id}`, { method: 'DELETE' }),
+  // P18 D1：基础角色模板库
+  baseCharacters: (): Promise<{ templates: Array<{ id: number; name: string; profile: Record<string, unknown>; sourceNovelId: number | null; sourceTitle: string; createdAt: string }> }> =>
+    j('/base-characters'),
+  baseCharacterFromCharacter: (novelId: number, characterId: number): Promise<{ id: number }> =>
+    j('/base-characters/from-character', { method: 'POST', body: JSON.stringify({ novelId, characterId }) }),
+  baseCharacterApply: (templateId: number, novelId: number): Promise<{ id: number }> =>
+    j(`/base-characters/${templateId}/apply`, { method: 'POST', body: JSON.stringify({ novelId }) }),
+  baseCharacterDelete: (id: number): Promise<{ ok: boolean }> => j(`/base-characters/${id}`, { method: 'DELETE' })
 }
 
 export const agentsApi = {

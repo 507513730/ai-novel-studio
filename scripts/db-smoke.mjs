@@ -37,7 +37,7 @@ try {
   check('迁移应用（schema version=3）', () => {
     applyMigrations(db)
     const v = getSchemaVersion(db)
-    if (v !== 4) throw new Error(`schema version=${v}`)
+    if (v !== 5) throw new Error(`schema version=${v}`)
   })
 
   check('seed 幂等（重复调用不重复插入）', () => {

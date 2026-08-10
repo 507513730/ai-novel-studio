@@ -13,6 +13,11 @@ const api = {
   // P16 P0：数据管理
   openDataDir: (): Promise<boolean> => ipcRenderer.invoke('open-data-dir') as Promise<boolean>,
   wipeData: (): Promise<boolean> => ipcRenderer.invoke('wipe-data') as Promise<boolean>,
+  // P18 B：备份导出/恢复
+  exportBackup: (): Promise<{ ok: boolean; canceled?: boolean; path?: string; copied?: number; error?: string }> =>
+    ipcRenderer.invoke('export-backup') as Promise<{ ok: boolean; canceled?: boolean; path?: string; copied?: number; error?: string }>,
+  restoreBackup: (): Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; error?: string }> =>
+    ipcRenderer.invoke('restore-backup') as Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; error?: string }>,
   platform: process.platform
 }
 

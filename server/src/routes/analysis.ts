@@ -10,6 +10,8 @@ import {
 } from '../services/analysis'
 
 export function createAnalysisRouter(db: DatabaseSync): Router {
+  // P18 D2???????????? summary????????
+  const dimText = (d: unknown): string => (typeof d === 'string' ? d : ((d as { summary?: unknown })?.summary as string) ?? '')
   const router = Router()
 
   // 拆书（三档）
@@ -94,14 +96,16 @@ export function createAnalysisRouter(db: DatabaseSync): Router {
         res.status(404).json({ error: 'analysis not found' })
         return
       }
-      const result = JSON.parse(row.result_json) as Record<string, string>
+      const result = JSON.parse(row.result_json) as Record<string, unknown>
+      // P18 D2：维度兼容（新对象格式取 summary，旧字符串格式原样）
+      const dimText = (d: unknown): string => (typeof d === 'string' ? d : ((d as { summary?: unknown })?.summary as string) ?? '')
       const content = [
         `【拆书报告 · ${row.depth} 档】`,
-        `题材定位：${result.genre ?? ''}`,
-        `剧情结构：${result.structure ?? ''}`,
-        `人物系统：${result.characters ?? ''}`,
-        `世界设定：${result.world ?? ''}`,
-        `写法技法：${result.style ?? ''}`,
+        `题材定位：${dimText(result.genre)}`,
+        `剧情结构：${dimText(result.structure)}`,
+        `人物系统：${dimText(result.characters)}`,
+        `世界设定：${dimText(result.world)}`,
+        `写法技法：${dimText(result.style)}`,
         `优点：${Array.isArray(result.strengths) ? result.strengths.join('；') : ''}`,
         `缺点：${Array.isArray(result.weaknesses) ? result.weaknesses.join('；') : ''}`
       ].join('\n')
@@ -137,8 +141,8 @@ export function createAnalysisRouter(db: DatabaseSync): Router {
           novelId,
           `拆书转写法-${analysisId}`,
           JSON.stringify([
-            { feature: '题材定位', value: result.genre },
-            { feature: '写法技法', value: result.style }
+            { feature: '题材定位', value: dimText(result.genre) },
+            { feature: '写法技法', value: dimText(result.style) }
           ]),
           JSON.stringify({ source: '拆书', depth: row.depth }),
           '[]',

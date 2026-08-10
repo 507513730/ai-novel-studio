@@ -453,6 +453,7 @@ export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'provi
 
 // P13 F0：外观设置（多主题选择器）
 function AppearancePanel(): React.JSX.Element {
+  const { toast } = useToast()
   const [current, setCurrent] = useState<ThemeKey>(getStoredTheme())
   return (
     <div className="panel col">
@@ -491,6 +492,36 @@ function AppearancePanel(): React.JSX.Element {
       <h2 style={{ marginTop: 8 }}>数据与卸载</h2>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <button onClick={() => void window.novelStudio?.openDataDir()}>📂 打开数据目录</button>
+        {/* P18 B：备份导出/恢复 */}
+        <button
+          onClick={() =>
+            void window.novelStudio?.exportBackup().then((r) => {
+              if (!r.ok) {
+                if (!r.canceled) toast('error', r.error ?? '导出失败')
+                return
+              }
+              toast('ok', `已导出备份（${r.copied ?? 0} 个文件）`)
+            })
+          }
+        >
+          📦 导出备份
+        </button>
+        <button
+          onClick={() => {
+            if (window.confirm('从备份恢复将覆盖当前全部数据（小说/设定/Key），且需要重启应用。继续？')) {
+              void window.novelStudio?.restoreBackup().then((r) => {
+                if (!r.ok) {
+                  if (!r.canceled) toast('error', r.error ?? '恢复失败')
+                  return
+                }
+                toast('ok', '已恢复，正在重启…')
+                setTimeout(() => window.location.reload(), 1200)
+              })
+            }
+          }}
+        >
+          ♻️ 从备份恢复
+        </button>
         <button
           className="danger"
           onClick={() => {

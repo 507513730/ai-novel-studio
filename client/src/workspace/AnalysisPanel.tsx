@@ -1,19 +1,40 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { analysisApi, novelApi } from '../api'
 
+interface Evidence {
+  chapterId: number
+  quote: string
+}
+
+interface Dimension {
+  summary: string
+  evidence: Evidence[]
+}
+
+// P18 D2：维度兼容（新对象 {summary,evidence} / 旧字符串）
+type DimOrString = Dimension | string
+
+function dimOf(d: DimOrString | undefined): Dimension {
+  if (!d) return { summary: '', evidence: [] }
+  if (typeof d === 'string') return { summary: d, evidence: [] }
+  return { summary: d.summary ?? '', evidence: Array.isArray(d.evidence) ? d.evidence : [] }
+}
+
 interface AnalysisResult {
-  genre?: string
-  structure?: string
-  characters?: string
-  world?: string
-  style?: string
+  genre?: DimOrString
+  structure?: DimOrString
+  characters?: DimOrString
+  world?: DimOrString
+  style?: DimOrString
   strengths?: string[]
   weaknesses?: string[]
 }
 
 export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Element {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [depth, setDepth] = useState<'quick' | 'standard' | 'full'>('standard')
   const [busy, setBusy] = useState(false)
@@ -146,11 +167,32 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
         </p>
         {report && (
           <div className="panel" style={{ background: 'var(--bg-card)', marginTop: 10 }}>
-            <div><strong>题材定位：</strong>{str(report.genre)}</div>
-            <div style={{ marginTop: 6 }}><strong>剧情结构：</strong>{str(report.structure)}</div>
-            <div style={{ marginTop: 6 }}><strong>人物系统：</strong>{str(report.characters)}</div>
-            <div style={{ marginTop: 6 }}><strong>世界设定：</strong>{str(report.world)}</div>
-            <div style={{ marginTop: 6 }}><strong>写法技法：</strong>{str(report.style)}</div>
+            {/* P18 D2：五维 summary + 章节证据卡 */}
+            {([
+              ['题材定位', dimOf(report.genre)],
+              ['剧情结构', dimOf(report.structure)],
+              ['人物系统', dimOf(report.characters)],
+              ['世界设定', dimOf(report.world)],
+              ['写法技法', dimOf(report.style)]
+            ] as Array<[string, Dimension]>).map(([label, dim]) => (
+              <div key={String(label)} style={{ marginTop: 6 }}>
+                <strong>{String(label)}：</strong>
+                <span className="muted">{dim.summary}</span>
+                {dim.evidence.length > 0 && (
+                  <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {dim.evidence.map((e, i) => (
+                      <div key={i} style={{ fontSize: 11, padding: '4px 8px', background: 'var(--bg-input)', borderRadius: 6, borderLeft: '3px solid var(--accent)' }}>
+                        <span style={{ color: 'var(--accent-bright)' }}>第 {e.chapterId} 章证据：</span>
+                        <span className="muted">“{e.quote.slice(0, 80)}{e.quote.length > 80 ? '…' : ''}”</span>
+                        <button className="ghost sm" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => navigate(`/novels/${novelId}/chapters`)}>
+                          去章节 →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
             {arr(report.strengths).length > 0 && (
               <div style={{ marginTop: 6 }}><strong>优点：</strong>{arr(report.strengths).join('；')}</div>
             )}

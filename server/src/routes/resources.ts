@@ -133,5 +133,88 @@ export function createResourcesRouter(db: DatabaseSync): Router {
     res.json({ ok: true })
   })
 
+  // ---------- 基础角色模板库（P18 D1） ----------
+  router.get('/base-characters', (_req, res) => {
+    const rows = db
+      .prepare(
+        `SELECT b.id, b.name, b.profile_json, b.source_novel_id, b.created_at, n.title AS source_title
+         FROM base_character b LEFT JOIN novel n ON n.id = b.source_novel_id
+         ORDER BY b.id`
+      )
+      .all() as Array<{ id: number; name: string; profile_json: string; source_novel_id: number | null; created_at: string; source_title: string | null }>
+    res.json({
+      templates: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        profile: JSON.parse(r.profile_json || '{}'),
+        sourceNovelId: r.source_novel_id,
+        sourceTitle: r.source_title ?? '',
+        createdAt: r.created_at
+      }))
+    })
+  })
+
+  // 从书角色另存为模板
+  router.post('/base-characters/from-character', (req, res, next) => {
+    try {
+      const input = z
+        .object({ novelId: z.number().int().positive(), characterId: z.number().int().positive() })
+        .parse(req.body)
+      const ch = db
+        .prepare('SELECT name, profile_json, ledger_json FROM character WHERE id = ? AND novel_id = ?')
+        .get(input.characterId, input.novelId) as
+        | { name: string; profile_json: string; ledger_json: string }
+        | undefined
+      if (!ch) {
+        res.status(404).json({ error: '角色不存在' })
+        return
+      }
+      const dup = db.prepare('SELECT id FROM base_character WHERE name = ?').get(ch.name) as { id: number } | undefined
+      if (dup) {
+        res.status(409).json({ error: `模板「${ch.name}」已存在` })
+        return
+      }
+      const r = db
+        .prepare('INSERT INTO base_character (name, profile_json, ledger_json, source_novel_id) VALUES (?, ?, ?, ?)')
+        .run(ch.name, ch.profile_json, ch.ledger_json, input.novelId)
+      res.status(201).json({ id: Number(r.lastInsertRowid) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // 应用模板到书（INSERT character, status=roster）
+  router.post('/base-characters/:id/apply', (req, res, next) => {
+    try {
+      const templateId = Number(req.params.id)
+      const input = z.object({ novelId: z.number().int().positive() }).parse(req.body)
+      const t = db.prepare('SELECT name, profile_json, ledger_json FROM base_character WHERE id = ?').get(templateId) as
+        | { name: string; profile_json: string; ledger_json: string }
+        | undefined
+      if (!t) {
+        res.status(404).json({ error: '模板不存在' })
+        return
+      }
+      const dup = db
+        .prepare('SELECT id FROM character WHERE novel_id = ? AND name = ?')
+        .get(input.novelId, t.name) as { id: number } | undefined
+      if (dup) {
+        res.status(409).json({ error: `该书已有同名角色「${t.name}」` })
+        return
+      }
+      const r = db
+        .prepare("INSERT INTO character (novel_id, name, profile_json, ledger_json, status) VALUES (?, ?, ?, ?, 'roster')")
+        .run(input.novelId, t.name, t.profile_json, t.ledger_json)
+      res.status(201).json({ id: Number(r.lastInsertRowid) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  router.delete('/base-characters/:id', (req, res) => {
+    db.prepare('DELETE FROM base_character WHERE id = ?').run(Number(req.params.id))
+    res.json({ ok: true })
+  })
+
   return router
 }

@@ -288,6 +288,20 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       )`
     ]
+  },
+  {
+    // P18 D1：基础角色模板库（跨书角色模板）
+    version: 5,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS base_character (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        profile_json TEXT NOT NULL DEFAULT '{}',
+        ledger_json TEXT NOT NULL DEFAULT '{}',
+        source_novel_id INTEGER REFERENCES novel(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`
+    ]
   }
 ]
 

@@ -453,3 +453,16 @@ D1 生成前成本确认（estimateCost(content,4096) confirm）；D2 近 7 日�
 
 ### D52 · 2026-08-10 · 文档组织优化（P17-5附带）
 - **决策**：optimization-log 并入 decision-log；测试报告合并（e2e+长书）；校准报告 3→1；新增 docs/architecture.md（进程模型/数据流/目录）
+
+
+### D54 · 2026-08-10 · 数据备份与恢复（P18 B）
+- **决策**：导出 = 主进程 showSaveDialog + 复制 db 三件套 + backup-info.json（目录副本，零依赖）；恢复 = showOpenDialog 校验 → 替换 → 退出（同 wipe-data 模式）
+- **写入**：AGENTS 纪律 48
+
+### D55 · 2026-08-10 · 角色模板库（P18 D1）
+- **决策**：迁移 v5 base_character 表；从书角色另存模板（重名 409）、应用到任意书（INSERT character roster）
+- **写入**：AGENTS 纪律 49
+
+### D56 · 2026-08-10 · 拆书证据回溯（P18 D2，完整版）
+- **决策**：生成时结构化证据（五维 {summary, evidence[{chapterId, quote}]}），而非事后检索——prompt 注入【第 N 章】编号 + quote 逐字约束，解析器校验 chapterId 存在性；旧报告兼容降级（纯 summary）
+- **写入**：AGENTS 纪律 50

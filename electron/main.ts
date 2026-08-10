@@ -1,6 +1,6 @@
-import { app, BrowserWindow, utilityProcess, shell, safeStorage, Menu, ipcMain, nativeTheme } from 'electron'
+import { app, BrowserWindow, utilityProcess, shell, safeStorage, Menu, ipcMain, nativeTheme, dialog } from 'electron'
 import { join } from 'node:path'
-import { mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, rmSync, copyFileSync, writeFileSync, existsSync } from 'node:fs'
 
 let mainWindow: BrowserWindow | null = null
 let serverProcess: Electron.UtilityProcess | null = null
@@ -43,6 +43,88 @@ ipcMain.handle('wipe-data', () => {
   }
   app.exit(0)
   return true
+})
+
+// P18 B：导出备份（复制 db 三件套到用户选择目录）
+ipcMain.handle('export-backup', async () => {
+  try {
+    const dataDir = app.getPath('userData')
+    const now = new Date()
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+    const defaultName = `ai-novel-studio-backup-${stamp}`
+    const picked = await dialog.showSaveDialog(mainWindow!, {
+      title: '导出数据备份',
+      defaultPath: join(app.getPath('documents'), defaultName),
+      buttonLabel: '导出备份',
+      properties: ['createDirectory']
+    })
+    if (picked.canceled || !picked.filePath) return { ok: false, canceled: true }
+    const outDir = picked.filePath
+    if (existsSync(outDir)) {
+      // 同名目录已存在 → 清空重建（用户已确认覆盖意图）
+      rmSync(outDir, { recursive: true, force: true })
+    }
+    mkdirSync(outDir, { recursive: true })
+    let copied = 0
+    for (const f of ['ai-novel-studio.db', 'ai-novel-studio.db-wal', 'ai-novel-studio.db-shm']) {
+      const src = join(dataDir, f)
+      if (existsSync(src)) {
+        copyFileSync(src, join(outDir, f))
+        copied++
+      }
+    }
+    writeFileSync(
+      join(outDir, 'backup-info.json'),
+      JSON.stringify(
+        {
+          app: 'AI-Novel-Studio',
+          version: app.getVersion(),
+          createdAt: new Date().toISOString(),
+          files: ['ai-novel-studio.db', 'ai-novel-studio.db-wal', 'ai-novel-studio.db-shm'].filter((f) => existsSync(join(dataDir, f))),
+          restoreNote: '恢复方式：设置页「从备份恢复」选择此目录，或手动将 db 三件套放回 %APPDATA%\\ai-novel-studio'
+        },
+        null,
+        2
+      ),
+      'utf8'
+    )
+    return { ok: true, path: outDir, copied }
+  } catch (e) {
+    console.error('[main] export-backup error:', e)
+    return { ok: false, error: String(e) }
+  }
+})
+
+// P18 B：从备份恢复（校验 → 替换三件套 → 退出）
+ipcMain.handle('restore-backup', async () => {
+  try {
+    const dataDir = app.getPath('userData')
+    const picked = await dialog.showOpenDialog(mainWindow!, {
+      title: '选择备份（目录或其中的 db 文件）',
+      properties: ['openDirectory', 'openFile']
+    })
+    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true }
+    const src = picked.filePaths[0]
+    // 定位备份目录：用户选的目录本身，或选的是文件取其目录
+    const dir = existsSync(src) && !existsSync(join(src, 'ai-novel-studio.db'))
+      ? join(src, '..')
+      : src
+    const dbFile = join(dir, 'ai-novel-studio.db')
+    if (!existsSync(dbFile)) {
+      return { ok: false, error: '所选位置没有 ai-novel-studio.db（不是有效备份）' }
+    }
+    // 替换三件套
+    for (const f of ['ai-novel-studio.db', 'ai-novel-studio.db-wal', 'ai-novel-studio.db-shm']) {
+      const s = join(dir, f)
+      const t = join(dataDir, f)
+      if (existsSync(s)) copyFileSync(s, t)
+      else if (existsSync(t)) rmSync(t, { force: true })
+    }
+    return { ok: true, restoredFrom: dir }
+  } catch (e) {
+    console.error('[main] restore-backup error:', e)
+    return { ok: false, error: String(e) }
+  }
 })
 
 function getServerEntry(): string {
