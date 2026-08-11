@@ -70,9 +70,9 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
     <div className="col">
       {error && <ErrorMsg error={error} />}
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row justify-between">
           <h2>角色</h2>
-          <div className="row" style={{ gap: 6 }}>
+          <div className="row gap-2">
             <input
               style={{ width: 220 }}
               placeholder="可选：本次生成要求（如：主角是腹黑医生、双女主）"
@@ -98,7 +98,7 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
 
         <div className="row" style={{ marginBottom: 12 }}>
           <input
-            style={{ flex: 1 }}
+            className="flex-1"
             placeholder="手动添加角色名"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -106,19 +106,19 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
           <button onClick={() => void addCharacter()} disabled={busy || !newName.trim()}>{busy ? '添加中…' : '添加'}</button>
         </div>
 
-        {chars.isLoading && <p className="muted" style={{ fontSize: 12 }}>加载中…</p>}
+        {chars.isLoading && <p className="muted t-small">加载中…</p>}
         {chars.isError && (
           <div style={{ color: 'var(--danger)', fontSize: 12 }}>
             加载失败：{String(chars.error)}
-            <button style={{ marginLeft: 8 }} onClick={() => void chars.refetch()}>重试</button>
+            <button className="ml-2" onClick={() => void chars.refetch()}>重试</button>
           </div>
         )}
-        {!chars.isLoading && !chars.isError && list.length === 0 && <p className="muted" style={{ fontSize: 12 }}>还没有角色</p>}
+        {!chars.isLoading && !chars.isError && list.length === 0 && <p className="muted t-small">还没有角色</p>}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
           {list.map((c) => (
             <div key={c.id} className="panel" style={{ background: 'var(--bg-card)' }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div className="row justify-between">
                 <strong>{c.name}</strong>
                 <span className="badge" style={c.status === 'pending' ? { color: '#ffb86c', background: 'rgba(255,184,108,0.12)' } : {}}>
                   {c.status === 'pending' ? '待确认' : '正式'}
@@ -129,7 +129,7 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
               {c.profile.personality && <div style={{ fontSize: 12, marginTop: 4 }}>性格：{c.profile.personality}</div>}
               {c.profile.goal && <div style={{ fontSize: 12, marginTop: 4 }}>目标：{c.profile.goal}</div>}
               {c.profile.weakness && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>弱点：{c.profile.weakness}</div>}
-              <div className="row" style={{ marginTop: 8 }}>
+              <div className="row mt-2">
                 {c.status === 'pending' && (
                   <button className="primary" disabled={charBusy !== null} onClick={() => void confirmCharacter(c.id)}>
                     {charBusy === c.id ? '确认中…' : '确认入册'}

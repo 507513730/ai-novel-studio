@@ -87,9 +87,9 @@ export function TasksPage(): React.JSX.Element {
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <div className="row">
           <ListChecks size={20} />
-          <h1 style={{ marginLeft: 8 }}>任务中心</h1>
+          <h1 className="ml-2">任务中心</h1>
         </div>
-        <button className="sm" onClick={() => void jobs.refetch()}><RefreshCw size={13} style={{ verticalAlign: -1, marginRight: 4 }} />刷新</button>
+        <button className="sm" onClick={() => void jobs.refetch()}><RefreshCw size={13} className="icon-gap" />刷新</button>
         <button
           className="sm"
           style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
@@ -114,7 +114,7 @@ export function TasksPage(): React.JSX.Element {
               .finally(() => setBusy(null))
           }}
         >
-          <Trash2 size={13} style={{ verticalAlign: -1, marginRight: 4 }} />清理已完成
+          <Trash2 size={13} className="icon-gap" />清理已完成
         </button>
       </div>
       {error && <ErrorMsg error={error} />}
@@ -126,7 +126,7 @@ export function TasksPage(): React.JSX.Element {
           const novelId = Number(j.payload.novelId ?? 0)
           return (
             <div key={j.id} className="panel" style={{ background: 'var(--bg-card)' }}>
-              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <div className="row justify-between flex-wrap gap-2">
                 <div className="row">
                   <span
                     style={{ width: 8, height: 8, borderRadius: 4, background: meta.color, display: 'inline-block' }}
@@ -141,7 +141,7 @@ export function TasksPage(): React.JSX.Element {
                     </button>
                   )}
                 </div>
-                <span className="muted" style={{ fontSize: 11 }}>{j.createdAt}</span>
+                <span className="muted t-small">{j.createdAt}</span>
               </div>
               {j.status === 'running' && typeof j.progress === 'number' && j.progress > 0 && (
                 <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'var(--bg-input)' }}>
@@ -174,19 +174,19 @@ export function TasksPage(): React.JSX.Element {
                     ))}
                   </select>
                   <button className="sm" disabled={busy !== null} onClick={() => retryWith(j.id)}>
-                    <RotateCcw size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+                    <RotateCcw size={12} className="icon-gap" />
                     {busy === j.id ? '处理中…' : '重试'}
                   </button>
                   <button className="sm danger" disabled={busy !== null} onClick={() => void act(j.id, () => novelApi.jobCancel(j.id), '任务已取消')}>
-                    <XCircle size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+                    <XCircle size={12} className="icon-gap" />
                     取消
                   </button>
                 </div>
               )}
               {(j.status === 'queued' || j.status === 'running') && (
-                <div className="row" style={{ marginTop: 8 }}>
+                <div className="row mt-2">
                   <button className="sm danger" disabled={busy !== null} onClick={() => void act(j.id, () => novelApi.jobCancel(j.id), '任务已取消')}>
-                    <XCircle size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+                    <XCircle size={12} className="icon-gap" />
                     取消
                   </button>
                 </div>

@@ -64,7 +64,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
       {error && <ErrorMsg error={error} />}
 
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row justify-between">
           <h2>整本卷规划</h2>
           <div className="row">
             <input
@@ -76,7 +76,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
               onChange={(e) => setChaptersPerVolume(e.target.value === '' ? 0 : Number(e.target.value))}
               title="每卷章数（可改）"
             />
-            <span className="muted" style={{ fontSize: 12 }}>每卷章数</span>
+            <span className="muted t-small">每卷章数</span>
             <button
               className="primary"
               disabled={busy !== null}
@@ -108,11 +108,11 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
             </button>
           </div>
         </div>
-        <p className="muted" style={{ fontSize: 12 }}>先生成卷规划，再逐卷生成节奏板和章节清单（章节名 AI 生成多样约束，可手动修改）。</p>
+        <p className="muted t-small">先生成卷规划，再逐卷生成节奏板和章节清单（章节名 AI 生成多样约束，可手动修改）。</p>
 
         {volumes.data?.volumes.map((v) => (
           <div key={v.id} className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row justify-between">
               <div>
                 <strong>第 {v.orderIndex + 1} 卷 · {v.title}</strong>
                 {Boolean(v.strategy.theme) && (
@@ -162,9 +162,9 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
 
       {/* 全书章节一览 */}
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div className="row justify-between flex-wrap gap-2">
           <h2>全书章节（{allChapters.length}）</h2>
-          <div className="row" style={{ flexWrap: 'wrap' }}>
+          <div className="row flex-wrap">
             <input
               type="number"
               min={1}
@@ -227,8 +227,8 @@ function VolumeDetail({ novelId, volId }: { novelId: number; volId: number }): R
   return (
     <div style={{ marginTop: 10 }}>
       {beats.data && beats.data.beats.length > 0 && (
-        <div className="col" style={{ gap: 6 }}>
-          <strong style={{ fontSize: 13 }}>节奏板</strong>
+        <div className="col gap-2">
+          <strong className="t3">节奏板</strong>
           {beats.data.beats.map((b) => (
             <div key={b.id} style={{ fontSize: 12, padding: '6px 10px', background: 'var(--bg-panel)', borderRadius: 6 }}>
               <strong>{b.orderIndex + 1}. {b.title}</strong>
@@ -238,7 +238,7 @@ function VolumeDetail({ novelId, volId }: { novelId: number; volId: number }): R
         </div>
       )}
       {beats.data && beats.data.beats.length === 0 && (
-        <p className="muted" style={{ fontSize: 12 }}>本卷还没有节奏板，点击"生成节奏板"。</p>
+        <p className="muted t-small">本卷还没有节奏板，点击"生成节奏板"。</p>
       )}
     </div>
   )
@@ -298,9 +298,9 @@ function ChapterRow({
             {chapter.title || `（第 ${chapter.id} 章，点击命名）`}
           </strong>
         )}
-        {chapter.volumeTitle && <span className="muted" style={{ fontSize: 11 }}>{chapter.volumeTitle}</span>}
-        {chapter.beatTitle && <span className="muted" style={{ fontSize: 11 }}>{chapter.beatTitle}</span>}
-        {chapter.wordCount > 0 && <span className="muted" style={{ fontSize: 11 }}>{chapter.wordCount} 字</span>}
+        {chapter.volumeTitle && <span className="muted t-small">{chapter.volumeTitle}</span>}
+        {chapter.beatTitle && <span className="muted t-small">{chapter.beatTitle}</span>}
+        {chapter.wordCount > 0 && <span className="muted t-small">{chapter.wordCount} 字</span>}
       </div>
       <button disabled={busy} onClick={onRefine} title="AI 细化本章任务单">
         {busy ? '细化中…' : '细化'}

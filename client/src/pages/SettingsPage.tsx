@@ -74,17 +74,17 @@ function ProvidersPanel(): React.JSX.Element {
 
   return (
     <div className="panel col">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="row justify-between">
         <h2>供应商</h2>
         <button onClick={() => void importOpencode()} disabled={busy} title="从本机 ~/.local/share/opencode/auth.json 导入 OpenCode Go 网关 key（聚合 DeepSeek/GLM/GPT/Grok/Kimi）">
           导入 OpenCode Go 网关
         </button>
       </div>
       {providers.data?.providers.map((p) => (
-        <div key={p.id} className="row" style={{ justifyContent: 'space-between' }}>
+        <div key={p.id} className="row justify-between">
           <div>
             <strong>{p.name}</strong>
-            <div className="muted" style={{ fontSize: 12 }}>
+            <div className="muted t-small">
               {p.baseUrl || '(使用 SDK 默认地址)'}
               {p.hasKey ? <span style={{ color: 'var(--ok)' }}> · 已配置 Key</span> : ' · 未配置 Key'}
             </div>
@@ -139,7 +139,7 @@ function ProvidersPanel(): React.JSX.Element {
               <input placeholder="名称" value={name} onChange={(e) => setName(e.target.value)} />
               <input
                 placeholder="base URL（OpenAI 兼容）"
-                style={{ flex: 1 }}
+                className="flex-1"
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
               />
@@ -238,7 +238,7 @@ function ModelRoutesPanel(): React.JSX.Element {
 
   return (
     <div className="panel col">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="row justify-between">
         <h2>模型路由（任务级）</h2>
         <button onClick={setDeepSeekPreset} disabled={!providers.data?.providers.some((p) => p.name === 'DeepSeek')}>
           一键应用 DeepSeek 预设
@@ -265,11 +265,11 @@ function ModelRoutesPanel(): React.JSX.Element {
                 })
               }
             >
-      {providers.isLoading && <p className="muted" style={{ fontSize: 12 }}>加载中…</p>}
+      {providers.isLoading && <p className="muted t-small">加载中…</p>}
       {providers.isError && (
         <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
           加载失败：{String(providers.error)}
-          <button className="sm" style={{ marginLeft: 8 }} onClick={() => void providers.refetch()}>重试</button>
+          <button className="sm ml-2" onClick={() => void providers.refetch()}>重试</button>
         </div>
       )}
       {providers.data?.providers.map((p) => (
@@ -342,7 +342,7 @@ function ModelRoutesPanel(): React.JSX.Element {
           </div>
         </div>
       ))}
-      <p className="muted" style={{ fontSize: 12 }}>
+      <p className="muted t-small">
         说明：thinking 开启时温度/penalty 无效（DeepSeek 官方约束）；fallback 链自动降级，降级调用会在成本仪表盘中标记。
       </p>
     </div>
@@ -371,7 +371,7 @@ function UsagePanel(): React.JSX.Element {
   return (
     <div className="panel col">
       <h2>成本仪表盘</h2>
-      <div className="row" style={{ flexWrap: 'wrap' }}>
+      <div className="row flex-wrap">
         <div className="panel" style={{ background: 'var(--bg-card)', minWidth: 150 }}>
           <div className="muted">预估成本 (USD)</div>
           <strong style={{ fontSize: 20 }}>{total ? total.cost.toFixed(4) : '—'}</strong>
@@ -484,7 +484,7 @@ export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'provi
   const [tab, setTab] = useState<'providers' | 'routes' | 'usage' | 'appearance' | 'writing'>(initialTab)
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="row justify-between">
         <h1>设置</h1>
         <div className="pill-tabs">
           <button className={tab === 'providers' ? 'active' : ''} onClick={() => setTab('providers')}>
@@ -563,14 +563,14 @@ function WritingPanel(): React.JSX.Element {
       }}
     >
       <div style={{ fontSize: 13, color: 'var(--text)' }}>{label} {current ? '✓' : ''}</div>
-      <div className="muted" style={{ fontSize: 11 }}>{desc}</div>
+      <div className="muted t-small">{desc}</div>
     </button>
   )
   if (!settings) return <div className="panel">加载中…</div>
   return (
     <div className="panel col">
       <h2>写作偏好</h2>
-      <p className="muted" style={{ fontSize: 12 }}>
+      <p className="muted t-small">
         这些规则会注入每次生成的写作要求（改设置后生成缓存自动失效）。仅在不等于默认值时注入，不浪费 token。
       </p>
       <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>语言</h3>
@@ -592,7 +592,7 @@ function WritingPanel(): React.JSX.Element {
 
       {/* P22-B：正文排版（编辑器即时生效） */}
       <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>正文排版</h3>
-      <div className="col" style={{ gap: 8 }}>
+      <div className="col gap-2">
         <label className="row" style={{ fontSize: 12, gap: 8 }}>
           <input type="checkbox" checked={typeIndent} onChange={(e) => { setTypeIndent(e.target.checked); patchType({ indent: e.target.checked }) }} />
           首行缩进 2 字符（每行缩进；段落=一行时视觉正确）
@@ -656,7 +656,7 @@ function FontPanel(): React.JSX.Element {
               <div style={{ fontSize: 15, color: 'var(--text)', fontFamily: f.stack }}>
                 {f.label} {settings.prose === f.key ? '✓' : ''}
               </div>
-              <div className="muted" style={{ fontSize: 11 }}>{f.desc}</div>
+              <div className="muted t-small">{f.desc}</div>
             </button>
           ))}
         </div>
@@ -675,8 +675,8 @@ function FontPanel(): React.JSX.Element {
           仿佛面前展开了全新的世界。他推开那扇尘封的门，光线涌了进来——预览文字，用于感受字体观感。
         </div>
       </div>
-      <div className="row" style={{ gap: 8 }}>
-        <span style={{ fontSize: 12 }}>编辑器字体：</span>
+      <div className="row gap-2">
+        <span className="t-small">编辑器字体：</span>
         <select
           value={settings.editor}
           onChange={(e) => update({ editor: e.target.value as 'prose' | 'mono' })}
@@ -696,7 +696,7 @@ function AppearancePanel(): React.JSX.Element {
   return (
     <div className="panel col">
       <h2>主题</h2>
-      <p className="muted" style={{ fontSize: 12 }}>
+      <p className="muted t-small">
         选择界面配色（灵感来自 FeelFish 色板与参考项目浅色风格）。主题即时生效并记住选择。
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
@@ -721,20 +721,20 @@ function AppearancePanel(): React.JSX.Element {
               <span style={{ width: 28, height: 28, borderRadius: 6, background: t.preview[1] }} />
             </div>
             <div style={{ fontSize: 13, color: 'var(--text)' }}>{t.label}</div>
-            <div className="muted" style={{ fontSize: 11 }}>{current === t.key ? '✓ 当前' : t.key}</div>
+            <div className="muted t-small">{current === t.key ? '✓ 当前' : t.key}</div>
           </button>
         ))}
       </div>
 
       {/* P22-A：字体设置 */}
-      <h2 style={{ marginTop: 8 }}>字体</h2>
-      <p className="muted" style={{ fontSize: 12 }}>
+      <h2 className="mt-2">字体</h2>
+      <p className="muted t-small">
         正文字体作用于写作编辑器与预览；界面字体保持系统栈。打包字体为开源 OFL 协议（霞鹜文楷/思源宋体/思源黑体），离线可用。
       </p>
       <FontPanel />
 
       {/* P16 P0：数据管理 */}
-      <h2 style={{ marginTop: 8 }}>数据与卸载</h2>
+      <h2 className="mt-2">数据与卸载</h2>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <button onClick={() => void window.novelStudio?.openDataDir()}>📂 打开数据目录</button>
         {/* P18 B：备份导出/恢复 */}

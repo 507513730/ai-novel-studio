@@ -112,13 +112,13 @@ export function AssetCreator({ type, typeLabel, placeholder, maxLen, onSave, onS
     <div className="panel" style={{ padding: 14 }}>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         <button className={`sm${mode === 'upload' ? ' primary' : ''}`} onClick={() => setMode('upload')}>
-          <Upload size={12} style={{ verticalAlign: -1, marginRight: 4 }} />上传文件
+          <Upload size={12} className="icon-gap" />上传文件
         </button>
         <button className={`sm${mode === 'paste' ? ' primary' : ''}`} onClick={() => setMode('paste')}>
-          <FileText size={12} style={{ verticalAlign: -1, marginRight: 4 }} />粘贴文本
+          <FileText size={12} className="icon-gap" />粘贴文本
         </button>
         <button className={`sm${mode === 'manual' ? ' primary' : ''}`} onClick={() => setMode('manual')}>
-          <PenLine size={12} style={{ verticalAlign: -1, marginRight: 4 }} />手动填写
+          <PenLine size={12} className="icon-gap" />手动填写
         </button>
       </div>
 
@@ -135,12 +135,12 @@ export function AssetCreator({ type, typeLabel, placeholder, maxLen, onSave, onS
           <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
             支持 TXT / MD / EPUB（自动分章）。解析后可点「AI 生成」提取{typeLabel}。
           </p>
-          {chapterCount !== null && <p className="muted" style={{ fontSize: 11 }}>已解析 {chapterCount} 章，将取前 {Math.min(chapterCount, 300)} 章内容。</p>}
+          {chapterCount !== null && <p className="muted t-small">已解析 {chapterCount} 章，将取前 {Math.min(chapterCount, 300)} 章内容。</p>}
         </div>
       )}
 
       {(mode === 'paste' || mode === 'upload') && text.length > 0 && (
-        <div style={{ marginTop: 8 }}>
+        <div className="mt-2">
           <textarea
             style={{ width: '100%', minHeight: 120, fontSize: 12 }}
             placeholder={placeholder}
@@ -180,12 +180,12 @@ export function AssetCreator({ type, typeLabel, placeholder, maxLen, onSave, onS
           onClick={() => void genDraft()}
           title="AI 从内容中提取草稿（可修改后保存）"
         >
-          <Sparkles size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+          <Sparkles size={12} className="icon-gap" />
           {busy === 'gen' ? '生成中…' : 'AI 生成'}
         </button>
         {saveable && (
           <button className="sm" disabled={busy !== null || !draft} onClick={() => void save()}>
-            <Save size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+            <Save size={12} className="icon-gap" />
             {busy === 'save' ? '保存中…' : '保存'}
           </button>
         )}

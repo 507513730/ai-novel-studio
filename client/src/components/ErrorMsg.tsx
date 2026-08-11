@@ -11,7 +11,7 @@ export function ErrorMsg({
   if (!error) return null
   return (
     <div className="row" style={{ marginTop, alignItems: 'flex-start', gap: 8 }}>
-      <div className="error-msg" style={{ flex: 1 }}>
+      <div className="error-msg flex-1">
         {error}
       </div>
       {onRetry && (

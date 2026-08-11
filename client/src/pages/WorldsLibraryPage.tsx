@@ -62,9 +62,9 @@ export function WorldsLibraryPage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <Globe2 size={20} />
-        <h1 style={{ marginLeft: 8 }}>世界样本库</h1>
+        <h1 className="ml-2">世界样本库</h1>
       </div>
       {error && <ErrorMsg error={error} />}
       {/* P23：上传/粘贴/手动 → AI 生成世界样本 */}
@@ -86,7 +86,7 @@ export function WorldsLibraryPage(): React.JSX.Element {
         hint="保存后可应用到任意书籍（世界 → 本书世界）。"
       />
       <div className="panel" style={{ marginBottom: 16, marginTop: 12 }}>
-        <h2 style={{ marginBottom: 8 }}>从书保存为样本</h2>
+        <h2 className="mb-2">从书保存为样本</h2>
         <div className="row">
           <select style={{ flex: 2 }} value={saveFrom} onChange={(e) => setSaveFrom(Number(e.target.value))}>
             <option value={0}>选择书…</option>
@@ -94,14 +94,14 @@ export function WorldsLibraryPage(): React.JSX.Element {
           </select>
           <input style={{ flex: 3 }} placeholder="样本名" value={saveName} onChange={(e) => setSaveName(e.target.value)} />
           <button className="primary" disabled={busy || !saveFrom || !saveName.trim()} onClick={() => void saveFromNovel()}>
-            <Save size={14} style={{ verticalAlign: -1, marginRight: 4 }} />保存
+            <Save size={14} className="icon-gap" />保存
           </button>
         </div>
       </div>
-      <div className="col" style={{ gap: 8 }}>
+      <div className="col gap-2">
         {templates.data?.templates.map((t) => (
           <div key={t.id} className="panel" style={{ background: 'var(--bg-card)', padding: 12 }}>
-            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <div className="row justify-between flex-wrap gap-2">
               <div>
                 <strong>{t.name}</strong>
                 <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>

@@ -55,8 +55,8 @@ function ImportBookCard({ onImported }: { onImported: (id: number) => void }): R
     <div className="panel" style={{ padding: 14 }}>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <Upload size={15} />
-        <strong style={{ fontSize: 13 }}>导入外部文件拆书</strong>
-        <span className="muted" style={{ fontSize: 11 }}>支持 TXT / MD / EPUB（自动分章，≤300 章）</span>
+        <strong className="t3">导入外部文件拆书</strong>
+        <span className="muted t-small">支持 TXT / MD / EPUB（自动分章，≤300 章）</span>
       </div>
       <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
         <input
@@ -94,9 +94,9 @@ export function BookAnalysisPage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <ScanSearch size={20} />
-        <h1 style={{ marginLeft: 8 }}>拆书</h1>
+        <h1 className="ml-2">拆书</h1>
       </div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
         各书的拆书分析与发布物总览。进入书内可执行新拆书、角色档案与形象演变。
@@ -120,8 +120,8 @@ function NovelAnalyses({ novelId, title, onOpen }: { novelId: number; title: str
   })
   return (
     <div className="panel">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <strong>{title} <span className="muted" style={{ fontSize: 12 }}>#{novelId}</span></strong>
+      <div className="row justify-between">
+        <strong>{title} <span className="muted t-small">#{novelId}</span></strong>
         <button className="sm" onClick={onOpen}>进入拆书工作台</button>
       </div>
       {q.data?.analyses.length === 0 && <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>暂无拆书记录。</p>}
@@ -129,7 +129,7 @@ function NovelAnalyses({ novelId, title, onOpen }: { novelId: number; title: str
         {q.data?.analyses.map((a) => (
           <div key={a.id} className="row" style={{ justifyContent: 'space-between', padding: '6px 10px', background: 'var(--bg-card)', borderRadius: 6, fontSize: 13 }}>
             <span><span className="badge">{a.depth}</span> <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>{String((a.result as Record<string, unknown>)?.genre ?? '')} · {a.createdAt}</span></span>
-            <span className="muted" style={{ fontSize: 11 }}>id {a.id}</span>
+            <span className="muted t-small">id {a.id}</span>
           </div>
         ))}
       </div>

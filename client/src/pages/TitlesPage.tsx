@@ -58,9 +58,9 @@ export function TitlesPage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <WandSparkles size={20} />
-        <h1 style={{ marginLeft: 8 }}>标题工坊</h1>
+        <h1 className="ml-2">标题工坊</h1>
       </div>
       {/* P23：自由输入 → AI 生成标题（不依赖已有书籍方向方案） */}
       <AssetCreator
@@ -79,7 +79,7 @@ export function TitlesPage(): React.JSX.Element {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {novels.data?.novels.map((n) => (
           <div key={n.id} className="panel">
-            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <div className="row justify-between flex-wrap gap-2">
               <div>
                 <strong>{n.title || '未命名小说'}</strong>
                 <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>#{n.id}</span>

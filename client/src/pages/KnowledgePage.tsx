@@ -28,9 +28,9 @@ export function KnowledgePage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <Database size={20} />
-        <h1 style={{ marginLeft: 8 }}>知识库</h1>
+        <h1 className="ml-2">知识库</h1>
       </div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
         全局文档库（拆书发布 / 外部资料 / AI 导入）。直塞文档会注入正文生成。
@@ -54,9 +54,9 @@ export function KnowledgePage(): React.JSX.Element {
       <div className="col" style={{ gap: 8, marginTop: 12 }}>
         {docs.data?.docs.map((d) => (
           <div key={d.id} className="panel" style={{ background: 'var(--bg-card)', padding: 12 }}>
-            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <div className="row justify-between flex-wrap gap-2">
               <div style={{ minWidth: 0 }}>
-                <strong style={{ fontSize: 13 }}>{d.title}</strong>
+                <strong className="t3">{d.title}</strong>
                 <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
                   {d.novelTitle || `#${d.novelId}`} · {d.source} · {d.createdAt}
                 </span>

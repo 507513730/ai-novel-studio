@@ -140,7 +140,7 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
         <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
           粘贴一段你喜欢的文风示例（≥200 字），AI 提取 8-15 个写法特征 → 创建可启停的写法资产。
         </p>
-        <div className="row" style={{ marginBottom: 8 }}>
+        <div className="row mb-2">
           <input
             style={{ width: 200 }}
             placeholder="资产名（如：我的悬疑文风）"
@@ -164,9 +164,9 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
           <h2>写法资产（绑定生效）</h2>
           {assets.data.assets.map((a) => (
             <div key={a.id} style={{ marginBottom: 12, padding: 10, background: 'var(--bg-card)', borderRadius: 8 }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div className="row justify-between">
                 <strong>{a.name}</strong>
-                <span className="muted" style={{ fontSize: 12 }}>{a.createdAt}</span>
+                <span className="muted t-small">{a.createdAt}</span>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                 {(a.features as unknown as Feature[]).map((f) => (
@@ -196,9 +196,9 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
 
       <div className="panel">
         <h2>试写对比</h2>
-        <div className="row" style={{ marginBottom: 8 }}>
+        <div className="row mb-2">
           <input
-            style={{ flex: 1 }}
+            className="flex-1"
             placeholder="试写任务（如：写一段主角深夜调查古董店的情节）"
             value={trialTask}
             onChange={(e) => setTrialTask(e.target.value)}
@@ -219,9 +219,9 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
 
       <div className="panel">
         <h2>反 AI 检测</h2>
-        <div className="row" style={{ marginBottom: 8 }}>
+        <div className="row mb-2">
           <input
-            style={{ flex: 1 }}
+            className="flex-1"
             placeholder="粘贴正文检测反 AI 词"
             value={checkText}
             onChange={(e) => setCheckText(e.target.value)}
@@ -229,7 +229,7 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
           <button onClick={() => void check()}>检测</button>
         </div>
         {checkResult && (
-          <div style={{ fontSize: 12 }}>
+          <div className="t-small">
             <span className="badge" style={checkResult.total > 0 ? { color: 'var(--danger)', background: 'rgba(255,107,107,0.12)' } : {}}>
               {checkResult.total > 0 ? `命中 ${checkResult.total} 处` : '无命中 ✓'}
             </span>
@@ -245,7 +245,7 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
         <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
           参考资料/设定文档将直接注入生成上下文前缀（复用缓存机制），总量 &gt;100 万字时才需真 RAG。
         </p>
-        <div className="row" style={{ marginBottom: 8 }}>
+        <div className="row mb-2">
           <input
             style={{ width: 200 }}
             placeholder="资料标题"

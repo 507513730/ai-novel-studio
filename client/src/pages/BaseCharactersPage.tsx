@@ -57,9 +57,9 @@ export function BaseCharactersPage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <UsersRound size={20} />
-        <h1 style={{ marginLeft: 8 }}>基础角色库</h1>
+        <h1 className="ml-2">基础角色库</h1>
       </div>
       {/* P23（N5）：上传/粘贴/手动 → AI 生成角色模板 */}
       <AssetCreator
@@ -79,15 +79,15 @@ export function BaseCharactersPage(): React.JSX.Element {
       />
 
       {/* 模板区 */}
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginBottom: 8 }}>跨书模板（{templates.data?.templates.length ?? 0}）</h2>
+      <div className="panel mb-4">
+        <h2 className="mb-2">跨书模板（{templates.data?.templates.length ?? 0}）</h2>
         <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
           从任意书的角色「⭐ 存为模板」沉淀；模板可应用到任意书名册。
         </p>
-        <div className="col" style={{ gap: 8 }}>
+        <div className="col gap-2">
           {templates.data?.templates.map((t) => (
             <div key={t.id} className="panel" style={{ background: 'var(--bg-card)', padding: 12 }}>
-              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <div className="row justify-between flex-wrap gap-2">
                 <div>
                   <strong>{t.name}</strong>
                   <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
@@ -155,8 +155,8 @@ function NovelChars({ novelId, title, chars, busy, onLoad, onOpen, onSaveTemplat
   const list = chars ?? q.data?.characters
   return (
     <div className="panel">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <strong>{title} <span className="muted" style={{ fontSize: 12 }}>#{novelId}</span></strong>
+      <div className="row justify-between">
+        <strong>{title} <span className="muted t-small">#{novelId}</span></strong>
         <button className="sm" onClick={onOpen}>进入角色工作台</button>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
@@ -175,7 +175,7 @@ function NovelChars({ novelId, title, chars, busy, onLoad, onOpen, onSaveTemplat
             </button>
           </span>
         ))}
-        {list === undefined && <span className="muted" style={{ fontSize: 12 }}>加载中…</span>}
+        {list === undefined && <span className="muted t-small">加载中…</span>}
       </div>
     </div>
   )

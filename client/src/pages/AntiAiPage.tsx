@@ -38,9 +38,9 @@ export function AntiAiPage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <ShieldCheck size={20} />
-        <h1 style={{ marginLeft: 8 }}>反 AI 规则</h1>
+        <h1 className="ml-2">反 AI 规则</h1>
       </div>
       {/* P23：上传/粘贴/手动 → AI 提炼反 AI 词库 */}
       <AssetCreator
@@ -103,7 +103,7 @@ export function AntiAiPage(): React.JSX.Element {
                   setNewWord('')
                 }}
               >
-                <Plus size={12} style={{ verticalAlign: -1, marginRight: 4 }} />添加
+                <Plus size={12} className="icon-gap" />添加
               </button>
             </div>
           </div>

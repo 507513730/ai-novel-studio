@@ -91,7 +91,7 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
 
       {/* 方向候选 */}
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row justify-between">
           <h2>整本方向</h2>
           <button className="primary" disabled={busy !== null} onClick={() => void run('directions', () => novelApi.directions(novelId))}>
             {busy === 'directions' ? '生成中…' : directions.length > 0 ? '重新生成方向' : 'AI 生成方向方案'}
@@ -117,7 +117,7 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
                 }}
               >
                 <strong style={{ fontSize: 15 }}>{d.scheme.title}</strong>
-                <span className="badge" style={{ marginLeft: 8 }}>{d.scheme.genre}</span>
+                <span className="badge ml-2">{d.scheme.genre}</span>
                 <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
                   卖点：{d.scheme.sellingPoint}
                 </div>
@@ -127,7 +127,7 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
                 <div style={{ fontSize: 12, marginTop: 4 }} className="muted">
                   前30章：{d.scheme.first30}
                 </div>
-                <div style={{ marginTop: 8 }}>
+                <div className="mt-2">
                   {/* P13 G6：定向重做单套方向 */}
                   <button
                     className="sm"
@@ -147,7 +147,7 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
         {titles.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <label>候选书名（点击选用）</label>
-            <div className="row" style={{ flexWrap: 'wrap' }}>
+            <div className="row flex-wrap">
               {titles.map((t) => (
                 <button
                   key={t}
@@ -164,7 +164,7 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
 
       {/* 项目设定 */}
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row justify-between">
           <h2>项目设定（framing）</h2>
           <button
             className="primary"
@@ -203,9 +203,9 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
           </div>
           <div>
             <label>流派（绑定爽点/节奏模板，注入章节生成）</label>
-            <div className="row" style={{ gap: 6 }}>
+            <div className="row gap-2">
               <select
-                style={{ flex: 1 }}
+                className="flex-1"
                 value={novel?.genre || ''}
                 onChange={(e) => {
                   setError(null)
@@ -233,7 +233,7 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
             {addingGenre && (
               <div className="row" style={{ marginTop: 6, gap: 6 }}>
                 <input
-                  style={{ flex: 1 }}
+                  className="flex-1"
                   placeholder="流派名（如：克苏鲁）"
                   value={newGenre}
                   onChange={(e) => setNewGenre(e.target.value)}
@@ -262,22 +262,22 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
           {Boolean(framing.summary) && (
             <div className="panel" style={{ background: 'var(--bg-card)' }}>
               <div><strong>故事梗概：</strong>
-                <button className="sm" style={{ marginLeft: 6 }} disabled={busy !== null} onClick={() => void run('field-summary', () => novelApi.framingField(novelId, 'summary'))}>
+                <button className="sm ml-2" disabled={busy !== null} onClick={() => void run('field-summary', () => novelApi.framingField(novelId, 'summary'))}>
                   {busy === 'field-summary' ? '重写中…' : '✎ AI 重写'}
                 </button>
                 {String(framing.summary)}</div>
-              <div style={{ marginTop: 6 }}><strong>卖点：</strong>
-                <button className="sm" style={{ marginLeft: 6 }} disabled={busy !== null} onClick={() => void run('field-sellingPoint', () => novelApi.framingField(novelId, 'sellingPoint'))}>
+              <div className="mt-2"><strong>卖点：</strong>
+                <button className="sm ml-2" disabled={busy !== null} onClick={() => void run('field-sellingPoint', () => novelApi.framingField(novelId, 'sellingPoint'))}>
                   {busy === 'field-sellingPoint' ? '重写中…' : '✎ AI 重写'}
                 </button>
                 {String(framing.sellingPoint)}</div>
-              <div style={{ marginTop: 6 }}><strong>读者感受：</strong>
-                <button className="sm" style={{ marginLeft: 6 }} disabled={busy !== null} onClick={() => void run('field-readerFeeling', () => novelApi.framingField(novelId, 'readerFeeling'))}>
+              <div className="mt-2"><strong>读者感受：</strong>
+                <button className="sm ml-2" disabled={busy !== null} onClick={() => void run('field-readerFeeling', () => novelApi.framingField(novelId, 'readerFeeling'))}>
                   {busy === 'field-readerFeeling' ? '重写中…' : '✎ AI 重写'}
                 </button>
                 {String(framing.readerFeeling)}</div>
-              <div style={{ marginTop: 6 }}><strong>前30章承诺：</strong>
-                <button className="sm" style={{ marginLeft: 6 }} disabled={busy !== null} onClick={() => void run('field-first30Promise', () => novelApi.framingField(novelId, 'first30Promise'))}>
+              <div className="mt-2"><strong>前30章承诺：</strong>
+                <button className="sm ml-2" disabled={busy !== null} onClick={() => void run('field-first30Promise', () => novelApi.framingField(novelId, 'first30Promise'))}>
                   {busy === 'field-first30Promise' ? '重写中…' : '✎ AI 重写'}
                 </button>
                 {String(framing.first30Promise)}</div>
@@ -288,7 +288,7 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
 
       {/* 故事宏观 */}
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row justify-between">
           <h2>故事宏观规划</h2>
           <button disabled={busy !== null} onClick={() => void run('macro', () => novelApi.macro(novelId))}>
             {busy === 'macro' ? '生成中…' : 'AI 生成宏观规划'}
@@ -297,12 +297,12 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
         {Boolean(macro.storyEngine) && (
           <div className="panel" style={{ background: 'var(--bg-card)' }}>
             <div><strong>故事引擎：</strong>{String(macro.storyEngine)}</div>
-            <div style={{ marginTop: 6 }}><strong>长期对立：</strong>{String(macro.longConflict)}</div>
-            <div style={{ marginTop: 6 }}><strong>推进与兑现：</strong>{String(macro.payoffSummary)}</div>
-            <div style={{ marginTop: 6 }}><strong>主题：</strong>{String(macro.theme)}</div>
+            <div className="mt-2"><strong>长期对立：</strong>{String(macro.longConflict)}</div>
+            <div className="mt-2"><strong>推进与兑现：</strong>{String(macro.payoffSummary)}</div>
+            <div className="mt-2"><strong>主题：</strong>{String(macro.theme)}</div>
           </div>
         )}
-        {!macro.storyEngine && <p className="muted" style={{ fontSize: 12 }}>先生成项目设定，再生成宏观规划。</p>}
+        {!macro.storyEngine && <p className="muted t-small">先生成项目设定，再生成宏观规划。</p>}
       </div>
     </div>
   )

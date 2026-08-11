@@ -109,7 +109,7 @@ export function Onboarding({ onDone }: OnboardingProps): React.JSX.Element {
             )}
           </div>
           {error && <ErrorMsg error={error} />}
-          <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div className="row justify-between">
             <button onClick={() => setStep(2)}>
               {providerChoice === 'opencode-go' ? '下一步（自动导入凭证）' : '下一步（输入 API Key）'}
             </button>

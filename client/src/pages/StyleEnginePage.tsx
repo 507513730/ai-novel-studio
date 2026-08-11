@@ -60,9 +60,9 @@ export function StyleEnginePage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <WandSparkles size={20} />
-        <h1 style={{ marginLeft: 8 }}>写法引擎</h1>
+        <h1 className="ml-2">写法引擎</h1>
       </div>
       {/* P23：上传/粘贴/手动 → AI 生成写法资产（含反 AI 词提炼） */}
       <AssetCreator
@@ -87,8 +87,8 @@ export function StyleEnginePage(): React.JSX.Element {
       />
       {error && <ErrorMsg error={error} />}
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginBottom: 8 }}>创建全局写法资产</h2>
+      <div className="panel mb-4">
+        <h2 className="mb-2">创建全局写法资产</h2>
         <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
           用一段有个人风格的示例文本提取特征，成为全局资产，可随时导入任意书。
         </p>
@@ -98,8 +98,8 @@ export function StyleEnginePage(): React.JSX.Element {
           value={sample}
           onChange={(e) => setSample(e.target.value)}
         />
-        <div className="row" style={{ marginTop: 8 }}>
-          <input style={{ flex: 1 }} placeholder="资产名（默认：我的全局写法）" value={name} onChange={(e) => setName(e.target.value)} />
+        <div className="row mt-2">
+          <input className="flex-1" placeholder="资产名（默认：我的全局写法）" value={name} onChange={(e) => setName(e.target.value)} />
           <button className="primary" disabled={busy} onClick={() => void createGlobal()}>
             {busy ? '提取中…' : '提取并创建'}
           </button>
@@ -107,16 +107,16 @@ export function StyleEnginePage(): React.JSX.Element {
       </div>
 
       <div className="panel">
-        <h2 style={{ marginBottom: 10 }}>全部写法资产</h2>
+        <h2 className="mb-3">全部写法资产</h2>
         {assets.isLoading && <p className="muted">加载中…</p>}
-        <div className="col" style={{ gap: 8 }}>
+        <div className="col gap-2">
           {assets.data?.assets.map((a) => (
             <div key={a.id} className="panel" style={{ background: 'var(--bg-card)', padding: 12 }}>
-              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <div className="row justify-between flex-wrap gap-2">
                 <div>
                   <strong>{a.name}</strong>
                   {a.global ? (
-                    <span className="badge" style={{ marginLeft: 8 }}>全局</span>
+                    <span className="badge ml-2">全局</span>
                   ) : (
                     <button
                       className="badge"
@@ -128,7 +128,7 @@ export function StyleEnginePage(): React.JSX.Element {
                   )}
                 </div>
                 <div className="row">
-                  <span className="muted" style={{ fontSize: 11 }}>{a.features.length} 特征</span>
+                  <span className="muted t-small">{a.features.length} 特征</span>
                   {a.global && (
                     <select
                       style={{ width: 150, padding: '4px 8px', fontSize: 12 }}

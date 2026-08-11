@@ -160,7 +160,7 @@ export function AppLayout(): React.JSX.Element {
           AI 小说创作工作台
         </span>
         <span className="muted" style={{ fontSize: 11, marginLeft: 10 }}>
-          v0.2.0
+          v{__APP_VERSION__}
         </span>
         {/* P13 G8：全局运行任务悬浮状态 */}
         {runningJobs.length > 0 && (
@@ -216,7 +216,7 @@ export function AppLayout(): React.JSX.Element {
         {/* 导航分组 */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px' }}>
           {navGroups.map((g) => (
-            <div key={g.title} style={{ marginBottom: 8 }}>
+            <div key={g.title} className="mb-2">
               {!collapsed && (
                 <div style={{ fontSize: 10, color: 'var(--text-faint)', padding: '6px 10px 4px', letterSpacing: 0.5 }}>
                   {g.title}

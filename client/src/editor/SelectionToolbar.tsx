@@ -85,7 +85,7 @@ export function SelectionToolbar(props: SelectionToolbarProps): React.JSX.Elemen
         flexWrap: 'wrap'
       }}
     >
-      <span className="muted" style={{ fontSize: 11 }}>
+      <span className="muted t-small">
         {hasSelection ? 'AI 改写选中文字：' : 'AI 插入：'}
       </span>
       {(hasSelection ? MODIFY_ACTIONS : INSERT_ACTIONS).map((a) => (

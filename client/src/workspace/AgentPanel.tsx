@@ -115,7 +115,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
         </div>
         {teamResult && (
           <div className="panel" style={{ background: 'var(--bg-card)', marginTop: 10 }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row justify-between">
               <strong>综合评分：{str(teamResult.score)}</strong>
               {Number(teamResult.highCount) > 0 && (
                 <span className="badge" style={{ color: 'var(--danger)', background: 'rgba(255,107,107,0.12)' }}>
@@ -147,7 +147,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
                       [{str(i.focus)}] {str(i.severity)}
                     </span>
                     <div>{str(i.problem)}</div>
-                    <div className="muted" style={{ fontSize: 11 }}>建议：{str(i.suggestion)}</div>
+                    <div className="muted t-small">建议：{str(i.suggestion)}</div>
                   </div>
                 ))}
               </div>
@@ -185,7 +185,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
             {agents.data.agents.map((a) => (
               <div key={a.id} className="panel" style={{ background: 'var(--bg-card)' }}>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div className="row justify-between">
                   <strong>{a.name}</strong>
                   <span className="badge" style={a.enabled ? {} : { color: 'var(--text-dim)' }}>
                     {a.enabled ? '启用' : '停用'}
@@ -196,7 +196,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
                 <p style={{ fontSize: 12, marginTop: 6, maxHeight: expandedPrompt === a.id ? 400 : 80, overflow: 'hidden', transition: 'max-height 200ms' }}>
                   {a.systemPrompt}
                 </p>
-                <div className="row" style={{ marginTop: 6 }}>
+                <div className="row mt-2">
                   <button className='sm' onClick={() => void toggleAgent(a.id, a.enabled)}>
                     {a.enabled ? '停用' : '启用'}
                   </button>
@@ -212,7 +212,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
 
       <div className="panel">
         <h2>创建自定义 Agent</h2>
-        <div className="row" style={{ marginBottom: 8 }}>
+        <div className="row mb-2">
           <input style={{ width: 160 }} placeholder="名称" value={name} onChange={(e) => setName(e.target.value)} />
           <select value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="custom">自定义</option>

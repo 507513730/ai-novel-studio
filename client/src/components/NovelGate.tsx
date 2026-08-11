@@ -10,9 +10,9 @@ export function NovelGate({ title, desc, target }: { title: string; desc: string
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <BookOpenText size={20} />
-        <h1 style={{ marginLeft: 8 }}>{title}</h1>
+        <h1 className="ml-2">{title}</h1>
       </div>
       <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>{desc}</p>
       {novels.isLoading && <p className="muted">加载中…</p>}
@@ -26,7 +26,7 @@ export function NovelGate({ title, desc, target }: { title: string; desc: string
           <button className="primary" onClick={() => navigate('/')}>去创建小说</button>
         </div>
       )}
-      <div className="col" style={{ gap: 8 }}>
+      <div className="col gap-2">
         {novels.data?.novels.map((n) => (
           <button
             key={n.id}
@@ -35,7 +35,7 @@ export function NovelGate({ title, desc, target }: { title: string; desc: string
             onClick={() => navigate(target(n.id))}
           >
             <span style={{ fontSize: 14 }}>{n.title || '未命名小说'}</span>
-            <span className="muted" style={{ fontSize: 12 }}>进入 {title} →</span>
+            <span className="muted t-small">进入 {title} →</span>
           </button>
         ))}
       </div>

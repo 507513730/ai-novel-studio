@@ -23,7 +23,7 @@ export function CreativeHubPage(): React.JSX.Element {
       <div className="row" style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ fontSize: 18 }}>创作中枢（Creative Hub）</h1>
-          <span className="muted" style={{ fontSize: 12 }}>
+          <span className="muted t-small">
             对话即创作：可以直接让 AI 查状态、跑导演、生成章节
           </span>
         </div>

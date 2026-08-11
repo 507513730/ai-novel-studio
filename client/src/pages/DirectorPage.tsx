@@ -174,9 +174,9 @@ export function DirectorPage(): React.JSX.Element {
         <button className="sm" onClick={() => navigate(`/novels/${id}`)}>← 工作台</button>
       </div>
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>启动自动导演</h2>
-        <div className="row" style={{ marginBottom: 10 }}>
+      <div className="panel mb-4">
+        <h2 className="mb-3">启动自动导演</h2>
+        <div className="row mb-3">
           <label>模式</label>
           <select value={mode} onChange={(e) => setMode(e.target.value as 'auto' | 'supervised')}>
             <option value="auto">全自动（无人值守）</option>
@@ -204,7 +204,7 @@ export function DirectorPage(): React.JSX.Element {
         {msg && <div style={{ color: 'var(--ok)', fontSize: 13 }}>{msg}</div>}
         {error && <ErrorMsg error={error} />}
         {pollFailed && (
-          <div className="row" style={{ marginBottom: 8 }}>
+          <div className="row mb-2">
             <span className="muted" style={{ fontSize: 12, color: 'var(--warn)' }}>连接已断开，轮询已暂停</span>
             <button className="sm" onClick={() => { setPollFailed(false); pollFailRef.current = 0; pollingRef.current = setInterval(poll, 3000); poll() }}>
               恢复连接
@@ -214,8 +214,8 @@ export function DirectorPage(): React.JSX.Element {
       </div>
 
       {status && status.status !== 'not_started' && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="panel mb-4">
+          <div className="row justify-between">
             <h2>导演进度</h2>
             <span className="badge">{status.status}</span>
           </div>
@@ -257,9 +257,9 @@ export function DirectorPage(): React.JSX.Element {
       )}
 
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div className="row justify-between flex-wrap gap-2">
           <h2>整本生产</h2>
-          <div className="row" style={{ flexWrap: 'wrap' }}>
+          <div className="row flex-wrap">
             {/* P14 B4：范围授权（留空 = 全部待生成章节） */}
             <input
               type="number"

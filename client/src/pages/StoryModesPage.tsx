@@ -49,9 +49,9 @@ export function StoryModesPage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <Workflow size={20} />
-        <h1 style={{ marginLeft: 8 }}>推进模式库</h1>
+        <h1 className="ml-2">推进模式库</h1>
       </div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
         推进节奏模板（升级流 / 日常流 / 群像流…），供章节生成时参考节奏与爽点密度。
@@ -72,25 +72,25 @@ export function StoryModesPage(): React.JSX.Element {
         onSaved={() => void queryClient.invalidateQueries({ queryKey: ['story-modes'] })}
       />
       {error && <ErrorMsg error={error} />}
-      <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel mb-4">
         <div className="row">
           <input style={{ flex: 2 }} placeholder="模式名（如：无限升级流）" value={name} onChange={(e) => setName(e.target.value)} />
           <input style={{ flex: 3 }} placeholder="描述（可选）" value={desc} onChange={(e) => setDesc(e.target.value)} />
           <button className="primary" disabled={!name.trim()} onClick={() => void create()}>
-            <Plus size={14} style={{ verticalAlign: -1, marginRight: 4 }} />创建
+            <Plus size={14} className="icon-gap" />创建
           </button>
         </div>
       </div>
-      <div className="col" style={{ gap: 8 }}>
+      <div className="col gap-2">
         {modes.data?.modes.map((m) => (
           <div key={m.id} className="panel" style={{ background: 'var(--bg-card)', padding: 12 }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row justify-between">
               <div>
                 <strong>{m.name}</strong>
                 {m.description && <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{m.description}</div>}
               </div>
               <button className="sm danger" onClick={() => void remove(m.id, m.name)}>
-                <Trash2 size={12} style={{ verticalAlign: -1, marginRight: 4 }} />删除
+                <Trash2 size={12} className="icon-gap" />删除
               </button>
             </div>
           </div>

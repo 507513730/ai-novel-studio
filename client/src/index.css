@@ -444,6 +444,12 @@ h2 {
   color: var(--accent-bright);
 }
 
+/* P25-D：badge 语义变体（收敛内联色） */
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.danger { background: var(--danger-soft); color: var(--danger); }
+.badge.plain { background: var(--bg-elevated); color: var(--text-dim); }
+
 /* 列表项（选中态：soft 底 + 左 3px 色条，kimi 建议） */
 .list-item {
   position: relative;
@@ -651,3 +657,73 @@ select:focus {
   background: var(--danger-soft);
   border: 1px solid transparent;
 }
+
+/* ============================================================
+ * P25 UI 打磨：工具类（收敛内联样式，统一间距/层级/状态）
+ * ============================================================ */
+
+/* ---- 间距工具类（对应 --sp-* 8px 栅格） ---- */
+.mt-1 { margin-top: 4px; }  .mt-2 { margin-top: 8px; }  .mt-3 { margin-top: 12px; }
+.mt-4 { margin-top: 16px; } .mt-5 { margin-top: 20px; } .mt-6 { margin-top: 24px; }
+.mb-1 { margin-bottom: 4px; } .mb-2 { margin-bottom: 8px; } .mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; } .mb-5 { margin-bottom: 20px; }
+.ml-1 { margin-left: 4px; } .ml-2 { margin-left: 8px; } .ml-3 { margin-left: 12px; }
+.mr-1 { margin-right: 4px; } .mr-2 { margin-right: 8px; } .mr-3 { margin-right: 12px; }
+.mx-1 { margin-left: 4px; margin-right: 4px; } .mx-2 { margin-left: 8px; margin-right: 8px; }
+.my-1 { margin-top: 4px; margin-bottom: 4px; } .my-2 { margin-top: 8px; margin-bottom: 8px; }
+.p-1 { padding: 4px; } .p-2 { padding: 8px; } .p-3 { padding: 12px; }
+.p-4 { padding: 16px; } .p-5 { padding: 20px; }
+.px-2 { padding-left: 8px; padding-right: 8px; } .px-3 { padding-left: 12px; padding-right: 12px; }
+.py-1 { padding-top: 4px; padding-bottom: 4px; } .py-2 { padding-top: 8px; padding-bottom: 8px; }
+.gap-1 { gap: 4px; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; }
+
+/* ---- 文本层级 ---- */
+.t1 { font-size: var(--fs-18); font-weight: 600; }
+.t2 { font-size: var(--fs-15); font-weight: 600; }
+.t3 { font-size: var(--fs-13); font-weight: 500; }
+.t-small { font-size: var(--fs-12); }
+
+/* ---- 圆角 / 阴影工具类 ---- */
+.radius-s { border-radius: var(--radius-s); }
+.radius-m { border-radius: var(--radius-m); }
+.radius-l { border-radius: var(--radius-l); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+
+/* ---- 布局辅助 ---- */
+.w-full { width: 100%; }
+.flex-1 { flex: 1; min-width: 0; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.items-center { align-items: center; }
+.flex-wrap { flex-wrap: wrap; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-gap { vertical-align: -1px; margin-right: 4px; }
+
+/* ---- 状态反馈：按压 + hover 提亮 ---- */
+button:active:not(:disabled),
+.list-item:active,
+[role='button']:active {
+  transform: scale(0.98);
+}
+button, .list-item, [role='button'] {
+  transition:
+    background var(--transition-fast) var(--ease),
+    border-color var(--transition-fast) var(--ease),
+    color var(--transition-fast) var(--ease),
+    transform 80ms var(--ease),
+    box-shadow var(--transition-fast) var(--ease);
+}
+
+/* 卡片/面板 hover 提亮（层级感） */
+.panel:hover,
+.card:hover {
+  border-color: var(--border-hover);
+}
+
+/* ---- 页面进入动效 ---- */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

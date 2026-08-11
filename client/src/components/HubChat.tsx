@@ -67,7 +67,7 @@ export function HubChat({ novelId, height = '100%' }: HubChatProps): React.JSX.E
             )}
           </div>
         ))}
-        {busy && <div className="muted" style={{ fontSize: 11 }}>AI 思考中…</div>}
+        {busy && <div className="muted t-small">AI 思考中…</div>}
         <div ref={bottomRef} />
       </div>
       <div style={{ display: 'flex', gap: 6, padding: '6px 8px', borderTop: '1px solid var(--border)' }}>

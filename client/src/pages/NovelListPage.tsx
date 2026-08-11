@@ -60,10 +60,10 @@ export function NovelListPage(): React.JSX.Element {
       </div>
 
       <div className="panel" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginBottom: 10 }}>开始新书：输入一句灵感</h2>
+        <h2 className="mb-3">开始新书：输入一句灵感</h2>
         <div className="row">
           <input
-            style={{ flex: 1 }}
+            className="flex-1"
             placeholder="例：一个失业程序员获得能读取他人欲望的异能，进入金融暗战……"
             value={inspiration}
             onChange={(e) => setInspiration(e.target.value)}
@@ -83,19 +83,19 @@ export function NovelListPage(): React.JSX.Element {
       </div>
 
       <div className="panel">
-        <h2 style={{ marginBottom: 10 }}>我的小说</h2>
+        <h2 className="mb-3">我的小说</h2>
         {novels.isLoading && <p className="muted">加载中…</p>}
         {novels.isError && (
           <div style={{ color: 'var(--danger)' }}>
             加载失败：{String(novels.error)}
-            <button style={{ marginLeft: 8 }} onClick={() => void novels.refetch()}>重试</button>
+            <button className="ml-2" onClick={() => void novels.refetch()}>重试</button>
           </div>
         )}
         {novels.data?.novels.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 20px' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>📚</div>
             <div style={{ fontSize: 15, marginBottom: 6 }}>还没有小说</div>
-            <div className="muted" style={{ fontSize: 12 }}>
+            <div className="muted t-small">
               在上方输入一句灵感，AI 自动导演会帮你完成开书、设定与第一卷规划。
             </div>
           </div>
@@ -139,7 +139,7 @@ export function NovelListPage(): React.JSX.Element {
                 >
                   {(n.title || '未').slice(0, 1)}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="flex-1">
                   <strong style={{ fontSize: 15, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {n.title || '未命名小说'}
                   </strong>

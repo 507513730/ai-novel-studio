@@ -34,6 +34,10 @@ export default defineConfig({
   renderer: {
     root: 'client',
     plugins: [react()],
+    // 版本单一来源：package.json（npm_package_version 由 pnpm/npm 注入）
+    define: {
+      __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0')
+    },
     resolve: {
       alias: {
         '@shared': resolve(__dirname, 'shared/src'),

@@ -264,15 +264,15 @@ export function StudioPage(): React.JSX.Element {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row gap-2">
           <WandSparkles size={20} />
           <h1>创造工坊</h1>
-          <span className="muted" style={{ fontSize: 12 }}>打造你的创作方案（智能体流水线）· P21</span>
+          <span className="muted t-small">打造你的创作方案（智能体流水线）· P21</span>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <button className="sm" onClick={createBlank}><Pencil size={13} style={{ verticalAlign: -1, marginRight: 4 }} />新建方案</button>
-          <button className="sm" onClick={importFile} disabled={busy !== null}><Upload size={13} style={{ verticalAlign: -1, marginRight: 4 }} />导入方案</button>
-          <button className="sm" onClick={importFeelfish} disabled={busy !== null} title="导入 Feelfish 的 .feelfish/agents/*.md + solution.json"><Layers size={13} style={{ verticalAlign: -1, marginRight: 4 }} />导入 Feelfish</button>
+          <button className="sm" onClick={createBlank}><Pencil size={13} className="icon-gap" />新建方案</button>
+          <button className="sm" onClick={importFile} disabled={busy !== null}><Upload size={13} className="icon-gap" />导入方案</button>
+          <button className="sm" onClick={importFeelfish} disabled={busy !== null} title="导入 Feelfish 的 .feelfish/agents/*.md + solution.json"><Layers size={13} className="icon-gap" />导入 Feelfish</button>
         </div>
       </div>
 
@@ -313,12 +313,12 @@ export function StudioPage(): React.JSX.Element {
                     color: 'var(--text)'
                   }}
                 >
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <strong style={{ fontSize: 13 }}>{sol.name}</strong>
+                  <div className="row justify-between">
+                    <strong className="t3">{sol.name}</strong>
                     <span className="badge">v{sol.version}</span>
                   </div>
                   <div className="row" style={{ justifyContent: 'space-between', marginTop: 2 }}>
-                    <span className="muted" style={{ fontSize: 11 }}>{sol.steps.length} 步{sol.enabled ? '' : ' · 已停用'}</span>
+                    <span className="muted t-small">{sol.steps.length} 步{sol.enabled ? '' : ' · 已停用'}</span>
                     {/* P23（N7）：方案删除 */}
                     <button
                       className="sm"
@@ -344,7 +344,7 @@ export function StudioPage(): React.JSX.Element {
               )
             })}
             {(solutions.data?.solutions ?? []).length === 0 && (
-              <p className="muted" style={{ fontSize: 12 }}>暂无方案。点「新建方案」开始，或「导入」已有方案。</p>
+              <p className="muted t-small">暂无方案。点「新建方案」开始，或「导入」已有方案。</p>
             )}
           </div>
 
@@ -374,8 +374,8 @@ export function StudioPage(): React.JSX.Element {
             </div>
             <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
               {(skills.data?.skills ?? []).map((sk) => (
-                <div key={Number(sk.id)} className="row" style={{ justifyContent: 'space-between' }}>
-                  <span className="muted" style={{ fontSize: 11 }}>
+                <div key={Number(sk.id)} className="row justify-between">
+                  <span className="muted t-small">
                     {String(sk.name)} <span style={{ opacity: 0.6 }}>· {String(sk.description).slice(0, 30)}</span>
                   </span>
                   <button
@@ -393,7 +393,7 @@ export function StudioPage(): React.JSX.Element {
                   </button>
                 </div>
               ))}
-              {(skills.data?.skills ?? []).length === 0 && <span className="muted" style={{ fontSize: 11 }}>空（可手动新建或导入 Feelfish agent 自动建）</span>}
+              {(skills.data?.skills ?? []).length === 0 && <span className="muted t-small">空（可手动新建或导入 Feelfish agent 自动建）</span>}
             </div>
           </div>
         </div>
@@ -403,16 +403,16 @@ export function StudioPage(): React.JSX.Element {
           {draft ? (
             <>
               <div className="panel" style={{ padding: 14 }}>
-                <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div className="row justify-between flex-wrap gap-2">
                   <input
                     style={{ fontSize: 16, fontWeight: 600, flex: '1 1 240px' }}
                     value={draft.name}
                     onChange={(e) => patchDraft({ name: e.target.value })}
                   />
-                  <div className="row" style={{ gap: 6 }}>
-                    <button className="sm" onClick={exportCurrent} disabled={isNew || busy !== null}><Download size={13} style={{ verticalAlign: -1, marginRight: 4 }} />导出</button>
+                  <div className="row gap-2">
+                    <button className="sm" onClick={exportCurrent} disabled={isNew || busy !== null}><Download size={13} className="icon-gap" />导出</button>
                     <button className="sm primary" onClick={() => void saveDraft()} disabled={busy !== null}>
-                      <Save size={13} style={{ verticalAlign: -1, marginRight: 4 }} />{busy === 'save' ? '保存中…' : '保存'}
+                      <Save size={13} className="icon-gap" />{busy === 'save' ? '保存中…' : '保存'}
                     </button>
                   </div>
                 </div>
@@ -427,7 +427,7 @@ export function StudioPage(): React.JSX.Element {
               {/* 步骤编辑 */}
               <div className="panel" style={{ padding: 14 }}>
                 <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                  <strong style={{ fontSize: 13 }}>步骤（按顺序执行）</strong>
+                  <strong className="t3">步骤（按顺序执行）</strong>
                   <button
                     className="sm"
                     onClick={() => {
@@ -445,7 +445,7 @@ export function StudioPage(): React.JSX.Element {
                   </button>
                 </div>
                 {draft.steps.length === 0 && (
-                  <p className="muted" style={{ fontSize: 12 }}>还没有步骤。添加步骤选择智能体，或用「AI 生成方案」自动创建。</p>
+                  <p className="muted t-small">还没有步骤。添加步骤选择智能体，或用「AI 生成方案」自动创建。</p>
                 )}
                 {draft.steps.map((step, i) => (
                   // P22-C5：拖拽排序（draggable + drop 交换）
@@ -532,7 +532,7 @@ export function StudioPage(): React.JSX.Element {
 
               {/* 试运行 */}
               <div className="panel" style={{ padding: 14 }}>
-                <strong style={{ fontSize: 13 }}>试运行</strong>
+                <strong className="t3">试运行</strong>
                 <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   <select
                     style={{ flex: '1 1 180px' }}
@@ -546,7 +546,7 @@ export function StudioPage(): React.JSX.Element {
                   </select>
                   <ChapterPicker novelId={runTarget?.novelId ?? 0} chapterId={runTarget?.chapterId ?? 0} onPick={(cid) => setRunTarget((prev) => ({ novelId: prev?.novelId ?? 0, chapterId: cid }))} />
                   <button className="sm primary" disabled={running || !runTarget || runTarget.chapterId <= 0} onClick={() => void runDraft()}>
-                    <Play size={13} style={{ verticalAlign: -1, marginRight: 4 }} />{running ? '运行中…' : '跑一遍'}
+                    <Play size={13} className="icon-gap" />{running ? '运行中…' : '跑一遍'}
                   </button>
                 </div>
                 <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
@@ -554,7 +554,7 @@ export function StudioPage(): React.JSX.Element {
                 </p>
                 {runResult && (
                   <div style={{ marginTop: 10 }}>
-                    <div className="row" style={{ gap: 6 }}>
+                    <div className="row gap-2">
                       <span className="badge">{runResult.run.degraded ? '部分降级' : '完成'}</span>
                       {(runResult.run.outputs as Array<{ role: string; ok: boolean; error?: string; ms: number }>).map((o, i) => (
                         <span key={i} className="badge" style={{ color: o.ok ? 'var(--ok)' : 'var(--danger)' }}>
@@ -572,7 +572,7 @@ export function StudioPage(): React.JSX.Element {
           ) : (
             <div className="panel" style={{ padding: 24, textAlign: 'center' }}>
               <WandSparkles size={28} style={{ opacity: 0.5 }} />
-              <p className="muted" style={{ marginTop: 8 }}>
+              <p className="muted mt-2">
                 从左侧选择一个方案编辑，或新建/导入。
               </p>
             </div>

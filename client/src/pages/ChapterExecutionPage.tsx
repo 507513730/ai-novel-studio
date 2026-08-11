@@ -660,7 +660,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
                 className={`nav-tab${resourceTab === k ? ' active' : ''}`}
                 onClick={() => void loadResourceTab(k)}
               >
-                <Icon size={12} style={{ verticalAlign: -1, marginRight: 4 }} />
+                <Icon size={12} className="icon-gap" />
                 {label}
               </button>
             ))}
@@ -700,25 +700,25 @@ export function ChapterExecutionPage(): React.JSX.Element {
                 onSelect={() => void selectChapter(c.id)}
               />
             ))}
-            {chapters.isLoading && <p className="muted" style={{ fontSize: 12 }}>加载中…</p>}
+            {chapters.isLoading && <p className="muted t-small">加载中…</p>}
             {chapters.isError && (
               <p className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
                 加载失败：{String(chapters.error)}
               </p>
             )}
             {!chapters.isLoading && !chapters.isError && list.length === 0 && (
-              <p className="muted" style={{ fontSize: 12 }}>还没有章节，请先在工作台生成章节清单。</p>
+              <p className="muted t-small">还没有章节，请先在工作台生成章节清单。</p>
             )}
           </div>
         )}
 
         {resourceTab === 'characters' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {resourceLoading && <p className="muted" style={{ fontSize: 12 }}>加载中…</p>}
+            {resourceLoading && <p className="muted t-small">加载中…</p>}
             {resourceError && (
               <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
                 加载失败：{resourceError}
-                <button className="sm" style={{ marginLeft: 6 }} onClick={() => void loadResourceTab('characters')}>重试</button>
+                <button className="sm ml-2" onClick={() => void loadResourceTab('characters')}>重试</button>
               </div>
             )}
             {resourceChars?.map((c) => (
@@ -732,18 +732,18 @@ export function ChapterExecutionPage(): React.JSX.Element {
               </div>
             ))}
             {resourceChars === null && !resourceLoading && !resourceError && (
-              <p className="muted" style={{ fontSize: 12 }}>点击上方「👤 角色」加载</p>
+              <p className="muted t-small">点击上方「👤 角色」加载</p>
             )}
           </div>
         )}
 
         {resourceTab === 'world' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {resourceLoading && <p className="muted" style={{ fontSize: 12 }}>加载中…</p>}
+            {resourceLoading && <p className="muted t-small">加载中…</p>}
             {resourceError && (
               <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
                 加载失败：{resourceError}
-                <button className="sm" style={{ marginLeft: 6 }} onClick={() => void loadResourceTab('world')}>重试</button>
+                <button className="sm ml-2" onClick={() => void loadResourceTab('world')}>重试</button>
               </div>
             )}
             {resourceWorld && Object.entries((resourceWorld as { manual?: Record<string, string> }).manual ?? {}).map(([k, v]) => (
@@ -752,18 +752,18 @@ export function ChapterExecutionPage(): React.JSX.Element {
               </div>
             ))}
             {resourceWorld === null && !resourceLoading && !resourceError && (
-              <p className="muted" style={{ fontSize: 12 }}>点击上方「🌍 设定」加载</p>
+              <p className="muted t-small">点击上方「🌍 设定」加载</p>
             )}
           </div>
         )}
 
         {resourceTab === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {resourceLoading && <p className="muted" style={{ fontSize: 12 }}>加载中…</p>}
+            {resourceLoading && <p className="muted t-small">加载中…</p>}
             {resourceError && (
               <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
                 加载失败：{resourceError}
-                <button className="sm" style={{ marginLeft: 6 }} onClick={() => void loadResourceTab('rules')}>重试</button>
+                <button className="sm ml-2" onClick={() => void loadResourceTab('rules')}>重试</button>
               </div>
             )}
             {resourceRules?.map((r) => (
@@ -776,7 +776,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
               </div>
             ))}
             {resourceRules === null && !resourceLoading && !resourceError && (
-              <p className="muted" style={{ fontSize: 12 }}>点击上方「📐 规则」加载</p>
+              <p className="muted t-small">点击上方「📐 规则」加载</p>
             )}
           </div>
         )}
@@ -822,9 +822,9 @@ export function ChapterExecutionPage(): React.JSX.Element {
                 {chapter?.title ?? '选择章节'}
               </strong>
             )}
-            {chapter?.summary && <span className="muted" style={{ fontSize: 12 }}>{chapter.summary}</span>}
-            <span className="muted" style={{ fontSize: 12 }}>｜{hanCount} 字</span>          </div>
-          <div className="row" style={{ flexWrap: 'wrap' }}>
+            {chapter?.summary && <span className="muted t-small">{chapter.summary}</span>}
+            <span className="muted t-small">｜{hanCount} 字</span>          </div>
+          <div className="row flex-wrap">
             <button onClick={() => void saveContent().catch(() => undefined)} disabled={saving || contentLoading || streaming}>
               {saving ? '保存中…' : '保存'}
             </button>
@@ -949,13 +949,13 @@ export function ChapterExecutionPage(): React.JSX.Element {
           const doneCount = segs.filter(([, v]) => v).length
           return (
             <div className="panel" style={{ background: 'var(--bg-card)', padding: 12, marginBottom: 12 }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div className="row justify-between">
                 <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>本章进度</span>
                 <span style={{ fontSize: 12, color: 'var(--accent-bright)' }}>{doneCount}/{segs.length}</span>
               </div>
               <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
                 {segs.map(([label, done]) => (
-                  <div key={label} title={`${label}${done ? ' ✓' : ''}`} style={{ flex: 1 }}>
+                  <div key={label} title={`${label}${done ? ' ✓' : ''}`} className="flex-1">
                     <div
                       style={{
                         height: 4,
@@ -1002,7 +1002,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
         {/* 分区：质量与连续性 */}
         <div style={{ fontSize: 12, color: 'var(--text-faint)', margin: '12px 0 6px' }}>质量与连续性</div>
-        <div className="col" style={{ gap: 8 }}>
+        <div className="col gap-2">
           <button
             onClick={() => void withBusy('review', () => runReview())}
             disabled={actionBusy !== null || !selectedChapter || !content}
@@ -1010,8 +1010,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
             {actionBusy === 'review' ? '审核中…' : 'AI 审核'}
           </button>
           {/* P21-3：跑创作方案（工坊定义的 agent 流水线） */}
-          <div className="col" style={{ gap: 6 }}>
-            <div className="row" style={{ gap: 6 }}>
+          <div className="col gap-2">
+            <div className="row gap-2">
               <select
                 style={{ flex: 1, fontSize: 12 }}
                 value={solutionId ?? ''}
@@ -1056,7 +1056,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
         {/* 分区：快照与上下文 */}
         <div style={{ fontSize: 12, color: 'var(--text-faint)', margin: '12px 0 6px' }}>快照与上下文</div>
-        <div className="col" style={{ gap: 8 }}>
+        <div className="col gap-2">
           <button
             onClick={() => void withBusy('versions', () => loadVersions())}
             disabled={actionBusy !== null || !selectedChapter}
@@ -1079,7 +1079,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
         {reviewResult && (
           <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row justify-between">
               <strong>审核结果</strong>
               <span className="badge">评分 {String(reviewResult.score)}</span>
             </div>
@@ -1171,7 +1171,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
         {showPending && (
           <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row justify-between">
               <strong>待确认区</strong>
               <button onClick={() => setShowPending(false)} style={{ fontSize: 12, padding: '2px 6px' }}>关闭</button>
             </div>
@@ -1195,7 +1195,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
         {showVersions && (
           <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row justify-between">
               <strong>版本历史</strong>
               <button onClick={() => setShowVersions(false)} style={{ fontSize: 12, padding: '2px 6px' }}>关闭</button>
             </div>
@@ -1207,7 +1207,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
                 <div key={v.id} style={{ fontSize: 12, padding: '6px 10px', background: 'var(--bg-panel)', borderRadius: 6 }}>
                   <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                     <span className="badge">#{v.id}</span>
-                    <span className="muted" style={{ fontSize: 11 }}>{v.note} · {v.createdAt} · {v.wordCount} 字</span>
+                    <span className="muted t-small">{v.note} · {v.createdAt} · {v.wordCount} 字</span>
                   </div>
                   <div className="muted" style={{ fontSize: 11, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {v.preview}
@@ -1263,14 +1263,14 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
         {ctxSections && ctxToggles && (
           <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row justify-between">
               <strong>写作上下文（生成时注入）</strong>
               <button onClick={() => { setCtxSections(null); setCtxToggles(null) }} style={{ fontSize: 12, padding: '2px 6px' }}>关闭</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
               {ctxSections.map((s) => (
                 <label key={s.key} className="row" style={{ fontSize: 12, cursor: 'pointer', justifyContent: 'space-between' }}>
-                  <span className="row" style={{ gap: 6 }}>
+                  <span className="row gap-2">
                     <input
                       type="checkbox"
                       checked={ctxToggles[s.key] ?? true}
@@ -1278,7 +1278,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
                     />
                     {s.key}
                   </span>
-                  <span className="muted" style={{ fontSize: 11 }}>{Math.round(s.tokens)} tokens</span>
+                  <span className="muted t-small">{Math.round(s.tokens)} tokens</span>
                 </label>
               ))}
             </div>
@@ -1290,8 +1290,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
         {resourceDetail && (
           <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <strong style={{ fontSize: 13 }}>{resourceDetail.title}</strong>
+            <div className="row justify-between">
+              <strong className="t3">{resourceDetail.title}</strong>
               <button onClick={() => setResourceDetail(null)} style={{ fontSize: 12, padding: '2px 6px' }}>✕</button>
             </div>
             <div style={{ marginTop: 8, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, maxHeight: 300, overflowY: 'auto' }}>
@@ -1343,17 +1343,17 @@ const ChapterListItem = memo(function ChapterListItem({
         }
       }}
     >
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="row justify-between">
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {c.title || `第 ${c.id} 章`}
         </span>
-        {c.wordCount > 0 && <span className="muted" style={{ fontSize: 11 }}>{c.wordCount}</span>}
+        {c.wordCount > 0 && <span className="muted t-small">{c.wordCount}</span>}
       </div>
       <div className="row" style={{ gap: 6, marginTop: 2 }}>
         <span
           style={{ width: 7, height: 7, borderRadius: 4, background: stColor, display: 'inline-block', flexShrink: 0 }}
         />
-        <span className="muted" style={{ fontSize: 11 }}>
+        <span className="muted t-small">
           {c.status} {c.volumeTitle ? `· ${c.volumeTitle}` : ''}
         </span>
       </div>

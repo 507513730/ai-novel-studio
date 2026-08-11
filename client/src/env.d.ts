@@ -15,6 +15,8 @@ declare global {
   interface Window {
     novelStudio?: NovelStudioApi
   }
+  // 版本单一来源：vite define 注入（package.json version）
+  const __APP_VERSION__: string
 }
 
 export {}

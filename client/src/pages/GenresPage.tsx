@@ -42,9 +42,9 @@ export function GenresPage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <Tags size={20} />
-        <h1 style={{ marginLeft: 8 }}>流派管理</h1>
+        <h1 className="ml-2">流派管理</h1>
       </div>
       {error && <ErrorMsg error={error} />}
 
@@ -68,36 +68,36 @@ export function GenresPage(): React.JSX.Element {
         onSaved={() => void queryClient.invalidateQueries({ queryKey: ['genres'] })}
       />
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginBottom: 8 }}>创建全局流派</h2>
+      <div className="panel mb-4">
+        <h2 className="mb-2">创建全局流派</h2>
         <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
           全局流派可在任意书的项目设定中选择；书中绑定后注入爽点/节奏模板。
         </p>
         <div className="row">
-          <input style={{ flex: 1 }} placeholder="流派名（如：克苏鲁、无限流）" value={newGenre} onChange={(e) => setNewGenre(e.target.value)}
+          <input className="flex-1" placeholder="流派名（如：克苏鲁、无限流）" value={newGenre} onChange={(e) => setNewGenre(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void createGlobal() }} />
           <button className="primary" disabled={busy || !newGenre.trim()} onClick={() => void createGlobal()}>
-            <Plus size={14} style={{ verticalAlign: -1, marginRight: 4 }} />创建
+            <Plus size={14} className="icon-gap" />创建
           </button>
         </div>
       </div>
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginBottom: 10 }}>全局预设（{globalGenres.length}）</h2>
+      <div className="panel mb-4">
+        <h2 className="mb-3">全局预设（{globalGenres.length}）</h2>
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {globalGenres.map((g) => <span key={g.id} className="chip">{g.name}</span>)}
         </div>
       </div>
 
       <div className="panel">
-        <h2 style={{ marginBottom: 10 }}>书内自定义流派</h2>
+        <h2 className="mb-3">书内自定义流派</h2>
         {customGenres.length === 0 && <EmptyState icon={Tags} title="?????????" desc="??????????????????" />}
-        <div className="col" style={{ gap: 6 }}>
+        <div className="col gap-2">
           {novels.data?.novels.map((n) => {
             const cg = customGenres.filter((g) => g.novelId === n.id)
             return cg.length > 0 ? (
               <div key={n.id} className="row" style={{ padding: '6px 10px', background: 'var(--bg-card)', borderRadius: 6, flexWrap: 'wrap' }}>
-                <strong style={{ fontSize: 13 }}>{n.title || `#${n.id}`}</strong>
+                <strong className="t3">{n.title || `#${n.id}`}</strong>
                 {cg.map((g) => <span key={g.id} className="chip">{g.name}</span>)}
               </div>
             ) : null

@@ -80,9 +80,9 @@ export function PromptWorkbenchPage(): React.JSX.Element {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ marginBottom: 16 }}>
+      <div className="row mb-4">
         <Braces size={20} />
-        <h1 style={{ marginLeft: 8 }}>提示词工作台</h1>
+        <h1 className="ml-2">提示词工作台</h1>
       </div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
         运行时编辑系统提示词（立即生效，无需改代码重启）。未编辑时使用内置模板。
@@ -118,17 +118,17 @@ export function PromptWorkbenchPage(): React.JSX.Element {
           </div>
         </div>
         {/* 右：编辑器 */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="flex-1">
           {selected ? (
             <div className="panel">
               <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
                 <strong>{selected.name}</strong>
                 <div className="row">
                   <button className="sm" disabled={busy !== false} onClick={() => void testRun()}>
-                    <Play size={12} style={{ verticalAlign: -1, marginRight: 4 }} />试跑
+                    <Play size={12} className="icon-gap" />试跑
                   </button>
                   <button className="sm primary" disabled={busy !== false} onClick={() => void save()}>
-                    <Save size={12} style={{ verticalAlign: -1, marginRight: 4 }} />保存
+                    <Save size={12} className="icon-gap" />保存
                   </button>
                   {/* P23（N8）：还原出厂模板（内置提示词；自定义提示词提示不可还原） */}
                   <button
@@ -149,7 +149,7 @@ export function PromptWorkbenchPage(): React.JSX.Element {
                     }}
                     title="还原为出厂模板（自定义提示词不可还原）"
                   >
-                    <RotateCcw size={12} style={{ verticalAlign: -1, marginRight: 4 }} />还原出厂
+                    <RotateCcw size={12} className="icon-gap" />还原出厂
                   </button>
                   {/* P23（N8）：新建提示词 */}
                   <button
@@ -187,7 +187,7 @@ export function PromptWorkbenchPage(): React.JSX.Element {
               />
               {placeholders.length > 0 && (
                 <div className="row" style={{ marginTop: 10, flexWrap: 'wrap', gap: 6 }}>
-                  <span className="muted" style={{ fontSize: 11 }}>变量：</span>
+                  <span className="muted t-small">变量：</span>
                   {[...new Set(placeholders)].map((ph) => {
                     const name = ph.slice(2, -1)
                     return (

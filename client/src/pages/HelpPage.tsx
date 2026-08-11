@@ -13,11 +13,11 @@ export function HelpPage(): React.JSX.Element {
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
       <div className="row" style={{ marginBottom: 20 }}>
         <CircleHelp size={22} />
-        <h1 style={{ marginLeft: 8 }}>创作向导</h1>
+        <h1 className="ml-2">创作向导</h1>
       </div>
       <div className="panel" style={{ marginBottom: 16, background: 'var(--bg-card)' }}>
         <h2 style={{ marginBottom: 6 }}>三步完成一本小说</h2>
-        <p className="muted" style={{ fontSize: 13 }}>
+        <p className="muted t3">
           AI 小说创作工作台是一个「导演式」写作系统：AI 负责规划、生成、审核与修复，你负责定方向、把关与确认。
         </p>
       </div>
@@ -39,7 +39,7 @@ export function HelpPage(): React.JSX.Element {
         })}
       </div>
       <div className="panel" style={{ marginTop: 16, background: 'var(--bg-card)' }}>
-        <h2 style={{ marginBottom: 8 }}>关键概念</h2>
+        <h2 className="mb-2">关键概念</h2>
         <div className="col" style={{ gap: 8, fontSize: 13 }}>
           <div><strong>自动导演</strong>：从灵感一路推进到可写章节（11 阶段），可全自动或半自动确认。</div>
           <div><strong>章节执行链</strong>：生成 → AI 审核 → 修复 → 状态回灌，保持全书连续性。</div>
@@ -49,7 +49,7 @@ export function HelpPage(): React.JSX.Element {
       </div>
       <div className="row" style={{ marginTop: 16 }}>
         <button onClick={() => navigate('/')}>去创建小说</button>
-        <button onClick={() => navigate('/settings')}><Settings size={14} style={{ verticalAlign: -1, marginRight: 4 }} />配置模型</button>
+        <button onClick={() => navigate('/settings')}><Settings size={14} className="icon-gap" />配置模型</button>
       </div>
     </div>
   )

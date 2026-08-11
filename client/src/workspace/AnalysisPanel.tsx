@@ -149,7 +149,7 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
       {msg && <div style={{ color: 'var(--ok)' }}>{msg}</div>}
 
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row justify-between">
           <h2>拆书分析</h2>
           <div className="row">
             <select value={depth} onChange={(e) => setDepth(e.target.value as 'quick' | 'standard' | 'full')}>
@@ -162,7 +162,7 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
             </button>
           </div>
         </div>
-        <p className="muted" style={{ fontSize: 12 }}>
+        <p className="muted t-small">
           拆书产出五维报告，可发布到知识库或转为写法资产（P4 消费）。
         </p>
         {report && (
@@ -175,7 +175,7 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
               ['世界设定', dimOf(report.world)],
               ['写法技法', dimOf(report.style)]
             ] as Array<[string, Dimension]>).map(([label, dim]) => (
-              <div key={String(label)} style={{ marginTop: 6 }}>
+              <div key={String(label)} className="mt-2">
                 <strong>{String(label)}：</strong>
                 <span className="muted">{dim.summary}</span>
                 {dim.evidence.length > 0 && (
@@ -194,10 +194,10 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
               </div>
             ))}
             {arr(report.strengths).length > 0 && (
-              <div style={{ marginTop: 6 }}><strong>优点：</strong>{arr(report.strengths).join('；')}</div>
+              <div className="mt-2"><strong>优点：</strong>{arr(report.strengths).join('；')}</div>
             )}
             {arr(report.weaknesses).length > 0 && (
-              <div style={{ marginTop: 6 }}><strong>缺点：</strong>{arr(report.weaknesses).join('；')}</div>
+              <div className="mt-2"><strong>缺点：</strong>{arr(report.weaknesses).join('；')}</div>
             )}
           </div>
         )}
@@ -205,7 +205,7 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
 
       <div className="panel">
         <h2>角色档案与形象演变</h2>
-        <div className="row" style={{ marginTop: 8 }}>
+        <div className="row mt-2">
           <input
             style={{ width: 160 }}
             placeholder="角色名"
@@ -239,8 +239,8 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
         )}
         {evolution && evolution.length > 0 && (
           <div className="col" style={{ marginTop: 10, gap: 6 }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <strong style={{ fontSize: 13 }}>形象演变（{coverage}% 覆盖率）</strong>
+            <div className="row justify-between">
+              <strong className="t3">形象演变（{coverage}% 覆盖率）</strong>
               {/* P14 B1：融合入档（合并外貌/状态锚点到角色档案） */}
               <button
                 className="sm primary"

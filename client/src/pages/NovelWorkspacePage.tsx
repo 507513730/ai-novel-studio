@@ -109,7 +109,7 @@ function GuideStrip({
               <span className="muted" style={{ fontSize: 10 }}>{i + 1}/{steps.length}</span>
             </div>
             <strong style={{ fontSize: 12, color: st === 'done' ? 'var(--ok)' : 'var(--text)' }}>{s.label}</strong>
-            <span className="muted" style={{ fontSize: 11 }}>{s.desc}</span>
+            <span className="muted t-small">{s.desc}</span>
           </button>
         )
       })}
@@ -251,7 +251,7 @@ export function NovelWorkspacePage(): React.JSX.Element {
       </aside>
 
       {/* 右：主工作区 */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="flex-1">
         <AiStatusBar novelId={id} />
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <div>
@@ -264,7 +264,7 @@ export function NovelWorkspacePage(): React.JSX.Element {
             )}
             {n && <h1>{n.title || '未命名小说'}</h1>}
             {n && (
-              <span className="muted" style={{ fontSize: 12 }}>
+              <span className="muted t-small">
                 状态：{n.status ?? '...'}
                 {n.genre ? ` · 流派：${n.genre}` : ''}
               </span>

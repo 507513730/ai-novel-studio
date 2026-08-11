@@ -45,7 +45,7 @@ export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
     <div className="col">
       {error && <ErrorMsg error={error} />}
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row justify-between">
           <h2>世界观</h2>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             <input
@@ -82,7 +82,7 @@ export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
                 ))}
               </div>
             ))}
-            <button style={{ marginTop: 8 }} onClick={() => { savedManualRef.current = JSON.stringify(data.manual, null, 2); setManualText(savedManualRef.current); setEditingManual(true) }}>
+            <button className="mt-2" onClick={() => { savedManualRef.current = JSON.stringify(data.manual, null, 2); setManualText(savedManualRef.current); setEditingManual(true) }}>
               编辑
             </button>
           </div>
@@ -120,7 +120,7 @@ export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
               {data.factions.map((f, i) => (
                 <div key={i} className="panel" style={{ background: 'var(--bg-card)' }}>
                   <strong>{f.name}</strong>
-                  {f.stance && <span className="badge" style={{ marginLeft: 8 }}>{f.stance}</span>}
+                  {f.stance && <span className="badge ml-2">{f.stance}</span>}
                   <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{f.desc}</div>
                 </div>
               ))}
