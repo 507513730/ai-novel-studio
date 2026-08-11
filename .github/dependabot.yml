@@ -9,3 +9,13 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+    # 大版本破坏性升级不自动开 PR（人工评估，D67 后：vitest 4/typescript 6 均构建失败）
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-plugin-react-hooks"
+        update-types: ["version-update:semver-major"]
