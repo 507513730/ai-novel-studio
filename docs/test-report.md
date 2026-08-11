@@ -80,3 +80,7 @@
 | T2 创作主链（R1） | 2 | 11 | 生成 2 套方向 — provider DeepSeek has no API key configured; 生成 framing — provider DeepSeek has no API key configured; 字段级 AI 重写（卖点） — provider DeepSeek has no API key configured; 宏观规划 — provider DeepSeek has no API key configured; 世界观生成 — provider DeepSeek has no API key configured; 世界手册非空; 角色阵容生成 — pro | novelId=1 |
 | T3 资产与智能（R1） | 1 | 3 | 拆书（标准档） — provider DeepSeek has no API key configured; 写法特征提取 — provider DeepSeek has no API key configured; 标题工坊生成 — provider DeepSeek has no API key configured |  |
 | T4 导演与恢复（R1） | 5 | 0 |  |  |
+| T1 配置与系统（R1） | 8 | 1 | OpenCode Go 网关已配置 Key |  |
+| T2 创作主链（R1） | 2 | 11 | 生成 2 套方向 — provider DeepSeek has no API key configured; 生成 framing — provider DeepSeek has no API key configured; 字段级 AI 重写（卖点） — provider DeepSeek has no API key configured; 宏观规划 — provider DeepSeek has no API key configured; 世界观生成 — provider DeepSeek has no API key configured; 世界手册非空; 角色阵容生成 — pro | novelId=1 |
+| T3 资产与智能（R1） | 1 | 3 | 拆书（标准档） — provider DeepSeek has no API key configured; 写法特征提取 — provider DeepSeek has no API key configured; 标题工坊生成 — provider DeepSeek has no API key configured |  |
+| T4 导演与恢复（R1） | 5 | 0 |  |  |
