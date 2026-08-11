@@ -5,7 +5,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { novelEditorTheme } from '../editor/theme'
-import { novelApi, generateChapterSse, styleApi } from '../api'
+import { novelApi, generateChapterSse, styleApi, studioApi } from '../api'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
@@ -377,6 +377,19 @@ export function ChapterExecutionPage(): React.JSX.Element {
         setContent((prev) => prev + tail)
       }
     }
+  }
+
+  // P21-3：方案流水线（跑在章节上）
+  const solutionsForRun = useQuery({ queryKey: ['studio-solutions', 'run'], queryFn: studioApi.solutions })
+  const [solutionId, setSolutionId] = useState<number | null>(null)
+  const [solutionRunSummary, setSolutionRunSummary] = useState<string | null>(null)
+  const runSolutionOnChapter = async (): Promise<void> => {
+    if (!selectedChapter || !solutionId) return
+    setSolutionRunSummary(null)
+    setActionError(null)
+    const r = await studioApi.solutionRun(solutionId, id, selectedChapter)
+    setSolutionRunSummary(r.run.degraded ? `⚠ 部分步骤降级\n${r.summary}` : r.summary)
+    setActionMsg(`方案完成${r.run.degraded ? '（部分降级）' : ''}`)
   }
 
   const cancelGenerate = (): void => {
@@ -1007,6 +1020,34 @@ export function ChapterExecutionPage(): React.JSX.Element {
           >
             {actionBusy === 'review' ? '审核中…' : 'AI 审核'}
           </button>
+          {/* P21-3：跑创作方案（工坊定义的 agent 流水线） */}
+          <div className="col" style={{ gap: 6 }}>
+            <div className="row" style={{ gap: 6 }}>
+              <select
+                style={{ flex: 1, fontSize: 12 }}
+                value={solutionId ?? ''}
+                disabled={actionBusy !== null || !selectedChapter || !content}
+                onChange={(e) => setSolutionId(Number(e.target.value) || null)}
+              >
+                <option value="">方案流水线（可选）…</option>
+                {(solutionsForRun.data?.solutions ?? []).map((s) => (
+                  <option key={Number(s.id)} value={Number(s.id)}>{String(s.name)}（{Array.isArray(s.steps) ? (s.steps as unknown[]).length : 0} 步）</option>
+                ))}
+              </select>
+              <button
+                className="sm primary"
+                disabled={actionBusy !== null || !selectedChapter || !content || !solutionId}
+                onClick={() => void withBusy('solution-run', () => runSolutionOnChapter())}
+              >
+                {actionBusy === 'solution-run' ? '运行中…' : '跑方案'}
+              </button>
+            </div>
+            {solutionRunSummary && (
+              <div className="muted" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto', background: 'var(--bg-panel)', borderRadius: 6, padding: 6 }}>
+                {solutionRunSummary}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => void withBusy('fix', () => fix())}
             disabled={actionBusy !== null || !selectedChapter || !content}

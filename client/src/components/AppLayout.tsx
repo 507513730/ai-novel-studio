@@ -22,7 +22,8 @@ import {
   Gauge,
   Globe2,
   Database,
-  Braces
+  Braces,
+  WandSparkles
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { novelApi } from '../api'
@@ -104,6 +105,7 @@ export function AppLayout(): React.JSX.Element {
       items: [
         { to: '/', label: '小说列表', icon: House },
         { to: '/help', label: '创作向导', icon: CircleHelp },
+        { to: '/studio', label: '创造工坊', icon: WandSparkles },
         { to: '/tasks', label: '任务中心', icon: ListChecks, badge: failedCount > 0 ? `F${failedCount}` : undefined },
         { to: '/follow-ups', label: '导演跟进', icon: Workflow },
         { to: '/hub', label: '创作中枢', icon: Brain },

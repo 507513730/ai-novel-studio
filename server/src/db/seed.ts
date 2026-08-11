@@ -87,9 +87,10 @@ export function seedIfEmpty(db: DatabaseSync): void {
     seedAntiAiRules(db)
     seedSystemPrompts(db)
     seedAgents(db)
+    seedSolutionTemplates(db)
 
     db.exec('COMMIT')
-    console.log('[seed] provider + model routes + genre presets + anti-AI rules seeded')
+    console.log('[seed] provider + model routes + genre presets + anti-AI rules + solution templates seeded')
   } catch (err) {
     db.exec('ROLLBACK')
     throw err
@@ -267,4 +268,59 @@ function seedSystemPrompts(db: DatabaseSync): void {
     insert.run('系统提示-' + key, 'sys_' + key, texts[key], '{}', 'P17-5A 提示词资产化（可在提示词工作台编辑）')
   }
   console.log('[seed] system prompts (14) seeded')
+}
+
+// P21-1：内置方案模板（对齐内置 5 智能体；依赖 seedAgents 已跑）
+function seedSolutionTemplates(db: DatabaseSync): void {
+  const existing = (db.prepare('SELECT COUNT(*) AS c FROM solution').get() as { c: number }).c
+  if (existing > 0) return
+  const roleToAgent = new Map<string, number>()
+  const rows = db.prepare('SELECT id, role FROM agent').all() as Array<{ id: number; role: string }>
+  for (const r of rows) roleToAgent.set(r.role, r.id)
+  const aid = (role: string): number | null => roleToAgent.get(role) ?? null
+  const insert = db.prepare(
+    'INSERT INTO solution (name, description, primary_agent_id, steps_json, version, enabled) VALUES (?, ?, ?, ?, 1, 1)'
+  )
+  const templates: Array<{ name: string; description: string; primaryRole: string; steps: Array<{ role: string; stage: 'post_generate' | 'review'; stepRole: string; maxTokens: number }> }> = [
+    {
+      name: '标准章节复核',
+      description: '正文生成后自动复核：主编节奏把关 → 审校问题清单 → 文风顾问反 AI 检查。与内置审核互补。',
+      primaryRole: 'editor',
+      steps: [
+        { role: 'editor', stage: 'post_generate', stepRole: '节奏复核', maxTokens: 1024 },
+        { role: 'reviewer', stage: 'review', stepRole: '问题清单', maxTokens: 2048 },
+        { role: 'style_advisor', stage: 'post_generate', stepRole: '文风检查', maxTokens: 1024 }
+      ]
+    },
+    {
+      name: '世界观一致性审校',
+      description: '专查设定矛盾：世界观顾问核对力量体系与地理 → 角色顾问核对人设与关系网。适合设定密集的书。',
+      primaryRole: 'world_advisor',
+      steps: [
+        { role: 'world_advisor', stage: 'review', stepRole: '设定一致性', maxTokens: 2048 },
+        { role: 'character_advisor', stage: 'review', stepRole: '人设核对', maxTokens: 2048 }
+      ]
+    },
+    {
+      name: '短篇冲刺',
+      description: '快速成文流：主编出结构 → 审校查逻辑 → 文风统一。适合短篇/章节快速产出。',
+      primaryRole: 'editor',
+      steps: [
+        { role: 'editor', stage: 'post_generate', stepRole: '结构把关', maxTokens: 1024 },
+        { role: 'reviewer', stage: 'review', stepRole: '逻辑检查', maxTokens: 2048 },
+        { role: 'style_advisor', stage: 'post_generate', stepRole: '文风统一', maxTokens: 1024 }
+      ]
+    }
+  ]
+  for (const t of templates) {
+    insert.run(
+      t.name,
+      t.description,
+      aid(t.primaryRole),
+      JSON.stringify(
+        t.steps.map((s) => ({ agentId: aid(s.role), role: s.stepRole, stage: s.stage, maxTokens: s.maxTokens, if: null }))
+      )
+    )
+  }
+  console.log(`[seed] solution templates (${templates.length}) seeded`)
 }

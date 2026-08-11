@@ -189,6 +189,36 @@ export const automationApi = {
     js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) })
 }
 
+
+// P21???????? / ?? / ????? / ??? / ?????
+export const studioApi = {
+  solutions: (): Promise<{ solutions: Array<Record<string, unknown>> }> => j('/solutions'),
+  solutionDetail: (id: number): Promise<{ solution: Record<string, unknown> }> => j(`/solutions/${id}`),
+  solutionCreate: (body: { name: string; description?: string; primaryAgentId?: number | null; steps?: Array<Record<string, unknown>> }): Promise<{ id: number }> =>
+    js('/solutions', { method: 'POST', body: JSON.stringify(body) }),
+  solutionPatch: (id: number, body: Record<string, unknown>): Promise<{ ok: boolean }> =>
+    j(`/solutions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  solutionDelete: (id: number): Promise<{ ok: boolean }> => j(`/solutions/${id}`, { method: 'DELETE' }),
+  solutionVersions: (id: number): Promise<{ versions: Array<Record<string, unknown>> }> => j(`/solutions/${id}/versions`),
+  solutionRun: (id: number, novelId: number, chapterId: number, humanOverride?: Record<string, string>): Promise<{ run: Record<string, unknown>; summary: string }> =>
+    js(`/solutions/${id}/run`, { method: 'POST', body: JSON.stringify({ novelId, chapterId, humanOverride }) }),
+  solutionGenerate: (body: { description: string; genre?: string }): Promise<{ name: string; description: string; steps: Array<Record<string, unknown>> }> =>
+    js('/solutions/generate', { method: 'POST', body: JSON.stringify(body) }),
+  solutionExport: (id: number): Promise<string> => j(`/solutions/${id}/export`),
+  solutionImport: (bundle: string): Promise<{ solutionId: number; name: string }> =>
+    js('/solutions/import', { method: 'POST', body: JSON.stringify({ bundle }) }),
+  feelfishImport: (body: { agents: string[]; solution?: { name: string; description?: string; agents: Array<{ id: string }>; primaryAgentId?: string | null }; primaryAgentId?: string | null }): Promise<{ id: number; name: string; agentCount: number }> =>
+    js('/solutions/import-feelfish', { method: 'POST', body: JSON.stringify(body) }),
+  skills: (): Promise<{ skills: Array<Record<string, unknown>> }> => j('/skills'),
+  skillCreate: (body: { name: string; description?: string; body_md?: string }): Promise<{ id: number }> =>
+    js('/skills', { method: 'POST', body: JSON.stringify(body) }),
+  skillDelete: (id: number): Promise<{ ok: boolean }> => j(`/skills/${id}`, { method: 'DELETE' }),
+  agentCreateCustom: (body: { name: string; description?: string; body_md?: string; skills?: string[] }): Promise<{ id: number }> =>
+    js('/agents/custom', { method: 'POST', body: JSON.stringify(body) }),
+  runTargets: (novelId: number): Promise<{ chapters: Array<{ id: number; title: string; status: string }> }> =>
+    j(`/run-targets/${novelId}`)
+}
+
 export const hub = {
   chat: (id: number, message: string): Promise<{ reply: string; toolCalls: string[] }> =>
     js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) })

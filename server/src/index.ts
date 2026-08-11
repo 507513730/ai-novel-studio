@@ -16,8 +16,9 @@ import { createAnalysisRouter } from './routes/analysis'
 import { createStyleRouter } from './routes/style'
 import { createAgentsRouter, createAgentAdminRouter } from './routes/agents'
 import { createGenresRouter } from './routes/genres'
-import { createResourcesRouter } from './routes/resources'
-import { createPromptsRouter } from './routes/prompts'
+import { createResourcesRouter } from './routes/resources'                        
+import { createPromptsRouter } from './routes/prompts'                        
+import { createSolutionsRouter } from './routes/solutions'                    
 import { initPromptDb } from './prompts/promptAsset'
 import { startScheduler } from './services/scheduler'
 import { originGuard } from './services/security'
@@ -47,6 +48,7 @@ export function createApp(db: DatabaseSync): express.Express {
   app.use('/api/genres', createGenresRouter(db))
   app.use('/api', createResourcesRouter(db))
   app.use('/api/prompts', createPromptsRouter(db))
+  app.use('/api', createSolutionsRouter(db)) // /api/solutions /api/skills /api/agents/custom（创造工坊）
   // 任务中心（全局挂载）
   app.use('/api', createJobsRouter(db))
 

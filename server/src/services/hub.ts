@@ -247,6 +247,44 @@ function toolsFor(_db: DatabaseSync): HubTool[] {
         )
         return JSON.stringify({ ok: true, chapterId, note: '已修改' })
       }
+    },
+    {
+      // P21-3：创作方案执行（hub 对话可触发；非 mutating——方案步骤可能含写操作需另行确认）
+      name: 'run_solution',
+      description: '对指定章节运行一个创作方案（agent 流水线），返回每步输出。先查 chapters_list 获取章节 id。',
+      parameters: {
+        type: 'object',
+        properties: {
+          solutionId: { type: 'number', description: '方案 ID（可先查 solutions）' },
+          chapterId: { type: 'number', description: '章节 ID' }
+        },
+        required: ['solutionId', 'chapterId']
+      },
+      run: async (args, db2, novelId) => {
+        const solutionId = Number(args.solutionId)
+        const chapterId = Number(args.chapterId)
+        if (!Number.isInteger(solutionId) || solutionId <= 0 || !Number.isInteger(chapterId) || chapterId <= 0) {
+          return JSON.stringify({ error: '参数无效' })
+        }
+        const chapter = db2
+          .prepare('SELECT id FROM chapter WHERE id = ? AND novel_id = ?')
+          .get(chapterId, novelId) as { id: number } | undefined
+        if (!chapter) return JSON.stringify({ error: `章节 ${chapterId} 不存在` })
+        try {
+          const { runSolutionById, summarizeRun } = await import('./solutionRunner')
+          const run = await runSolutionById(db2, solutionId, novelId, chapterId)
+          return JSON.stringify({
+            ok: true,
+            solutionId,
+            degraded: run.degraded,
+            degradedReasons: run.degradedReasons,
+            outputs: run.outputs.map((o) => ({ role: o.role, ok: o.ok, output: o.output.slice(0, 500) })),
+            summary: summarizeRun(run).slice(0, 2000)
+          })
+        } catch (err) {
+          return JSON.stringify({ error: err instanceof Error ? err.message : String(err) })
+        }
+      }
     }
   ]
 }

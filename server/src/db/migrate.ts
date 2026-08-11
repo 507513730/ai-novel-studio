@@ -330,7 +330,6 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     statements: [
       `ALTER TABLE job ADD COLUMN started_at TEXT`,
       `ALTER TABLE quality_debt ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0`,
-      `ALTER TABLE quality_debt ADD COLUMN updated_at TEXT`,
       `CREATE INDEX IF NOT EXISTS idx_job_status ON job (status)`,
       `CREATE INDEX IF NOT EXISTS idx_style_asset_novel ON style_asset (novel_id)`,
       `CREATE INDEX IF NOT EXISTS idx_genre_asset_novel ON genre_asset (novel_id)`,
@@ -341,6 +340,49 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
       `CREATE INDEX IF NOT EXISTS idx_quality_debt_resolved ON quality_debt (resolved)`,
       `CREATE INDEX IF NOT EXISTS idx_timeline_event_novel ON timeline_event (novel_id)`,
       `CREATE INDEX IF NOT EXISTS idx_usage_log_created ON usage_log (created_at)`
+    ]
+  },
+  {
+    // P21-1：智能体资产化 + 技能体系 + 创作方案（创造工坊地基）
+    version: 9,
+    statements: [
+      `ALTER TABLE agent ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE agent ADD COLUMN skills_json TEXT NOT NULL DEFAULT '[]'`,
+      `ALTER TABLE agent ADD COLUMN body_md TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE agent ADD COLUMN is_custom INTEGER NOT NULL DEFAULT 0`,
+      `CREATE TABLE IF NOT EXISTS skill (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        body_md TEXT NOT NULL DEFAULT '',
+        novel_id INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_skill_novel ON skill (novel_id)`,
+      `CREATE TABLE IF NOT EXISTS agent_skill (
+        agent_id INTEGER NOT NULL REFERENCES agent(id) ON DELETE CASCADE,
+        skill_id INTEGER NOT NULL REFERENCES skill(id) ON DELETE CASCADE,
+        PRIMARY KEY (agent_id, skill_id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS solution (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        primary_agent_id INTEGER REFERENCES agent(id) ON DELETE SET NULL,
+        steps_json TEXT NOT NULL DEFAULT '[]',
+        version INTEGER NOT NULL DEFAULT 1,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_solution_enabled ON solution (enabled)`,
+      `CREATE TABLE IF NOT EXISTS solution_version (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        solution_id INTEGER NOT NULL REFERENCES solution(id) ON DELETE CASCADE,
+        steps_json TEXT NOT NULL DEFAULT '[]',
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`
     ]
   }
 ]
