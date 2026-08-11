@@ -62,7 +62,10 @@
       "electron",
       "esbuild",
       "electron-winstaller"
-    ]
+    ],
+    "overrides": {
+      "adm-zip": ">=0.6.0"
+    }
   },
   "build": {
     "appId": "com.ai-novel-studio.app",
