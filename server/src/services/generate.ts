@@ -2,9 +2,11 @@ import OpenAI from 'openai'
 import { DatabaseSync } from 'node:sqlite'
 import { getRouteConfig } from './llm'
 import { decryptSecret } from './keyCrypto'
-import { buildChapterWriteContext } from './context'
+import { buildChapterWriteContext, estimateTokens } from './context'
 import { recordUsage } from './usage'
 import { runTripleReview } from './tripleReview'
+import { getBoundStyleRules, detectAntiAiHits, extractAntiAiWordsFromRules } from './styleEngine'
+import { callLlmJson } from './jsonSafe'
 
 export interface GenerateOptions {
   signal?: AbortSignal
@@ -12,6 +14,7 @@ export interface GenerateOptions {
   onThinking?: (text: string) => void
   tripleReview?: boolean // P2.3：三方会审开关（默认开）
   include?: string[] // B1：注入段过滤（contract/world/characters/continuity/genre/triple/style/summary/external）
+  guidance?: string // P19 ①：本次引导（单次）
 }
 
 export interface GenerateResult {
@@ -77,14 +80,18 @@ export async function generateChapter(
         console.log('[triple-review]', JSON.stringify(tripleConstraints, null, 2))
       }
       }
-    } catch {
-      // 三方会审失败不阻塞生成（降级为无约束）
+    } catch (err) {
+      // P20（M7）：三方会审失败不阻塞生成（降级为无约束），但必须可见——不再静默
+      console.warn(
+        `[triple-review] 降级（本章无会审约束）: ${err instanceof Error ? err.message : String(err)}`
+      )
     }
   }
 
   const ctx = buildChapterWriteContext(db, novelId, chapterId, {
     tripleConstraints,
-    include: opts.include
+    include: opts.include,
+    perCallGuidance: opts.guidance
   })
 
   const body: Record<string, unknown> = {
@@ -152,7 +159,7 @@ export async function generateChapter(
     aborted = true
   }
 
-  const wordCount = (content.match(/[\u4e00-\u9fff]/g) ?? []).length
+  let wordCount = (content.match(/[\u4e00-\u9fff]/g) ?? []).length
 
   if (content) {
     db.prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)').run(
@@ -163,6 +170,61 @@ export async function generateChapter(
     db.prepare(
       "UPDATE chapter SET content = ?, word_count = ?, status = 'written', updated_at = datetime('now') WHERE id = ?"
     ).run(content, wordCount, chapterId)
+  }
+
+  // P20（U8）：反 AI 校验闭环——生成后检测，重度命中（总命中≥5 或单词≥3 次）自动重写一次
+  if (!aborted && content.trim().length > 0) {
+    const bound = getBoundStyleRules(db, novelId)
+    if (bound && bound.antiAiRules.length > 0) {
+      const words = extractAntiAiWordsFromRules(bound.antiAiRules)
+      const hits = detectAntiAiHits(content, words)
+      const totalHits = hits.reduce((a, h) => a + h.count, 0)
+      if (totalHits >= 5 || hits.some((h) => h.count >= 3)) {
+        console.warn(
+          `[anti-ai] 命中 ${totalHits} 次（${hits.slice(0, 5).map((h) => `${h.word}x${h.count}`).join(',')}），自动重写一次`
+        )
+        try {
+          const rewritten = await callLlmJson<{ content: string }>(
+            db,
+            'extraction',
+            {
+              novelId,
+              messages: [
+                {
+                  role: 'user',
+                  content: `你是文字润色编辑。以下章节含禁用的 AI 腔词汇，请只替换这些词/句式（保持原文结构与内容），不要改动其他文字。\n禁用词：${words.join('、')}\n\n【正文】\n${content.slice(0, 8000)}\n\n请输出 {"content": "重写后的全文"}`
+                }
+              ],
+              maxTokens: 8192
+            },
+            (obj) => {
+              const r = obj as Record<string, unknown>
+              if (typeof r.content === 'string' && r.content.length > 100) return { content: r.content }
+              return null
+            },
+            'anti-ai-rewrite'
+          )
+          if (rewritten && rewritten.content.length >= content.length * 0.5) {
+            content = rewritten.content
+            wordCount = (content.match(/[\u4e00-\u9fff]/g) ?? []).length
+            db.prepare(
+              "UPDATE chapter SET content = ?, word_count = ?, updated_at = datetime('now') WHERE id = ?"
+            ).run(content, wordCount, chapterId)
+          }
+        } catch (err) {
+          console.warn('[anti-ai] 重写失败，保留原文:', err instanceof Error ? err.message : String(err))
+        }
+      }
+    }
+  }
+
+  // P20（C4）：abort/流中断时供应商可能不发最终 usage chunk——用上下文预算+已产出字数量估算补账，
+  // 否则最贵的调用（长流中止）从成本统计消失
+  if (usageInput === 0 && (aborted || content.length > 0)) {
+    usageInput = ctx.budgetUsed
+    usageOutput = estimateTokens(content)
+    cacheHit = 0
+    cacheMiss = usageInput
   }
 
   if (usageInput > 0) {

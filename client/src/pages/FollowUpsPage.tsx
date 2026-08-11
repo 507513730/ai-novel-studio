@@ -6,7 +6,7 @@ import { novelApi } from '../api'
 // P16 P1：导演跟进（待审核/待处理聚合：failed jobs + pending 待确认 + 导演阻塞）
 export function FollowUpsPage(): React.JSX.Element {
   const navigate = useNavigate()
-  const jobs = useQuery({ queryKey: ['jobs'], queryFn: novelApi.jobs, refetchInterval: 5000 })
+  const jobs = useQuery({ queryKey: ['jobs', 'followups'], queryFn: novelApi.jobs, refetchInterval: 5000 })
   const novels = useQuery<{ novels: Array<{ id: number; title: string }> }>({ queryKey: ['novels'], queryFn: novelApi.list })
 
   const failed = (jobs.data?.jobs ?? []).filter((j) => j.status === 'failed')

@@ -25,7 +25,7 @@ export function NovelListPage(): React.JSX.Element {
 
   // P12 A2：失败任务徽章（有 failed job 的书显示"需恢复"）
   const jobs = useQuery({
-    queryKey: ['jobs'],
+    queryKey: ['jobs', 'list'],
     queryFn: novelApi.jobs,
     refetchInterval: 6000
   })

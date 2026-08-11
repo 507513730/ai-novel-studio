@@ -324,6 +324,67 @@ export function createSettingsRouter(db: DatabaseSync): Router {
     res.json({ total, groups })
   })
 
+
+  // ---------- P19 ?????????? / ?? / ????? ----------
+  router.get('/writing', (_req, res) => {
+    const rows = db.prepare('SELECT key, value FROM app_settings').all() as Array<{ key: string; value: string }>
+    const map = new Map(rows.map((r) => [r.key, r.value]))
+    res.json({
+      lang: map.get('lang') ?? 'simplified',
+      format: map.get('format') ?? 'paragraph',
+      writingMode: map.get('writingMode') ?? 'standard'
+    })
+  })
+
+  router.patch('/writing', (req, res, next) => {
+    try {
+      const input = z
+        .object({
+          lang: z.enum(['simplified', 'traditional']).optional(),
+          format: z.enum(['paragraph', 'longSentence']).optional(),
+          writingMode: z.enum(['focused', 'standard', 'free']).optional()
+        })
+        .parse(req.body ?? {})
+      const upsert = db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      if (input.lang !== undefined) upsert.run('lang', input.lang)
+      if (input.format !== undefined) upsert.run('format', input.format)
+      if (input.writingMode !== undefined) upsert.run('writingMode', input.writingMode)
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- P20（C7）：质量债聚合（按书，可消费） ----------
+  router.get('/quality-debts', (_req, res) => {
+    const rows = db
+      .prepare(
+        `SELECT c.novel_id AS novel_id, n.title,
+                SUM(CASE WHEN q.severity = 'high' THEN 1 ELSE 0 END) AS high_count,
+                SUM(CASE WHEN q.severity = 'medium' THEN 1 ELSE 0 END) AS medium_count,
+                SUM(CASE WHEN q.resolved = 1 THEN 1 ELSE 0 END) AS resolved_count
+         FROM quality_debt q
+         JOIN chapter c ON c.id = q.chapter_id
+         JOIN novel n ON n.id = c.novel_id
+         GROUP BY c.novel_id ORDER BY high_count DESC`
+      )
+      .all() as Array<Record<string, number | string>>
+    res.json({ debts: rows })
+  })
+
+  // ---------- P20（T3）：历史清理（usage_log >90 天、失败/取消 job >30 天） ----------
+  router.post('/cleanup', (_req, res) => {
+    const usage = db
+      .prepare("DELETE FROM usage_log WHERE created_at < datetime('now', '-90 days')")
+      .run()
+    const jobs = db
+      .prepare(
+        "DELETE FROM job WHERE status IN ('failed', 'cancelled') AND updated_at < datetime('now', '-30 days')"
+      )
+      .run()
+    res.json({ usageDeleted: usage.changes, jobsDeleted: jobs.changes })
+  })
+
   // ---------- settings bootstrap (first-run detection) ----------
   router.get('/bootstrap', (_req, res) => {
     const providers = db.prepare('SELECT COUNT(*) AS c FROM provider').get() as { c: number }

@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { callLlm, type LlmCallOptions } from './llm'
+import { getGuidance, buildGuidanceBlock, getWritingSettings, buildWritingRules } from './guidance'
 import type { TaskType } from '../db/seed'
 
 export const MAX_RETRIES = 3
@@ -30,8 +31,30 @@ export async function callLlmJson<T>(
   label = 'structured-output'
 ): Promise<T> {
   let lastError: unknown = null
+  // P19 ①：书级引导 + 单次引导（注入 user 消息首条，保持模型关注）
+  let guidedOpts = opts
+  if (opts.novelId && opts.messages[0]?.content) {
+    const block = buildGuidanceBlock(getGuidance(db, opts.novelId), opts.guidance)
+    if (block) {
+      guidedOpts = {
+        ...opts,
+        messages: [{ ...opts.messages[0], content: opts.messages[0].content + '\n\n' + block }, ...opts.messages.slice(1)]
+      }
+    }
+  }
+  // P19 ②⑤：写作偏好规则（语言/格式/模式；偏离默认才注入，改设置→hash 变→缓存失效）
+  const writingRules = buildWritingRules(getWritingSettings(db))
+  if (writingRules && guidedOpts.messages[0]?.content) {
+    guidedOpts = {
+      ...guidedOpts,
+      messages: [
+        { ...guidedOpts.messages[0], content: guidedOpts.messages[0].content + '\n\n【写作要求】\n' + writingRules },
+        ...guidedOpts.messages.slice(1)
+      ]
+    }
+  }
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const result = await callLlm(db, taskType, { ...opts, jsonMode: true })
+    const result = await callLlm(db, taskType, { ...guidedOpts, jsonMode: true })
     const raw = extractJson(result.content)
     try {
       const parsed = JSON.parse(raw)

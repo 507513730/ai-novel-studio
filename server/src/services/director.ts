@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { callLlmJson } from './jsonSafe'
+import { isJobCancelled } from './jobQueue'
 import {
   generateDirectionsPrompt,
   parseDirections,
@@ -250,6 +251,8 @@ export function isStageDone(db: DatabaseSync, novelId: number, stage: DirectorSt
 // ---------- 阶段执行 ----------
 interface StageContext {
   chaptersPerVolume: number
+  // P20（M2）：job 感知（取消时每阶段边界中止）
+  jobId?: number
 }
 
 async function runStage(
@@ -420,12 +423,20 @@ async function runStage(
         parseCharacters,
         'director-characters-extended'
       )
+      // P20（M3）：幂等去重——按 novel+name 跳过已存在（阶段失败重跑不造重名角色）
+      const existingChars = new Set(
+        (db.prepare('SELECT name FROM character WHERE novel_id = ?').all(novelId) as Array<{ name: string }>).map(
+          (r) => r.name
+        )
+      )
       const insert = db.prepare(
         'INSERT INTO character (novel_id, name, profile_json, status) VALUES (?, ?, ?, ?)'
       )
       db.exec('BEGIN')
       try {
         for (const c of [...core, ...extended]) {
+          if (existingChars.has(c.name)) continue
+          existingChars.add(c.name)
           insert.run(
             novelId,
             c.name,
@@ -474,9 +485,17 @@ async function runStage(
         parseVolumes,
         'director-volumes'
       )
+      // P20（M3）：卷幂等去重（按 novel+title 跳过重跑产物）
+      const existingVols = new Set(
+        (db.prepare('SELECT title FROM volume WHERE novel_id = ?').all(novelId) as Array<{ title: string }>).map(
+          (r) => r.title
+        )
+      )
       db.exec('BEGIN')
       try {
         for (let i = 0; i < volumes.length; i++) {
+          if (existingVols.has(volumes[i].title)) continue
+          existingVols.add(volumes[i].title)
           db.prepare(
             'INSERT INTO volume (novel_id, title, strategy_json, skeleton_json, order_index) VALUES (?, ?, ?, ?, ?)'
           ).run(
@@ -529,9 +548,17 @@ async function runStage(
           parseBeats,
           'director-beats'
         )
+        // P20（M3）：节拍幂等去重（按 volume+title 跳过重跑产物）
+        const existingBeats = new Set(
+          (
+            db.prepare('SELECT title FROM beat WHERE volume_id = ?').all(v.id) as Array<{ title: string }>
+          ).map((r) => r.title)
+        )
         db.exec('BEGIN')
         try {
           for (let i = 0; i < beats.length; i++) {
+            if (existingBeats.has(beats[i].title)) continue
+            existingBeats.add(beats[i].title)
             db.prepare('INSERT INTO beat (volume_id, title, summary, order_index) VALUES (?, ?, ?, ?)').run(
               v.id,
               beats[i].title,
@@ -604,9 +631,17 @@ async function runStage(
           },
           'director-chapters'
         )
+        // P20（M3）：章节幂等去重（按 volume+title 跳过重跑产物）
+        const existingChapters = new Set(
+          (
+            db.prepare('SELECT title FROM chapter WHERE volume_id = ?').all(v.id) as Array<{ title: string }>
+          ).map((r) => r.title)
+        )
         db.exec('BEGIN')
         try {
           for (const cp of plan) {
+            if (existingChapters.has(cp.title)) continue
+            existingChapters.add(cp.title)
             db.prepare(
               'INSERT INTO chapter (novel_id, volume_id, beat_id, title, summary, goal_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
             ).run(novelId, v.id, cp.beatId, cp.title, cp.summary, JSON.stringify({ goal: cp.goal }), 'planned')
@@ -699,11 +734,22 @@ export async function runDirectorPipeline(
   saveDirectorTask(db, task)
 
   for (const stage of STAGE_ORDER) {
+    // P20（M2）：取消感知（用户取消 → 中止并标记 task）
+    if (ctx.jobId && isJobCancelled(db, ctx.jobId)) {
+      task.status = 'cancelled'
+      task.checkpoint.displayStatus = '导演已取消（用户中止）'
+      task.checkpoint.resumeAction = '重新运行导演以继续'
+      saveDirectorTask(db, task)
+      return
+    }
+
     // 熔断：超过上限直接停
-    if (task.checkpoint.replanCount > MAX_REPLAN) {
+    // P20（M6）：按阶段计数——早期网络抖动不耗尽全局预算
+    const stageReplans = task.checkpoint.decisions.filter((d) => d.startsWith(`${stage}:`)).length
+    if (stageReplans > MAX_REPLAN) {
       task.status = 'failed'
       task.checkpoint.displayStatus = '重规划超限，需人工介入'
-      task.checkpoint.blockingReason = `连续重规划 ${task.checkpoint.replanCount} 次超过上限 ${MAX_REPLAN}`
+      task.checkpoint.blockingReason = `阶段 ${STAGE_LABELS[stage]} 连续重规划 ${stageReplans} 次超过上限 ${MAX_REPLAN}`
       task.checkpoint.resumeAction = '人工修改后重跑导演'
       saveDirectorTask(db, task)
       return
@@ -739,9 +785,11 @@ export async function runDirectorPipeline(
       }
       const isRetryable =
         /LLM JSON 输出解析失败|rate limit|429|503|timeout|网络|ECONN|配额|insufficient_quota/i.test(message)
-      if (isRetryable && task.checkpoint.replanCount <= MAX_REPLAN) {
+      // P20（M6）：按阶段计数判定可重试
+      const stageReplansNow = task.checkpoint.decisions.filter((d) => d.startsWith(`${stage}:`)).length
+      if (isRetryable && stageReplansNow <= MAX_REPLAN) {
         task.status = 'running'
-        task.checkpoint.displayStatus = `阶段失败（可重试 ${task.checkpoint.replanCount}/${MAX_REPLAN}）：${STAGE_LABELS[stage]}`
+        task.checkpoint.displayStatus = `阶段失败（可重试 ${stageReplansNow}/${MAX_REPLAN}）：${STAGE_LABELS[stage]}`
         saveDirectorTask(db, task)
         await new Promise((r) => setTimeout(r, 2000))
         continue // 重试当前阶段

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import CodeMirror from '@uiw/react-codemirror'
@@ -42,11 +42,18 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const dirtyRef = useRef(false)
   const streamingRef = useRef(false)
   const generateBusyRef = useRef(false)
+  // P20（U6）：流式 rAF 合并缓冲
+  const pendingDeltaRef = useRef('')
+  const rAFRef = useRef<number | null>(null)
+  // P19 ④：单次生成引导输入（生成后保留，供参考）
+  const [guidanceDraft, setGuidanceDraft] = useState('')
   // P12 A3：章节进度矩阵信号（跨渲染记录，不新增请求）
   const fixDoneRef = useRef(false)
   const backfillDoneRef = useRef(false)
   const confirmDoneRef = useRef(false)
   const snapshotDoneRef = useRef(false)
+  // P20（U5）：字数统计 memo（避免每次击键重渲染时 O(n) 扫描）
+  const hanCount = useMemo(() => (content.match(/[\u4e00-\u9fff]/g) ?? []).length, [content])
   // A1：选区/光标状态（ref 缓存防 onUpdate 无限重渲染）
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; cursor: number }>({ text: '', cursor: -1 })
   const selectionRef = useRef({ text: '', cursor: -1 })
@@ -209,6 +216,17 @@ export function ChapterExecutionPage(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChapter, content])
 
+  // P20（U3）：定时自动保存（30s 防抖；生成/加载中挂起；cleanup 时清定时器）
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (dirtyRef.current && !streamingRef.current && !contentLoadingRef.current) {
+        void saveContent({ silent: true }).catch(() => undefined)
+      }
+    }, 30_000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChapter])
+
   const saveContent = async (opts?: { silent?: boolean; force?: boolean }): Promise<void> => {
     if (!selectedChapter) return
     if (contentLoadingRef.current || streamingRef.current) return
@@ -287,11 +305,19 @@ export function ChapterExecutionPage(): React.JSX.Element {
         selectedChapter,
         {
           onDelta: (text) => {
-            setContent((prev) => prev + text)
-            // P12 C2：实时估算（字符 + token + 成本）
-            const total = (editorRef.current?.view?.state.doc.toString() ?? '').length
-            const t = estimateTokens(total.toString())
-            setStreamStat(`已生成 ${total.toLocaleString()} 字 · 约 ${t.toLocaleString()} tokens · ${fmtCost(estimateCost('', t).cost)}`)
+            // P20（U6）：rAF 合并——每帧只触发一次 setState + 统计（避免高频 delta 全页重渲染）
+            const pending = (pendingDeltaRef.current += text)
+            if (rAFRef.current !== null) return
+            rAFRef.current = requestAnimationFrame(() => {
+              rAFRef.current = null
+              const batch = pendingDeltaRef.current
+              pendingDeltaRef.current = ''
+              setContent((prev) => prev + batch)
+              const total = (editorRef.current?.view?.state.doc.toString() ?? '').length
+              const t = estimateTokens(total.toString())
+              setStreamStat(`已生成 ${total.toLocaleString()} 字 · 约 ${t.toLocaleString()} tokens · ${fmtCost(estimateCost('', t).cost)}`)
+              void pending
+            })
           },
           onDone: async (payload) => {
             setContent(payload.content)
@@ -320,10 +346,18 @@ export function ChapterExecutionPage(): React.JSX.Element {
             setActionError(message)
             setStreaming(false)
             abortRef.current = null
+          },
+          // P20（D1）：context 事件接入——预算/缓存诊断显示
+          onContext: (payload) => {
+            const p = payload as { budgetUsed?: number; budgetLimit?: number; frozenHash?: string }
+            setStreamStat(
+              `上下文 ${((p.budgetUsed ?? 0) / 1000).toFixed(1)}k / ${((p.budgetLimit ?? 0) / 1000).toFixed(1)}k tokens · 冻结 ${String(p.frozenHash ?? '').slice(0, 8)}`
+            )
           }
         },
         controller.signal,
-        buildInclude()
+        buildInclude(),
+        guidanceDraft.trim() || undefined
       )
     } catch {
       /* 异常路径已由 handlers 处理 */
@@ -332,6 +366,16 @@ export function ChapterExecutionPage(): React.JSX.Element {
       streamingRef.current = false
       setStreaming(false)
       abortRef.current = null
+      // P20（U6）：清理 rAF 缓冲（未刷入的 delta 直接落到 state，保证内容不丢）
+      if (rAFRef.current !== null) {
+        cancelAnimationFrame(rAFRef.current)
+        rAFRef.current = null
+      }
+      if (pendingDeltaRef.current) {
+        const tail = pendingDeltaRef.current
+        pendingDeltaRef.current = ''
+        setContent((prev) => prev + tail)
+      }
     }
   }
 
@@ -777,8 +821,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
               </strong>
             )}
             {chapter?.summary && <span className="muted" style={{ fontSize: 12 }}>{chapter.summary}</span>}
-            <span className="muted" style={{ fontSize: 12 }}>｜{(content.match(/[\u4e00-\u9fff]/g) ?? []).length} 字</span>
-          </div>
+            <span className="muted" style={{ fontSize: 12 }}>｜{hanCount} 字</span>          </div>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <button onClick={() => void saveContent().catch(() => undefined)} disabled={saving || contentLoading || streaming}>
               {saving ? '保存中…' : '保存'}
@@ -786,6 +829,14 @@ export function ChapterExecutionPage(): React.JSX.Element {
             <button onClick={() => void generate()} disabled={streaming || !selectedChapter || contentLoading}>
               {streaming ? '生成中…' : 'AI 生成正文'}
             </button>
+            <input
+              style={{ flex: '1 1 200px', minWidth: 180 }}
+              placeholder="可选：对本次生成的额外要求（如：本章要引入新反派伏笔、节奏放慢写细节）…"
+              value={guidanceDraft}
+              disabled={streaming}
+              onChange={(e) => setGuidanceDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !streaming) void generate() }}
+            />
             <span style={{ margin: '0 8px', color: 'var(--border)' }}>|</span>
             <button className="sm" style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }} disabled={exportBusy !== null} onClick={() => void exportChapter('txt')}>
               {exportBusy === 'txt' ? '导出中…' : 'TXT'}
@@ -1002,15 +1053,61 @@ export function ChapterExecutionPage(): React.JSX.Element {
               <strong>审核结果</strong>
               <span className="badge">评分 {String(reviewResult.score)}</span>
             </div>
-            {Array.isArray(reviewResult.issues) && (reviewResult.issues as Array<Record<string, unknown>>).map((issue, i) => (
-              <div key={i} style={{ marginTop: 8, fontSize: 12, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                <span className="badge" style={issue.severity === 'high' ? { color: '#ff6b6b', background: 'rgba(255,107,107,0.12)' } : {}}>
-                  {String(issue.severity)}
-                </span>
-                <div style={{ marginTop: 4 }}>{String(issue.problem)}</div>
-                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>建议：{String(issue.suggestion)}</div>
-              </div>
-            ))}
+            {Array.isArray(reviewResult.issues) && (reviewResult.issues as Array<Record<string, unknown>>).length > 0 && (
+              <>
+                {/* P19 ⑧：优先优化建议（severity 排序 top 3，一键采纳重写） */}
+                <div style={{ marginTop: 10, fontSize: 12 }}>
+                  <span style={{ fontWeight: 600, color: 'var(--accent-bright)' }}>优先优化建议（按优先级）</span>
+                  <ol style={{ margin: '6px 0 0 18px', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {(reviewResult.issues as Array<Record<string, unknown>>)
+                      .slice()
+                      .sort((a, b) => {
+                        const w: Record<string, number> = { high: 0, medium: 1, low: 2 }
+                        return (w[String(a.severity)] ?? 3) - (w[String(b.severity)] ?? 3)
+                      })
+                      .slice(0, 3)
+                      .map((issue, i) => (
+                        <li key={i}>
+                          {String(issue.problem)} <span className="muted">→ {String(issue.suggestion)}</span>
+                        </li>
+                      ))}
+                  </ol>
+                </div>
+                <button
+                  className="sm"
+                  style={{ marginTop: 10, color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
+                  disabled={streaming || actionBusy !== null}
+                  onClick={() => {
+                    const top = (reviewResult.issues as Array<Record<string, unknown>>)
+                      .slice()
+                      .sort((a, b) => {
+                        const w: Record<string, number> = { high: 0, medium: 1, low: 2 }
+                        return (w[String(a.severity)] ?? 3) - (w[String(b.severity)] ?? 3)
+                      })
+                      .slice(0, 3)
+                    const advice = top
+                      .map((i) => `${String(i.location)}：${String(i.problem)}（建议：${String(i.suggestion)}）`)
+                      .join('；')
+                    if (!window.confirm(`将按以下建议重新生成本章（当前内容会被替换）：\n\n${advice.slice(0, 300)}`)) return
+                    setGuidanceDraft(advice)
+                    void generate()
+                  }}
+                >
+                  采纳建议并重写
+                </button>
+                <div style={{ marginTop: 10, borderTop: '1px solid var(--border)' }}>
+                  {(reviewResult.issues as Array<Record<string, unknown>>).map((issue, i) => (
+                    <div key={i} style={{ marginTop: 8, fontSize: 12, paddingTop: 8 }}>
+                      <span className="badge" style={issue.severity === 'high' ? { color: '#ff6b6b', background: 'rgba(255,107,107,0.12)' } : {}}>
+                        {String(issue.severity)}
+                      </span>
+                      <div style={{ marginTop: 4 }}>{String(issue.problem)}</div>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>建议：{String(issue.suggestion)}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1078,16 +1175,59 @@ export function ChapterExecutionPage(): React.JSX.Element {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
               {versions?.map((v) => (
                 <div key={v.id} style={{ fontSize: 12, padding: '6px 10px', background: 'var(--bg-panel)', borderRadius: 6 }}>
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
                     <span className="badge">#{v.id}</span>
                     <span className="muted" style={{ fontSize: 11 }}>{v.note} · {v.createdAt} · {v.wordCount} 字</span>
                   </div>
-              <div className="muted" style={{ fontSize: 11, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {v.preview}
-              </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {v.preview}
+                  </div>
+                  {/* P20（U1）：查看全文 + 恢复此版本（版本历史可用了） */}
+                  <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                    <button
+                      className="sm"
+                      disabled={actionBusy !== null}
+                      onClick={() => {
+                        if (!selectedChapter) return
+                        void withBusy(`vview-${v.id}`, async () => {
+                          try {
+                            const r = await novelApi.chapterVersionDetail(id, selectedChapter, v.id)
+                            setResourceDetail({ title: `版本 #${v.id}（${v.note} · ${v.createdAt}）`, body: r.version.content })
+                          } catch (err) {
+                            setActionError(err instanceof Error ? err.message : String(err))
+                          }
+                        })
+                      }}
+                    >
+                      查看
+                    </button>
+                    <button
+                      className="sm"
+                      style={{ color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
+                      disabled={actionBusy !== null || streaming}
+                      onClick={() => {
+                        if (!selectedChapter) return
+                        if (!window.confirm(`恢复为版本 #${v.id}？当前内容会先存入新版本，然后被替换。`)) return
+                        void withBusy(`vrestore-${v.id}`, async () => {
+                          try {
+                            const r = await novelApi.chapterVersionRestore(id, selectedChapter, v.id)
+                            setContent(r.content)
+                            savedContentRef.current = r.content
+                            dirtyRef.current = false
+                            setActionMsg(`已恢复版本 #${v.id}（${r.wordCount} 字），原内容已存为新版本`)
+                            await invalidate()
+                          } catch (err) {
+                            setActionError(err instanceof Error ? err.message : String(err))
+                          }
+                        })
+                      }}
+                    >
+                      恢复
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
       </div>
         )}
 

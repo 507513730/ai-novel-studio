@@ -23,6 +23,27 @@ const PRICING: Record<string, { hit: number; miss: number; out: number }> = {
 
 const DEFAULT_PRICING = { hit: 0.1, miss: 0.5, out: 1.5 }
 
+// P20（C2）：模型名归一化匹配——供应商回显名（response.model）常与配置名有大小写/别名差异，
+// 精确匹配失败会落 DEFAULT_PRICING（虚高 3.5~35 倍）。归一后精确 + 前缀匹配。
+function normKey(s: string): string {
+  return s.trim().toLowerCase().replace(/[\s_]/g, '')
+}
+
+const PRICING_NORM: Array<{ n: string; p: { hit: number; miss: number; out: number } }> = Object.entries(
+  PRICING
+).map(([k, p]) => ({ n: normKey(k), p }))
+
+function findPricing(provider: string, model: string): { hit: number; miss: number; out: number } {
+  const key = normKey(`${provider}:${model}`)
+  for (const e of PRICING_NORM) {
+    if (e.n === key) return e.p
+  }
+  for (const e of PRICING_NORM) {
+    if (key.startsWith(e.n) || e.n.startsWith(key)) return e.p
+  }
+  return DEFAULT_PRICING
+}
+
 export function estimateCost(
   provider: string,
   model: string,
@@ -31,7 +52,7 @@ export function estimateCost(
   cacheHit: number,
   cacheMiss: number
 ): number {
-  const p = PRICING[`${provider}:${model}`] ?? DEFAULT_PRICING
+  const p = findPricing(provider, model)
   return (cacheHit / 1e6) * p.hit + (cacheMiss / 1e6) * p.miss + (output / 1e6) * p.out
 }
 

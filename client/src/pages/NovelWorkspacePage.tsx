@@ -35,6 +35,88 @@ const STEPS: StepDef[] = [
 
 type StepStatus = 'done' | 'current' | 'todo'
 
+// P19 ⑦：卡片化创作向导（横排卡片；全部完成后自动折叠，可手动展开）
+function GuideStrip({
+  steps,
+  statusOf,
+  onPick
+}: {
+  steps: StepDef[]
+  statusOf: (key: Tab) => StepStatus
+  onPick: (key: Tab) => void
+}): React.JSX.Element {
+  const allDone = steps.every((s) => statusOf(s.key) === 'done')
+  const [collapsed, setCollapsed] = useState<boolean>(allDone)
+  if (collapsed) {
+    const doneCount = steps.filter((s) => statusOf(s.key) === 'done').length
+    return (
+      <button
+        className="sm"
+        style={{ marginBottom: 16, color: 'var(--ok)', borderColor: 'var(--ok)' }}
+        onClick={() => setCollapsed(false)}
+        title="点击展开流程卡片"
+      >
+        ✓ 本书创作流程已完成 {doneCount}/{steps.length} 步 · 点击展开
+      </button>
+    )
+  }
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(auto-fit, minmax(120px, 1fr))`,
+        gap: 8,
+        marginBottom: 16
+      }}
+    >
+      {steps.map((s, i) => {
+        const st = statusOf(s.key)
+        const Icon = s.icon
+        return (
+          <button
+            key={s.key}
+            onClick={() => onPick(s.key)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: 4,
+              padding: '10px 12px',
+              borderRadius: 'var(--radius-m)',
+              background: 'var(--bg-card)',
+              border: `1px solid ${st === 'current' ? 'var(--accent)' : st === 'done' ? 'rgba(52, 211, 153, 0.35)' : 'var(--border)'}`,
+              cursor: 'pointer',
+              textAlign: 'left'
+            }}
+          >
+            <div className="row" style={{ gap: 6, width: '100%', justifyContent: 'space-between' }}>
+              <span
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 11,
+                  flexShrink: 0,
+                  background: st === 'done' ? 'rgba(52, 211, 153, 0.15)' : st === 'current' ? 'var(--accent-soft)' : 'var(--bg-card)',
+                  border: `1px solid ${st === 'done' ? 'var(--ok)' : st === 'current' ? 'var(--accent)' : 'var(--border)'}`
+                }}
+              >
+                {st === 'done' ? '✓' : <Icon size={11} />}
+              </span>
+              <span className="muted" style={{ fontSize: 10 }}>{i + 1}/{steps.length}</span>
+            </div>
+            <strong style={{ fontSize: 12, color: st === 'done' ? 'var(--ok)' : 'var(--text)' }}>{s.label}</strong>
+            <span className="muted" style={{ fontSize: 11 }}>{s.desc}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function NovelWorkspacePage(): React.JSX.Element {
   const { novelId } = useParams()
   const navigate = useNavigate()
@@ -189,6 +271,15 @@ export function NovelWorkspacePage(): React.JSX.Element {
             )}
           </div>
         </div>
+
+        {/* P19 ⑦：卡片化创作向导（横排 7 步；全部完成后自动折叠为进度条） */}
+        {n && (
+          <GuideStrip
+            steps={STEPS}
+            statusOf={statusOf}
+            onPick={switchTab}
+          />
+        )}
 
         {tab === 'setup' && <SetupPanel novelId={id} onDirtyChange={setDirty} />}
         {tab === 'world' && <WorldPanel novelId={id} onDirtyChange={setDirty} />}

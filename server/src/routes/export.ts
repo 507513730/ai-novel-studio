@@ -25,7 +25,15 @@ export function createExportRouter(db: DatabaseSync): Router {
         .all(novelId) as Array<{ title: string; content: string }>
 
       const title = novel.title || '未命名小说'
-      const safeName = title.replace(/[\\/:*?"<>|]/g, '_')
+      // P20（E4）：文件名消毒补全（控制字符/结尾点空格/Windows 保留名）
+      const safeName =
+        title
+          .split('')
+          .map((ch) => (ch.charCodeAt(0) < 32 ? '_' : ch))
+          .join('')
+          .replace(/[\\/:*?"<>|]/g, '_')
+          .replace(/[. ]+$/g, '')
+          .replace(/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i, '_$1') || '未命名小说'
 
       if (format === 'txt') {
         const parts = [title, '']
@@ -35,7 +43,8 @@ export function createExportRouter(db: DatabaseSync): Router {
           parts.push(c.content)
           parts.push('')
         }
-        const buf = Buffer.from(parts.join('\n'), 'utf-8')
+        // P20（E3）：TXT 加 UTF-8 BOM（旧版 Windows 记事本按 GBK 误读中文乱码）
+        const buf = Buffer.concat([Buffer.from('\uFEFF', 'utf-8'), Buffer.from(parts.join('\n'), 'utf-8')])
         res.setHeader('Content-Type', 'text/plain; charset=utf-8')
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}.txt`)
         res.send(buf)
@@ -66,6 +75,9 @@ export function createExportRouter(db: DatabaseSync): Router {
       if (typeof epub !== 'function') {
         throw new Error('epub-gen-memory 未正确加载（导出结构异常）')
       }
+      // P20（E1）：章节内容 XML 转义（& < > " 防 EPUB 畸形/标签注入）
+      const xmlEscape = (s: string): string =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
       const buf = (await epub(
         {
           title,
@@ -75,8 +87,8 @@ export function createExportRouter(db: DatabaseSync): Router {
           lang: 'zh-CN'
         },
         chapters.map((c, i) => ({
-          title: c.title || `第 ${i + 1} 章`,
-          content: `<p>${c.content.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`
+          title: xmlEscape(c.title || `第 ${i + 1} 章`),
+          content: `<p>${xmlEscape(c.content).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`
         }))
       )) as Buffer
       res.setHeader('Content-Type', 'application/epub+zip')

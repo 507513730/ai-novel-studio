@@ -4,6 +4,7 @@ import { getBoundStyleRules } from './styleEngine'
 import { smartContextText, type SmartContext } from './smartContext'
 import type { LlmMessage } from './llm'
 import { TfidfRetriever } from './retrieval'
+import { getGuidance, getWritingSettings, buildWritingRules } from './guidance'
 
 // 前缀冻结组装器（PLAN §3.3）
 // [冻结前缀区] 系统提示 → 书级合约(framing) → 世界观手册 → 角色账本(按参与者筛选)
@@ -20,10 +21,12 @@ export interface CharacterLedgerEntry {
 }
 
 export interface FrozenContext {
+  writingRules?: string
   contract: string
   world: string
   characters: string
   external?: string // P4 外部资料直塞
+  guidance?: string // P19 ①：书级创作引导
   hash: string
 }
 
@@ -53,11 +56,24 @@ function truncate(text: string, maxChars: number): string {
   return text.slice(0, maxChars) + '…[已截断]'
 }
 
-function estimateTokens(text: string): number {
+export function estimateTokens(text: string): number {
   // 中文为主：1 汉字 ≈ 1.2 token；其余字符 ≈ 0.4 token
   const cjk = (text.match(/[\u4e00-\u9fff]/g) ?? []).length
   const other = text.length - cjk
   return Math.ceil(cjk * 1.2 + other * 0.4)
+}
+
+// P20（C5/C6）：预算裁剪——按 markers 顺序（先裁的在前）从尾部逐段删除，直至不超预算
+function trimFromEnd(text: string, markers: string[], budget: number): string {
+  let t = text
+  for (const m of markers) {
+    if (estimateTokens(t) <= budget) break
+    const idx = t.lastIndexOf(m)
+    if (idx > 0) {
+      t = t.slice(0, idx).trimEnd()
+    }
+  }
+  return t
 }
 
 function getNovel(db: DatabaseSync, novelId: number): {
@@ -185,23 +201,28 @@ export function getCharactersForChapter(
  * kb_doc 中 status='direct' 的文档注入冻结前缀区（复用缓存机制）
  */
 // P17-5B：知识库检索（TF-IDF，按相关性 Top-K 注入可变区）
-const kbCache = new Map<number, { version: number; retriever: TfidfRetriever }>()
+// P20（D2）：缓存失效键从"文档条数"升级为"数量+内容 hash"——编辑/删一加一即重建索引
+const kbCache = new Map<number, { version: string; retriever: TfidfRetriever }>()
 
 export function getKnowledgeRetrieval(db: DatabaseSync, novelId: number, query: string): string | null {
   if (!query.trim()) return null
+  // P20（D7）：status='direct' 的直塞资料排除（已走冻结区直塞，避免双份进提示词）
   const docs = db
-    .prepare("SELECT id, title, content FROM kb_doc WHERE novel_id = ? AND content != '' ORDER BY id")
+    .prepare(
+      "SELECT id, title, content FROM kb_doc WHERE novel_id = ? AND content != '' AND status != 'direct' ORDER BY id"
+    )
     .all(novelId) as Array<{ id: number; title: string; content: string }>
   if (docs.length === 0) return null
 
+  const versionKey = `${docs.length}:${hashOf(docs.map((d) => `${d.id}:${d.content.length}:${d.content.slice(0, 200)}`).join('|'))}`
   let cached = kbCache.get(novelId)
   if (!cached) {
-    cached = { version: 0, retriever: new TfidfRetriever() }
+    cached = { version: '', retriever: new TfidfRetriever() }
     kbCache.set(novelId, cached)
   }
-  if (cached.version !== docs.length) {
+  if (cached.version !== versionKey) {
     cached.retriever.indexNow(docs.map((d) => ({ id: d.id, title: d.title, content: d.content })))
-    cached.version = docs.length
+    cached.version = versionKey
   }
   const hits = cached.retriever.searchNow(query, 3)
   if (hits.length === 0) return null
@@ -287,6 +308,51 @@ function getGenreConstraints(db: DatabaseSync, novelId: number): string {
   return parts.join('\n')
 }
 
+// P19 ⑥：当前定位（卷战略 → 节拍 → 本章目标），限量 600 字；查不到任何信息返回空串
+export function getChapterLocation(db: DatabaseSync, chapterId: number): string {
+  const chapter = db
+    .prepare('SELECT volume_id, beat_id, goal_json FROM chapter WHERE id = ?')
+    .get(chapterId) as { volume_id: number | null; beat_id: number | null; goal_json: string } | undefined
+  if (!chapter) return ''
+  const parts: string[] = []
+  if (chapter.volume_id) {
+    const vol = db
+      .prepare('SELECT title, strategy_json FROM volume WHERE id = ?')
+      .get(chapter.volume_id) as { title: string; strategy_json: string } | undefined
+    if (vol) {
+      const strategy = JSON.parse(vol.strategy_json || '{}') as {
+        theme?: string
+        coreConflict?: string
+        payoff?: string
+      }
+      const volLine = [`本卷：${vol.title}`]
+      if (strategy.theme) volLine.push(`主题：${strategy.theme}`)
+      if (strategy.coreConflict) volLine.push(`核心冲突：${strategy.coreConflict}`)
+      parts.push('【当前定位】' + volLine.join('；'))
+    }
+  }
+  if (chapter.beat_id) {
+    const beat = db
+      .prepare('SELECT title, summary FROM beat WHERE id = ?')
+      .get(chapter.beat_id) as { title: string; summary: string } | undefined
+    if (beat) {
+      parts.push(`所属节拍：${beat.title}${beat.summary ? `（${beat.summary.slice(0, 80)}）` : ''}`)
+    }
+  } else if (chapter.volume_id) {
+    const beats = db
+      .prepare('SELECT title FROM beat WHERE volume_id = ? ORDER BY order_index LIMIT 5')
+      .all(chapter.volume_id) as Array<{ title: string }>
+    if (beats.length > 0) parts.push(`本卷节奏序列：${beats.map((b) => b.title).join(' → ')}`)
+  }
+  const goal = JSON.parse(chapter.goal_json || '{}') as { title?: string; goal?: string; scenes?: unknown[] }
+  if (goal.title || goal.goal) {
+    const goalParts = [`本章目标：${goal.goal || goal.title || ''}`]
+    if (Array.isArray(goal.scenes)) goalParts.push(`计划场景数：${goal.scenes.length}`)
+    parts.push(goalParts.join('；'))
+  }
+  return parts.join('\n').slice(0, 600)
+}
+
 function getChapterSummary(db: DatabaseSync, novelId: number, beforeChapterId: number): string {
   // 前 3 章摘要（标题 + 一句话摘要）
   const rows = db
@@ -294,8 +360,7 @@ function getChapterSummary(db: DatabaseSync, novelId: number, beforeChapterId: n
       `SELECT title, summary FROM chapter
        WHERE novel_id = ? AND id < ? AND status IN ('done', 'reviewed', 'written')
        ORDER BY id DESC LIMIT 3`
-    )
-    .all(novelId, beforeChapterId) as Array<{ title: string; summary: string }>
+    )    .all(novelId, beforeChapterId) as Array<{ title: string; summary: string }>
   if (rows.length === 0) return ''
   const lines = rows.reverse().map((r) => `- 《${r.title}》：${r.summary || '（无摘要）'}`)
   return `【前文回顾】\n${lines.join('\n')}`
@@ -308,12 +373,18 @@ export function buildFrozenContext(db: DatabaseSync, novelId: number): FrozenCon
   const characters = getCharacters(db, novelId)
   // P4：外部资料直塞（status='direct'）注入冻结区
   const external = getExternalMaterials(db, novelId)
+  // P19 ①：书级创作引导（冻结区——改引导=hash 变化=缓存失效，语义正确）
+  const guidance = getGuidance(db, novelId)
+  // P19 ②⑤：写作偏好规则（语言/格式/模式；非默认才注入；改设置=hash 变=缓存失效）
+  const writingRules = buildWritingRules(getWritingSettings(db))
   return {
     contract,
     world,
     characters,
     external,
-    hash: hashOf(contract + '\n' + world + '\n' + characters + '\n' + external)
+    guidance,
+    writingRules,
+    hash: hashOf(contract + '\n' + world + '\n' + characters + '\n' + external + '\n' + guidance + '\n' + writingRules)
   }
 }
 
@@ -331,7 +402,7 @@ export function buildChapterWriteContext(
   db: DatabaseSync,
   novelId: number,
   chapterId: number,
-  opts: { budgetTokens?: number; tripleConstraints?: string[]; include?: string[] } = {}
+  opts: { budgetTokens?: number; tripleConstraints?: string[]; include?: string[]; perCallGuidance?: string } = {}
 ): ChapterWriteContext {
   const budgetLimit = opts.budgetTokens ?? 12_000
   const frozen = buildFrozenContext(db, novelId)
@@ -362,15 +433,21 @@ export function buildChapterWriteContext(
   const continuity = getContinuityState(db, novelId, chapterId)
   const genreConstraints = getGenreConstraints(db, novelId)
 
-  // 冻结前缀区（按优先级：合约 > 世界观 > 角色 > 外部资料；B1 include 过滤）
+  // 冻结前缀区（按优先级：合约 > 世界观 > 角色 > 外部资料 > 书级引导 > 写作要求；B1 include 过滤）
   let frozenText = getSystemPrompt('prose')
   if (frozen.contract && has('contract')) frozenText += '\n\n' + frozen.contract
   if (frozen.world && has('world')) frozenText += '\n\n' + frozen.world
   if (frozen.characters && has('characters')) frozenText += '\n\n【角色账本】\n' + frozen.characters
-  if (frozen.external && has('external')) frozenText += '\n\n' + frozen.external
+  if (frozen.external && has('external')) frozenText += '\n\n【外部资料】\n' + frozen.external
+  // P19 ①：书级引导注入冻结区（改引导→hash 变→缓存失效，语义正确）
+  if (frozen.guidance) frozenText += '\n\n【创作引导】\n' + frozen.guidance
+  // P19 ②⑤：写作偏好规则注入冻结区（非默认才注入；改设置→hash 变→缓存失效）
+  if (frozen.writingRules) frozenText += '\n\n【写作要求】\n' + frozen.writingRules
 
   // 可变区（顺序：连续性状态 → 流派约束 → 三方会审约束 → 写法规则 → 任务单 → 前文摘要；B1 过滤）
   let variableText = ''
+  // P19 ①：本次引导（单次，仅本请求；追加在前保持模型关注）
+  if (opts.perCallGuidance) variableText += '【本次引导】\n' + opts.perCallGuidance + '\n\n'
   if (continuity && has('continuity')) variableText += continuity + '\n\n'
   if (genreConstraints && has('genre')) variableText += genreConstraints + '\n\n'
   if (opts.tripleConstraints && opts.tripleConstraints.length > 0 && has('triple')) {
@@ -391,37 +468,45 @@ export function buildChapterWriteContext(
     const kbRetrieval = getKnowledgeRetrieval(db, novelId, `${chapter?.title ?? ''} ${chapter?.summary ?? ''} ${chapter?.goal_json ?? ''}`)
     if (kbRetrieval) variableText += kbRetrieval + '\n\n'
   }
+  // P19 ⑥：当前定位（卷战略 → 节拍 → 本章目标 4 级聚焦，限量 600 字）
+  if (has('location')) {
+    const location = getChapterLocation(db, chapterId)
+    if (location) variableText += location + '\n\n'
+  }
   variableText += taskSheet
   if (summaryText && has('summary')) variableText += '\n\n' + summaryText
 
-  // 预算守卫：先裁可变区摘要，再裁冻结区角色/世界观
+  // 预算守卫（P20 C5/C6：从尾部向头部逐段裁剪，高价值段（引导/约束/任务单）最后才裁）
   const frozenBudget = Math.floor(budgetLimit * 0.8)
   const variableBudget = budgetLimit - frozenBudget
 
+  // 冻结区裁剪顺序（尾→头：写作要求 → 引导 → 外部资料 → 角色账本 → 世界观 → 合约）
+  const FROZEN_TRIM_ORDER = ['【写作要求】', '【创作引导】', '【外部资料】', '【角色账本】', '【世界观手册】']
+  // 可变区裁剪顺序（先裁尾部低价值：前文回顾 → 知识库 → 定位 → 写法规则 → 约束 → 连续性 → 本次引导；
+  // 任务单永不整段裁，极端超限只截 head 保 tail）
+  const VARIABLE_TRIM_ORDER = [
+    '【前文回顾】',
+    '【知识库检索（按相关性）】',
+    '【当前定位】',
+    '【绑定写法要求（必须遵守）】',
+    '【本章三方会审约束（必须遵守）】',
+    '【未回收伏笔（写作时酌情呼应，不得遗忘）】',
+    '【本次引导】'
+  ]
+
   if (estimateTokens(variableText) > variableBudget) {
-    // 优先压缩前文回顾
-    const priorIdx = variableText.indexOf('【前文回顾】')
-    if (priorIdx > 0) {
-      variableText = variableText.slice(0, priorIdx).trimEnd()
-    }
+    variableText = trimFromEnd(variableText, VARIABLE_TRIM_ORDER, variableBudget)
     if (estimateTokens(variableText) > variableBudget) {
-      variableText = truncate(variableText, Math.floor((variableBudget / 1.2) * 0.8))
+      // 极端超限：按预算截断（尾部摘要先丢，保留任务单/引导）
+      const taskIdx = variableText.indexOf('【本章任务单】')
+      const head = taskIdx > 0 ? variableText.slice(0, taskIdx) : ''
+      const tail = taskIdx > 0 ? variableText.slice(taskIdx) : variableText
+      variableText = head.slice(0, Math.floor((variableBudget / 1.2) * 0.5)) + tail
     }
   }
 
   if (estimateTokens(frozenText) > frozenBudget) {
-    // 先裁角色账本段
-    const charIdx = frozenText.indexOf('【角色账本】')
-    if (charIdx > 0) {
-      frozenText = frozenText.slice(0, charIdx).trimEnd()
-    }
-    if (estimateTokens(frozenText) > frozenBudget) {
-      // 再裁世界观
-      const worldIdx = frozenText.indexOf('【世界观手册】')
-      if (worldIdx > 0) {
-        frozenText = frozenText.slice(0, worldIdx).trimEnd()
-      }
-    }
+    frozenText = trimFromEnd(frozenText, FROZEN_TRIM_ORDER, frozenBudget)
     if (estimateTokens(frozenText) > frozenBudget) {
       frozenText = truncate(frozenText, Math.floor((frozenBudget / 1.2) * 0.9))
     }

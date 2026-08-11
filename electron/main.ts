@@ -1,13 +1,34 @@
 import { app, BrowserWindow, utilityProcess, shell, safeStorage, Menu, ipcMain, nativeTheme, dialog } from 'electron'
 import { join } from 'node:path'
-import { mkdirSync, rmSync, copyFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, rmSync, copyFileSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 
 let mainWindow: BrowserWindow | null = null
 let serverProcess: Electron.UtilityProcess | null = null
 // P11-1.2：缓存 server URL（防 server-ready 早于 renderer 监听导致消息丢失）
 let lastServerUrl: string | null = null
+// P20（S1）：renderer 调用本地 API 的鉴权 token（经 preload 注入，恶意网页拿不到）
+const SERVER_TOKEN = randomBytes(32).toString('hex')
+
+// P20（S2）：便携版数据目录统一（export/restore/wipe/open-data-dir 与 server 使用同一目录）
+function getDataDir(): string {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    const d = join(process.env.PORTABLE_EXECUTABLE_DIR, 'data')
+    try {
+      mkdirSync(d, { recursive: true })
+      return d
+    } catch {
+      /* 不可写时回退 userData */
+    }
+  }
+  return app.getPath('userData')
+}
 
 ipcMain.handle('get-server-url', () => lastServerUrl)
+// P20（S1）：renderer 请求 token（sendSync 同步返回）
+ipcMain.on('get-server-token', (event) => {
+  event.returnValue = SERVER_TOKEN
+})
 
 // P13 F0：主题联动（nativeTheme 同步 + titleBarOverlay 配色）
 const THEME_OVERLAY: Record<string, { color: string; symbolColor: string }> = {
@@ -26,15 +47,15 @@ ipcMain.handle('theme-set', (_e, theme: string) => {
   return true
 })
 
-// P16 P0：数据管理（打开数据目录 / 清除全部数据）
+// P16 P0：数据管理（打开数据目录 / 清除全部数据）——P20 统一便携版目录
 ipcMain.handle('open-data-dir', () => {
-  void shell.openPath(app.getPath('userData'))
+  void shell.openPath(getDataDir())
   return true
 })
 ipcMain.handle('wipe-data', () => {
   try {
-    const dataDir = app.getPath('userData')
-    if (rmSync.length >= 0 && dataDir) {
+    const dataDir = getDataDir()
+    if (dataDir) {
       rmSync(dataDir, { recursive: true, force: true })
     }
   } catch (e) {
@@ -45,10 +66,10 @@ ipcMain.handle('wipe-data', () => {
   return true
 })
 
-// P18 B：导出备份（复制 db 三件套到用户选择目录）
+// P18 B + P20（S2）：导出备份（先 checkpoint 保证原子，只导出主库文件）
 ipcMain.handle('export-backup', async () => {
   try {
-    const dataDir = app.getPath('userData')
+    const dataDir = getDataDir()
     const now = new Date()
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
     const defaultName = `ai-novel-studio-backup-${stamp}`
@@ -59,20 +80,33 @@ ipcMain.handle('export-backup', async () => {
       properties: ['createDirectory']
     })
     if (picked.canceled || !picked.filePath) return { ok: false, canceled: true }
+    // P20：请求 server 执行 wal_checkpoint(TRUNCATE)（WAL 落主库），保证备份原子
+    const sp = serverProcess
+    if (sp) {
+      await new Promise<void>((resolve) => {
+        const id = `cp-${Date.now()}`
+        const onMsg = (msg: unknown): void => {
+          const m = msg as { type?: string; id?: string }
+          if (m?.id === id && (m.type === 'checkpoint-done' || m.type === 'checkpoint-error')) {
+            sp.off('message', onMsg)
+            resolve()
+          }
+        }
+        sp.on('message', onMsg)
+        sp.postMessage({ type: 'checkpoint', id })
+        setTimeout(resolve, 5000) // 兜底：5s 内未应答也继续（WAL 可能为空）
+      })
+    }
     const outDir = picked.filePath
     if (existsSync(outDir)) {
       // 同名目录已存在 → 清空重建（用户已确认覆盖意图）
       rmSync(outDir, { recursive: true, force: true })
     }
     mkdirSync(outDir, { recursive: true })
-    let copied = 0
-    for (const f of ['ai-novel-studio.db', 'ai-novel-studio.db-wal', 'ai-novel-studio.db-shm']) {
-      const src = join(dataDir, f)
-      if (existsSync(src)) {
-        copyFileSync(src, join(outDir, f))
-        copied++
-      }
-    }
+    // 只备份主库（checkpoint 后 wal/shm 为空；恢复时旧 wal/shm 一并清除防脏）
+    const dbFile = join(dataDir, 'ai-novel-studio.db')
+    if (!existsSync(dbFile)) return { ok: false, error: '数据库文件不存在，无法备份' }
+    copyFileSync(dbFile, join(outDir, 'ai-novel-studio.db'))
     writeFileSync(
       join(outDir, 'backup-info.json'),
       JSON.stringify(
@@ -80,25 +114,25 @@ ipcMain.handle('export-backup', async () => {
           app: 'AI-Novel-Studio',
           version: app.getVersion(),
           createdAt: new Date().toISOString(),
-          files: ['ai-novel-studio.db', 'ai-novel-studio.db-wal', 'ai-novel-studio.db-shm'].filter((f) => existsSync(join(dataDir, f))),
-          restoreNote: '恢复方式：设置页「从备份恢复」选择此目录，或手动将 db 三件套放回 %APPDATA%\\ai-novel-studio'
+          files: ['ai-novel-studio.db'],
+          restoreNote: '恢复方式：设置页「从备份恢复」选择此目录（应用会先停止服务再替换，然后自动重启）'
         },
         null,
         2
       ),
       'utf8'
     )
-    return { ok: true, path: outDir, copied }
+    return { ok: true, path: outDir, copied: 1 }
   } catch (e) {
     console.error('[main] export-backup error:', e)
     return { ok: false, error: String(e) }
   }
 })
 
-// P18 B：从备份恢复（校验 → 替换三件套 → 退出）
+// P18 B + P20（S2）：从备份恢复（停服务 → 替换主库 → 清 wal/shm → 重启服务 → 通知刷新）
 ipcMain.handle('restore-backup', async () => {
   try {
-    const dataDir = app.getPath('userData')
+    const dataDir = getDataDir()
     const picked = await dialog.showOpenDialog(mainWindow!, {
       title: '选择备份（目录或其中的 db 文件）',
       properties: ['openDirectory', 'openFile']
@@ -113,13 +147,52 @@ ipcMain.handle('restore-backup', async () => {
     if (!existsSync(dbFile)) {
       return { ok: false, error: '所选位置没有 ai-novel-studio.db（不是有效备份）' }
     }
-    // 替换三件套
-    for (const f of ['ai-novel-studio.db', 'ai-novel-studio.db-wal', 'ai-novel-studio.db-shm']) {
-      const s = join(dir, f)
-      const t = join(dataDir, f)
-      if (existsSync(s)) copyFileSync(s, t)
-      else if (existsSync(t)) rmSync(t, { force: true })
+    // P20：版本提示（不同版本备份允许恢复——迁移层幂等补齐列；仅提示）
+    const infoFile = join(dir, 'backup-info.json')
+    let backupVersion = '未知'
+    if (existsSync(infoFile)) {
+      try {
+        const info = JSON.parse(readFileSync(infoFile, 'utf8')) as { version?: string }
+        backupVersion = info.version ?? '未知'
+      } catch {
+        /* 忽略损坏的 info */
+      }
     }
+    if (backupVersion !== app.getVersion()) {
+      const ok = await dialog.showMessageBox(mainWindow!, {
+        type: 'warning',
+        title: '版本不一致',
+        message: `备份来自 v${backupVersion}，当前应用为 v${app.getVersion()}。\n恢复后将以当前应用打开旧备份数据（数据库会自动补齐缺失字段）。\n继续恢复？`,
+        buttons: ['继续恢复', '取消'],
+        defaultId: 1
+      })
+      if (ok.response !== 0) return { ok: false, canceled: true }
+    }
+    // 1) 停服务（Windows 下数据库文件被 server 独占，必须释放）
+    const hadServer = serverProcess !== null
+    if (serverProcess) {
+      const proc = serverProcess
+      serverProcess = null
+      proc.kill()
+      await new Promise((r) => setTimeout(r, 800))
+    }
+    // 2) 替换主库 + 清除旧 wal/shm（恢复后由 SQLite 按主库重建 WAL）
+    copyFileSync(dbFile, join(dataDir, 'ai-novel-studio.db'))
+    for (const f of ['ai-novel-studio.db-wal', 'ai-novel-studio.db-shm']) {
+      const t = join(dataDir, f)
+      if (existsSync(t)) rmSync(t, { force: true })
+    }
+    // 3) 重启服务
+    if (hadServer) {
+      try {
+        startServer()
+      } catch (e) {
+        console.error('[main] restore: server restart failed:', e)
+        return { ok: true, warning: '数据已恢复，但服务重启失败，请手动重启应用', restoredFrom: dir }
+      }
+    }
+    // 4) 通知渲染端刷新（恢复后旧页面状态已失效）
+    mainWindow?.webContents.send('data-restored')
     return { ok: true, restoredFrom: dir }
   } catch (e) {
     console.error('[main] restore-backup error:', e)
@@ -132,23 +205,15 @@ function getServerEntry(): string {
 }
 
 function startServer(): void {
-  // P6-3：portable 版数据跟随可执行文件（PORTABLE_EXECUTABLE_DIR 是 electron-builder portable 注入的环境变量）
-  let userData = app.getPath('userData')
-  if (process.env.PORTABLE_EXECUTABLE_DIR) {
-    userData = join(process.env.PORTABLE_EXECUTABLE_DIR, 'data')
-    try {
-      mkdirSync(userData, { recursive: true })
-    } catch {
-      /* 目录不可写时回退 userData */
-      userData = app.getPath('userData')
-    }
-  }
+  // P6-3 + P20（S2）：portable 版数据跟随可执行文件（与备份/恢复/清数据统一目录）
+  const userData = getDataDir()
   serverProcess = utilityProcess.fork(getServerEntry(), [], {
     env: {
       ...(process.env as Record<string, string>),
       AI_NOVEL_USER_DATA: userData,
       AI_NOVEL_APP_VERSION: app.getVersion(),
-      AI_NOVEL_PORT: process.env.ELECTRON_RENDERER_URL ? '3000' : '0'
+      AI_NOVEL_PORT: process.env.ELECTRON_RENDERER_URL ? '3000' : '0',
+      SERVER_TOKEN
     },
     serviceName: 'ai-novel-server',
     stdio: 'inherit'

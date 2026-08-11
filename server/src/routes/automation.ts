@@ -27,6 +27,17 @@ export function createJobsRouter(db: DatabaseSync): Router {
     })
   })
 
+  // P19 ③：清理已完成/失败任务（参考项目 #77 同类：任务中心无法清空）
+  router.delete('/jobs/done', (req, res) => {
+    const scope = (req.query.scope as string | undefined) ?? 'done'
+    const statuses =
+      scope === 'all' ? ["status IN ('done', 'failed', 'cancelled')"] : ["status = 'done'"]
+    const deleted = db
+      .prepare(`DELETE FROM job WHERE ${statuses.join(' AND ')} AND status != 'running'`)
+      .run()
+    res.json({ deleted: deleted.changes })
+  })
+
   router.get('/jobs/:id', (req, res) => {
     const row = db.prepare('SELECT * FROM job WHERE id = ?').get(Number(req.params.id)) as
       | Record<string, unknown>

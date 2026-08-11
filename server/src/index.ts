@@ -118,6 +118,21 @@ function start(): void {
       process.parentPort.postMessage({ type: 'error', error: String(err) })
     }
   })
+
+  // P20（S2）：备份前 checkpoint 支持（main 通知 → WAL 落主库 → 应答，保证备份原子）
+  if (isUtilityProcess()) {
+    process.parentPort.on('message', (msg: unknown) => {
+      const m = msg as { type?: string; id?: string }
+      if (m?.type === 'checkpoint') {
+        try {
+          db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+          process.parentPort.postMessage({ type: 'checkpoint-done', id: m.id })
+        } catch (err) {
+          process.parentPort.postMessage({ type: 'checkpoint-error', id: m.id, error: String(err) })
+        }
+      }
+    })
+  }
 }
 
 if (isUtilityProcess()) {

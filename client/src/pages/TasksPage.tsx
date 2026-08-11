@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ListChecks, RotateCcw, XCircle, RefreshCw } from 'lucide-react'
+import { ListChecks, RotateCcw, XCircle, RefreshCw, Trash2 } from 'lucide-react'
 import { novelApi, automationApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
@@ -34,7 +34,7 @@ export function TasksPage(): React.JSX.Element {
   const models = [...new Set((routes.data?.routes ?? []).map((r) => r.model))]
 
   const jobs = useQuery({
-    queryKey: ['jobs'],
+    queryKey: ['jobs', 'tasks'],
     queryFn: novelApi.jobs,
     refetchInterval: 4000
   })
@@ -46,7 +46,7 @@ export function TasksPage(): React.JSX.Element {
     try {
       await fn()
       toast('ok', doneMsg)
-      void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      void queryClient.invalidateQueries({ queryKey: ['jobs', 'tasks'] })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
@@ -69,7 +69,7 @@ export function TasksPage(): React.JSX.Element {
       .directorResume(novelId)
       .then(() => {
         toast('ok', '已从断点继续导演任务')
-        void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+        void queryClient.invalidateQueries({ queryKey: ['jobs', 'tasks'] })
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : String(err)
@@ -89,6 +89,32 @@ export function TasksPage(): React.JSX.Element {
           <h1 style={{ marginLeft: 8 }}>任务中心</h1>
         </div>
         <button className="sm" onClick={() => void jobs.refetch()}><RefreshCw size={13} style={{ verticalAlign: -1, marginRight: 4 }} />刷新</button>
+        <button
+          className="sm"
+          style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+          disabled={busy !== null}
+          onClick={() => {
+            const done = (jobs.data?.jobs ?? []).filter((j) => j.status === 'done').length
+            if (done === 0) {
+              toast('info', '没有已完成的任务')
+              return
+            }
+            if (!window.confirm(`将删除 ${done} 条已完成任务记录（不影响正文/文档）。继续？`)) return
+            setBusy(-1)
+            void automationApi
+              .jobsClearDone()
+              .then((r: { deleted: number }) => {
+                toast('ok', `已清理 ${r.deleted} 条完成记录`)
+                void queryClient.invalidateQueries({ queryKey: ['jobs', 'tasks'] })
+              })
+              .catch((err: unknown) => {
+                toast('error', err instanceof Error ? err.message : String(err))
+              })
+              .finally(() => setBusy(null))
+          }}
+        >
+          <Trash2 size={13} style={{ verticalAlign: -1, marginRight: 4 }} />清理已完成
+        </button>
       </div>
       {error && <ErrorMsg error={error} />}
       {jobs.isLoading && <p className="muted">加载中…</p>}

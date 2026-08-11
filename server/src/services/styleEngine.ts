@@ -101,6 +101,18 @@ export function detectAntiAiHits(text: string, antiAiWords: string[]): Array<{ w
   return hits.sort((a, b) => b.count - a.count)
 }
 
+// P20（U8）：从「反 AI 词禁令」规则块解析禁用词（从 style.ts 移入共用，生成链路复用）
+export function extractAntiAiWordsFromRules(rules: string[]): string[] {
+  const words: string[] = []
+  for (const rule of rules) {
+    const m = rule.match(/严禁出现以下词汇\/句式：(.+)/)
+    if (m) {
+      for (const w of m[1].split(/[、，,]/)) words.push(w.trim())
+    }
+  }
+  return words.filter(Boolean)
+}
+
 // ---------- 绑定到书（返回注入文本，供 context 组装器用） ----------
 export function getBoundStyleRules(db: DatabaseSync, novelId: number): CompiledStyleRules | null {
   // 取该书最近一条 style_asset（或全局），返回编译后的规则

@@ -153,7 +153,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
     try {
       const novelId = Number(req.params.novelId)
       const input = z
-        .object({ chaptersPerVolume: z.number().int().min(5).max(40).default(20) })
+        .object({ chaptersPerVolume: z.number().int().min(5).max(40).default(20), guidance: z.string().max(1000).optional() })
         .parse(req.body)
       const novel = db.prepare('SELECT framing_json, title FROM novel WHERE id = ?').get(novelId) as
         | { framing_json: string; title: string }
@@ -168,6 +168,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId,
+          guidance: input.guidance,
           messages: [
             {
               role: 'user',
@@ -215,6 +216,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
             'INSERT INTO volume (novel_id, title, strategy_json, skeleton_json, order_index) VALUES (?, ?, ?, ?, ?)'
           ).run(
             novelId,
+
             v.title,
             JSON.stringify({
               theme: v.theme,
@@ -274,6 +276,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId,
+          guidance: (req.body as { guidance?: string } | undefined)?.guidance,
           messages: [
             {
               role: 'user',
@@ -469,6 +472,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId,
+          guidance: (req.body as { guidance?: string } | undefined)?.guidance,
           messages: [
             {
               role: 'user',

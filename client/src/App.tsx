@@ -1,30 +1,38 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import type { BootstrapInfo } from '@shared/types'
 import { SettingsPage } from './pages/SettingsPage'
 import { Onboarding } from './pages/Onboarding'
 import { NovelListPage } from './pages/NovelListPage'
-import { NovelWorkspacePage } from './pages/NovelWorkspacePage'
-import { ChapterExecutionPage } from './pages/ChapterExecutionPage'
-import { DirectorPage } from './pages/DirectorPage'
-import { CreativeHubPage } from './pages/CreativeHubPage'
-import { TasksPage } from './pages/TasksPage'
-import { TitlesPage } from './pages/TitlesPage'
-import { HelpPage } from './pages/HelpPage'
-import { AntiAiPage } from './pages/AntiAiPage'
-import { BaseCharactersPage } from './pages/BaseCharactersPage'
-import { FollowUpsPage } from './pages/FollowUpsPage'
-import { StyleEnginePage } from './pages/StyleEnginePage'
-import { BookAnalysisPage } from './pages/BookAnalysisPage'
-import { GenresPage } from './pages/GenresPage'
-import { StoryModesPage } from './pages/StoryModesPage'
-import { WorldsLibraryPage } from './pages/WorldsLibraryPage'
-import { KnowledgePage } from './pages/KnowledgePage'
-import { PromptWorkbenchPage } from './pages/PromptWorkbenchPage'
 import { NovelGate } from './components/NovelGate'
 import { AppLayout } from './components/AppLayout'
 import { getApiBaseUrl, setApiBaseUrl, apiFetch } from './api'
+
+// P20（U4）：路由懒加载（22 页面分包，首屏只载当前页）
+const NovelWorkspacePage = lazy(() => import('./pages/NovelWorkspacePage').then((m) => ({ default: m.NovelWorkspacePage })))
+const ChapterExecutionPage = lazy(() => import('./pages/ChapterExecutionPage').then((m) => ({ default: m.ChapterExecutionPage })))
+const DirectorPage = lazy(() => import('./pages/DirectorPage').then((m) => ({ default: m.DirectorPage })))
+const CreativeHubPage = lazy(() => import('./pages/CreativeHubPage').then((m) => ({ default: m.CreativeHubPage })))
+const TasksPage = lazy(() => import('./pages/TasksPage').then((m) => ({ default: m.TasksPage })))
+const TitlesPage = lazy(() => import('./pages/TitlesPage').then((m) => ({ default: m.TitlesPage })))
+const HelpPage = lazy(() => import('./pages/HelpPage').then((m) => ({ default: m.HelpPage })))
+const AntiAiPage = lazy(() => import('./pages/AntiAiPage').then((m) => ({ default: m.AntiAiPage })))
+const BaseCharactersPage = lazy(() => import('./pages/BaseCharactersPage').then((m) => ({ default: m.BaseCharactersPage })))
+const FollowUpsPage = lazy(() => import('./pages/FollowUpsPage').then((m) => ({ default: m.FollowUpsPage })))
+const StyleEnginePage = lazy(() => import('./pages/StyleEnginePage').then((m) => ({ default: m.StyleEnginePage })))
+const BookAnalysisPage = lazy(() => import('./pages/BookAnalysisPage').then((m) => ({ default: m.BookAnalysisPage })))
+const GenresPage = lazy(() => import('./pages/GenresPage').then((m) => ({ default: m.GenresPage })))
+const StoryModesPage = lazy(() => import('./pages/StoryModesPage').then((m) => ({ default: m.StoryModesPage })))
+const WorldsLibraryPage = lazy(() => import('./pages/WorldsLibraryPage').then((m) => ({ default: m.WorldsLibraryPage })))
+const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then((m) => ({ default: m.KnowledgePage })))
+const PromptWorkbenchPage = lazy(() => import('./pages/PromptWorkbenchPage').then((m) => ({ default: m.PromptWorkbenchPage })))
+
+function PageFallback(): React.JSX.Element {
+  return (
+    <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>加载中…</div>
+  )
+}
 
 export function App(): React.JSX.Element {
   const [baseUrl, setBaseUrl] = useState<string | null>(null)
@@ -106,24 +114,24 @@ export function App(): React.JSX.Element {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<NovelListPage />} />
-          <Route path="/novels/:novelId" element={<NovelWorkspacePage />} />
-          <Route path="/novels/:novelId/chapters" element={<ChapterExecutionPage />} />
-          <Route path="/novels/:novelId/director" element={<DirectorPage />} />
-          <Route path="/novels/:novelId/hub" element={<CreativeHubPage />} />
-          <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/titles" element={<TitlesPage />} />
-          <Route path="/help" element={<HelpPage />} />
-          <Route path="/anti-ai" element={<AntiAiPage />} />
-          <Route path="/base-characters" element={<BaseCharactersPage />} />
-          <Route path="/follow-ups" element={<FollowUpsPage />} />
-          <Route path="/style-engine" element={<StyleEnginePage />} />
-          <Route path="/book-analysis" element={<BookAnalysisPage />} />
-          <Route path="/genres" element={<GenresPage />} />
-          <Route path="/story-modes" element={<StoryModesPage />} />
-          <Route path="/worlds" element={<WorldsLibraryPage />} />
-          <Route path="/knowledge" element={<KnowledgePage />} />
-          <Route path="/prompt-workbench" element={<PromptWorkbenchPage />} />
-          <Route path="/hub" element={<CreativeHubPage />} />
+          <Route path="/novels/:novelId" element={<Suspense fallback={<PageFallback />}><NovelWorkspacePage /></Suspense>} />
+          <Route path="/novels/:novelId/chapters" element={<Suspense fallback={<PageFallback />}><ChapterExecutionPage /></Suspense>} />
+          <Route path="/novels/:novelId/director" element={<Suspense fallback={<PageFallback />}><DirectorPage /></Suspense>} />
+          <Route path="/novels/:novelId/hub" element={<Suspense fallback={<PageFallback />}><CreativeHubPage /></Suspense>} />
+          <Route path="/tasks" element={<Suspense fallback={<PageFallback />}><TasksPage /></Suspense>} />
+          <Route path="/titles" element={<Suspense fallback={<PageFallback />}><TitlesPage /></Suspense>} />
+          <Route path="/help" element={<Suspense fallback={<PageFallback />}><HelpPage /></Suspense>} />
+          <Route path="/anti-ai" element={<Suspense fallback={<PageFallback />}><AntiAiPage /></Suspense>} />
+          <Route path="/base-characters" element={<Suspense fallback={<PageFallback />}><BaseCharactersPage /></Suspense>} />
+          <Route path="/follow-ups" element={<Suspense fallback={<PageFallback />}><FollowUpsPage /></Suspense>} />
+          <Route path="/style-engine" element={<Suspense fallback={<PageFallback />}><StyleEnginePage /></Suspense>} />
+          <Route path="/book-analysis" element={<Suspense fallback={<PageFallback />}><BookAnalysisPage /></Suspense>} />
+          <Route path="/genres" element={<Suspense fallback={<PageFallback />}><GenresPage /></Suspense>} />
+          <Route path="/story-modes" element={<Suspense fallback={<PageFallback />}><StoryModesPage /></Suspense>} />
+          <Route path="/worlds" element={<Suspense fallback={<PageFallback />}><WorldsLibraryPage /></Suspense>} />
+          <Route path="/knowledge" element={<Suspense fallback={<PageFallback />}><KnowledgePage /></Suspense>} />
+          <Route path="/prompt-workbench" element={<Suspense fallback={<PageFallback />}><PromptWorkbenchPage /></Suspense>} />
+          <Route path="/hub" element={<Suspense fallback={<PageFallback />}><CreativeHubPage /></Suspense>} />
           <Route path="/director" element={<NovelGate title="自动导演" desc="从灵感推进到可写章节（11 阶段）。选择一本书进入。请先创建或选择小说。" target={(n) => `/novels/${n}/director`} />} />
           <Route path="/chapters" element={<NovelGate title="章节执行" desc="逐章生成、审核、修复、回灌。选择一本书进入。请先创建或选择小说。" target={(n) => `/novels/${n}/chapters`} />} />
           <Route path="/settings" element={<SettingsPage />} />

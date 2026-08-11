@@ -5,6 +5,7 @@ import {
   extractStyleFeatures,
   getBoundStyleRules,
   detectAntiAiHits,
+  extractAntiAiWordsFromRules as extractAntiAiWords,
   trialWrite,
   type StyleFeature
 } from '../services/styleEngine'
@@ -227,15 +228,4 @@ export function createStyleRouter(db: DatabaseSync): Router {
   })
 
   return router
-}
-
-function extractAntiAiWords(rules: string[]): string[] {
-  const words: string[] = []
-  for (const rule of rules) {
-    const m = rule.match(/严禁出现以下词汇\/句式：(.+)/)
-    if (m) {
-      for (const w of m[1].split(/[、，,]/)) words.push(w.trim())
-    }
-  }
-  return words.filter(Boolean)
 }

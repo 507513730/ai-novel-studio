@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ModelRoute, Provider, UsageGroup, UsageTotal } from '@shared/types'
@@ -418,12 +418,69 @@ function UsagePanel(): React.JSX.Element {
           </tbody>
         </table>
       )}
+
+      {/* P20（C7/T3）：质量债 + 历史清理 */}
+      <QualityDebtPanel />
     </div>
   )
 }
 
-export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'providers' | 'routes' | 'usage' | 'appearance' }): React.JSX.Element {
-  const [tab, setTab] = useState<'providers' | 'routes' | 'usage' | 'appearance'>(initialTab)
+function QualityDebtPanel(): React.JSX.Element {
+  const { toast } = useToast()
+  const debts = useQuery<{ debts: Array<{ novel_id: number; title: string; high_count: number; medium_count: number; resolved_count: number }> }>({
+    queryKey: ['quality-debts'],
+    queryFn: async () => (await apiFetch('/settings/quality-debts')) as { debts: Array<{ novel_id: number; title: string; high_count: number; medium_count: number; resolved_count: number }> }
+  })
+  const [cleanBusy, setCleanBusy] = useState(false)
+  const runCleanup = async (): Promise<void> => {
+    setCleanBusy(true)
+    try {
+      const r = (await apiFetch('/settings/cleanup', { method: 'POST' })) as { usageDeleted: number; jobsDeleted: number }
+      toast('ok', `已清理：成本记录 ${r.usageDeleted} 条（>90 天）、失败任务 ${r.jobsDeleted} 条（>30 天）`)
+      void debts.refetch()
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setCleanBusy(false)
+    }
+  }
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ fontSize: 14 }}>质量债（未解决的审核问题）</h3>
+        <button className="sm" disabled={cleanBusy} onClick={() => void runCleanup()}>
+          {cleanBusy ? '清理中…' : '清理历史数据（>90 天成本 / >30 天失败任务）'}
+        </button>
+      </div>
+      {debts.data && debts.data.debts.length === 0 && <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>暂无质量债。审核发现 high/medium 问题时会自动登记，修复达标后自动销账。</p>}
+      {debts.data && debts.data.debts.length > 0 && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: 6 }}>小说</th>
+              <th style={{ textAlign: 'right', padding: 6 }}>high</th>
+              <th style={{ textAlign: 'right', padding: 6 }}>medium</th>
+              <th style={{ textAlign: 'right', padding: 6 }}>已解决</th>
+            </tr>
+          </thead>
+          <tbody>
+            {debts.data.debts.map((d) => (
+              <tr key={d.novel_id} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={{ padding: 6 }}>{d.title || `#${d.novel_id}`}</td>
+                <td style={{ padding: 6, textAlign: 'right', color: 'var(--danger)' }}>{d.high_count}</td>
+                <td style={{ padding: 6, textAlign: 'right', color: 'var(--text-dim)' }}>{d.medium_count}</td>
+                <td style={{ padding: 6, textAlign: 'right', color: 'var(--ok)' }}>{d.resolved_count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'providers' | 'routes' | 'usage' | 'appearance' | 'writing' }): React.JSX.Element {
+  const [tab, setTab] = useState<'providers' | 'routes' | 'usage' | 'appearance' | 'writing'>(initialTab)
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -438,6 +495,9 @@ export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'provi
           <button className={tab === 'usage' ? 'active' : ''} onClick={() => setTab('usage')}>
             成本
           </button>
+          <button className={tab === 'writing' ? 'active' : ''} onClick={() => setTab('writing')}>
+            写作
+          </button>
           <button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>
             外观
           </button>
@@ -446,7 +506,80 @@ export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'provi
       {tab === 'providers' && <ProvidersPanel />}
       {tab === 'routes' && <ModelRoutesPanel />}
       {tab === 'usage' && <UsagePanel />}
+      {tab === 'writing' && <WritingPanel />}
       {tab === 'appearance' && <AppearancePanel />}
+    </div>
+  )
+}
+
+// P19 ②⑤：写作偏好（语言 / 格式 / 写作模式）
+function WritingPanel(): React.JSX.Element {
+  const { toast } = useToast()
+  const [settings, setSettings] = useState<{ lang: string; format: string; writingMode: string } | null>(null)
+  useEffect(() => {
+    let alive = true
+    void fetch('/api/settings/writing')
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive) setSettings(d)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
+  const patch = async (patch: Record<string, string>): Promise<void> => {
+    try {
+      await fetch('/api/settings/writing', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      })
+      setSettings((prev) => (prev ? { ...prev, ...patch } : prev))
+      toast('ok', '已保存，将影响后续生成')
+    } catch {
+      toast('error', '保存失败')
+    }
+  }
+  const Option = ({ label, desc, current, onPick }: { label: string; desc: string; current: boolean; onPick: () => void }): React.JSX.Element => (
+    <button
+      onClick={onPick}
+      style={{
+        padding: '10px 14px',
+        borderRadius: 'var(--radius-m)',
+        background: 'var(--bg-card)',
+        border: `1px solid ${current ? 'var(--accent)' : 'var(--border)'}`,
+        cursor: 'pointer',
+        textAlign: 'left'
+      }}
+    >
+      <div style={{ fontSize: 13, color: 'var(--text)' }}>{label} {current ? '✓' : ''}</div>
+      <div className="muted" style={{ fontSize: 11 }}>{desc}</div>
+    </button>
+  )
+  if (!settings) return <div className="panel">加载中…</div>
+  return (
+    <div className="panel col">
+      <h2>写作偏好</h2>
+      <p className="muted" style={{ fontSize: 12 }}>
+        这些规则会注入每次生成的写作要求（改设置后生成缓存自动失效）。仅在不等于默认值时注入，不浪费 token。
+      </p>
+      <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>语言</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+        <Option label="简体中文" desc="默认" current={settings.lang === 'simplified'} onPick={() => void patch({ lang: 'simplified' })} />
+        <Option label="繁体中文" desc="全文统一繁体" current={settings.lang === 'traditional'} onPick={() => void patch({ lang: 'traditional' })} />
+      </div>
+      <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>格式</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+        <Option label="自然分段" desc="默认，一段一意" current={settings.format === 'paragraph'} onPick={() => void patch({ format: 'paragraph' })} />
+        <Option label="长句连续" desc="复合句为主，段落连续" current={settings.format === 'longSentence'} onPick={() => void patch({ format: 'longSentence' })} />
+      </div>
+      <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>写作模式</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+        <Option label="聚焦" desc="严格围绕章节目标，不展开支线" current={settings.writingMode === 'focused'} onPick={() => void patch({ writingMode: 'focused' })} />
+        <Option label="标准" desc="默认，适度铺陈" current={settings.writingMode === 'standard'} onPick={() => void patch({ writingMode: 'standard' })} />
+        <Option label="自由" desc="允许支线发散，结尾回落主线" current={settings.writingMode === 'free'} onPick={() => void patch({ writingMode: 'free' })} />
+      </div>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { generateChapter } from './generate'
 import { callLlmJson } from './jsonSafe'
 import { buildChapterReviewContext, buildBackfillContext, buildFixContext, buildPatchContext, applyPatches } from './context'
 import { writeCharacterStates } from './ledger'
+import { isJobCancelled } from './jobQueue'
 
 // ============================================================
 // 整本批量生产 pipeline（PLAN §7.2 / P2）
@@ -24,11 +25,19 @@ export async function runProductionPipeline(
   db: DatabaseSync,
   novelId: number,
   onProgress: (p: ProductionProgress) => void,
-  opts: { from?: number; to?: number } = {}
+  opts: { from?: number; to?: number; jobId?: number } = {}
 ): Promise<ProductionProgress> {
   let sql = "SELECT id, title, status, content FROM chapter WHERE novel_id = ? AND content = ''"
   const params: Array<number> = [novelId]
-  // P14 B4：范围授权（章节 id 区间）
+  // P14 B4：范围授权（章节 id 区间）——P20：仅单边传参视为无效（静默全范围），to<from 报错
+  if (opts.from !== undefined || opts.to !== undefined) {
+    if (opts.from === undefined || opts.to === undefined) {
+      throw new Error('范围授权需同时提供 from 与 to')
+    }
+    if (opts.to < opts.from) {
+      throw new Error('范围授权无效：to 小于 from')
+    }
+  }
   if (opts.from !== undefined && opts.to !== undefined) {
     sql += ' AND id BETWEEN ? AND ?'
     params.push(opts.from, opts.to)
@@ -49,6 +58,12 @@ export async function runProductionPipeline(
   onProgress(progress)
 
   for (let i = 0; i < chapters.length; i++) {
+    // P20（M2）：取消感知（每章边界检查）
+    if (opts.jobId && isJobCancelled(db, opts.jobId)) {
+      progress.currentAction = '已取消（用户中止）'
+      onProgress(progress)
+      throw new Error('job cancelled')
+    }
     const ch = chapters[i]
     progress.currentChapter = ch.title || `第 ${ch.id} 章`
     progress.currentAction = '生成正文'

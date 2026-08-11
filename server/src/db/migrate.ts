@@ -302,6 +302,46 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       )`
     ]
+  },
+  {
+    // P19 ①：书级创作引导（两级引导：书级持久化 + 单次随请求）
+    version: 6,
+    statements: [
+      `ALTER TABLE novel ADD COLUMN guidance TEXT NOT NULL DEFAULT ''`
+    ]
+  },
+  {
+    // P19 ②⑤：写作偏好设置（语言 / 格式 / 写作模式），应用级
+    version: 7,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL DEFAULT ''
+      )`,
+      `INSERT OR IGNORE INTO app_settings (key, value) VALUES
+        ('lang', 'simplified'),
+        ('format', 'paragraph'),
+        ('writingMode', 'standard')`
+    ]
+  },
+  {
+    // P20：看门狗字段 + 质量债可消费 + 高频 WHERE 列索引
+    version: 8,
+    statements: [
+      `ALTER TABLE job ADD COLUMN started_at TEXT`,
+      `ALTER TABLE quality_debt ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE quality_debt ADD COLUMN updated_at TEXT`,
+      `CREATE INDEX IF NOT EXISTS idx_job_status ON job (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_style_asset_novel ON style_asset (novel_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_genre_asset_novel ON genre_asset (novel_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_book_analysis_novel ON book_analysis (novel_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_agent_session_novel ON agent_session (novel_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_director_followup_novel ON director_followup (novel_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_quality_debt_chapter ON quality_debt (chapter_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_quality_debt_resolved ON quality_debt (resolved)`,
+      `CREATE INDEX IF NOT EXISTS idx_timeline_event_novel ON timeline_event (novel_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_usage_log_created ON usage_log (created_at)`
+    ]
   }
 ]
 
@@ -321,7 +361,19 @@ export function applyMigrations(db: DatabaseSync): void {
     if (applied.has(migration.version)) continue
     db.exec('BEGIN')
     try {
-      for (const stmt of migration.statements) db.exec(stmt)
+      for (const stmt of migration.statements) {
+        try {
+          db.exec(stmt)
+        } catch (err) {
+          // P20（S4）：ALTER 迁移幂等——旧备份恢复到新应用时列已存在（_migrations 缺失），
+          // 跳过 duplicate column name，其余错误照常抛出
+          if (stmt.trim().toUpperCase().startsWith('ALTER TABLE') && /duplicate column name/i.test(String(err))) {
+            console.log(`[migrate] skip ${stmt.trim().split('\n')[0]} (column already exists)`)
+            continue
+          }
+          throw err
+        }
+      }
       db.prepare('INSERT INTO _migrations (version) VALUES (?)').run(migration.version)
       db.exec('COMMIT')
       console.log(`[migrate] applied v${migration.version}`)

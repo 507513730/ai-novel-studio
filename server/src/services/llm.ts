@@ -73,6 +73,7 @@ export interface LlmCallOptions {
   temperature?: number | null
   signal?: AbortSignal
   novelId?: number | null
+  guidance?: string // P19 ??????????????
 }
 
 export interface LlmResult {

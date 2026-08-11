@@ -60,12 +60,17 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       'review'
     )
     // 记录质量债务（high/medium 问题）
+    // P20（C7）：按章节+签名去重（同章重复审核不重复插）；修复时置 resolved
     const insertDebt = db.prepare(
-      'INSERT INTO quality_debt (chapter_id, issue, severity) VALUES (?, ?, ?)'
+      `INSERT OR IGNORE INTO quality_debt (chapter_id, issue, severity)
+       SELECT ?, ?, ? WHERE NOT EXISTS (
+         SELECT 1 FROM quality_debt WHERE chapter_id = ? AND issue = ? AND resolved = 0
+       )`
     )
     for (const issue of review.issues) {
       if (issue.severity === 'high' || issue.severity === 'medium') {
-        insertDebt.run(chapterId, `${issue.location} ${issue.problem}`, issue.severity)
+        const sig = `${issue.location} ${issue.problem}`
+        insertDebt.run(chapterId, sig, issue.severity, chapterId, sig)
       }
     }
     db.prepare(
@@ -76,8 +81,22 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
 
   // ---------- SSE 流式正文生成 ----------
   router.post('/:novelId/chapters/:chapterId/generate', async (req, res) => {
-    const novelId = Number(req.params.novelId)
-    const chapterId = Number(req.params.chapterId)
+    // P20（S5）：参数 zod 校验（NaN/越界/超大 guidance 一律 400）
+    const genInput = z
+      .object({
+        guidance: z.string().max(1000).optional()
+      })
+      .safeParse(req.body ?? {})
+    if (!genInput.success) {
+      res.status(400).json({ error: 'invalid request body' })
+      return
+    }
+    const novelId = z.coerce.number().int().positive().safeParse(req.params.novelId)
+    const chapterId = z.coerce.number().int().positive().safeParse(req.params.chapterId)
+    if (!novelId.success || !chapterId.success) {
+      res.status(400).json({ error: 'invalid chapter id' })
+      return
+    }
 
     const abort = new AbortController()
     let aborted = false
@@ -92,8 +111,12 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
     res.flushHeaders()
 
     const send = (event: string, data: unknown): void => {
-      if (aborted) return
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      if (aborted || res.writableEnded) return
+      try {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      } catch {
+        /* 连接已死：停止写入（P20 D1：不再抛未捕获异常） */
+      }
     }
 
     try {
@@ -104,14 +127,15 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
             .map((s) => s.trim())
             .filter(Boolean)
         : undefined
-      const ctx = buildChapterWriteContext(db, novelId, chapterId, { include })
+      const ctx = buildChapterWriteContext(db, novelId.data, chapterId.data, { include })
       send('context', { frozenHash: ctx.frozenHash, budgetUsed: ctx.budgetUsed, budgetLimit: ctx.budgetLimit })
 
-      const result = await generateChapter(db, novelId, chapterId, {
+      const result = await generateChapter(db, novelId.data, chapterId.data, {
         signal: abort.signal,
         onDelta: (text) => send('delta', { text }),
         onThinking: (text) => send('thinking', { delta: text }),
-        include
+        include,
+        guidance: genInput.data.guidance // P19 ①：单次引导
       })
 
       if (result.aborted) {
@@ -126,7 +150,7 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       res.end()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      db.prepare("UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ?").run(chapterId)
+      db.prepare("UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ?").run(chapterId.data)
       send('error', { message })
       res.end()
     }
@@ -138,13 +162,33 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       const novelId = Number(req.params.novelId)
       const chapterId = Number(req.params.chapterId)
       const chapter = db
-        .prepare('SELECT content FROM chapter WHERE id = ? AND novel_id = ?')
-        .get(chapterId, novelId) as { content: string } | undefined
+        .prepare('SELECT content, goal_json FROM chapter WHERE id = ? AND novel_id = ?')
+        .get(chapterId, novelId) as { content: string; goal_json: string } | undefined
       if (!chapter || !chapter.content) {
         res.status(400).json({ error: '章节无正文，先生成再审核' })
         return
       }
+      // P19 ③：场景数下限校验（<3 场景 → 追加 high 级问题 + 质量债，参考项目 #103 同类）
+      const goal = JSON.parse(chapter.goal_json || '{}') as { scenes?: unknown }
+      const sceneCount = Array.isArray(goal.scenes) ? goal.scenes.length : 0
       const review = await performReview(novelId, chapterId, chapter.content)
+      if (sceneCount > 0 && sceneCount < 3) {
+        review.issues.push({
+          severity: 'high',
+          location: '全章结构',
+          problem: `场景数不足（${sceneCount} 个 < 3），节奏拖沓或信息密度低`,
+          suggestion: '拆分为至少 3 个场景：起（引入）→ 承（冲突推进）→ 转合（结果与钩子），或在现有场景内补充目标冲突'
+        })
+        review.needsFix = true
+        db.prepare('INSERT INTO quality_debt (chapter_id, issue, severity) VALUES (?, ?, ?)').run(
+          chapterId,
+          `全章结构 场景数不足（${sceneCount}）`,
+          'high'
+        )
+        db.prepare(
+          "UPDATE chapter SET review_json = ?, status = 'reviewed', updated_at = datetime('now') WHERE id = ?"
+        ).run(JSON.stringify(review), chapterId)
+      }
       res.json({ review })
     } catch (err) {
       next(err)
@@ -213,6 +257,12 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       // 重审闭环（P1.5）：修复后自动重审，score≥75 或达轮数上限停止
       const rescore = await performReview(novelId, chapterId, fixed.content)
       const passed = rescore.score >= 75
+      // P20（C7）：达标 → 该章未解决的债务标记 resolved（质量债可消费闭环）
+      if (passed) {
+        db.prepare(
+          "UPDATE quality_debt SET resolved = 1, updated_at = datetime('now') WHERE chapter_id = ? AND resolved = 0"
+        ).run(chapterId)
+      }
       res.json({
         fixed: true,
         round: fixHistory.length,
@@ -468,6 +518,55 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
         .prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)')
         .run(chapterId, chapter.content, input.note)
       res.status(201).json({ versionId: Number(result.lastInsertRowid) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- P20（U1）：版本详情 / 恢复 ----------
+  router.get('/:novelId/chapters/:chapterId/versions/:versionId', (req, res, next) => {
+    try {
+      const chapterId = Number(req.params.chapterId)
+      const versionId = Number(req.params.versionId)
+      const row = db
+        .prepare('SELECT id, content, note, created_at FROM chapter_version WHERE id = ? AND chapter_id = ?')
+        .get(versionId, chapterId) as { id: number; content: string; note: string; created_at: string } | undefined
+      if (!row) {
+        res.status(404).json({ error: 'version not found' })
+        return
+      }
+      res.json({ version: row })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  router.post('/:novelId/chapters/:chapterId/versions/:versionId/restore', (req, res, next) => {
+    try {
+      const chapterId = Number(req.params.chapterId)
+      const novelId = Number(req.params.novelId)
+      const versionId = Number(req.params.versionId)
+      const row = db
+        .prepare('SELECT content FROM chapter_version WHERE id = ? AND chapter_id = ?')
+        .get(versionId, chapterId) as { content: string } | undefined
+      if (!row) {
+        res.status(404).json({ error: 'version not found' })
+        return
+      }
+      // 当前内容先存为新版本（不丢改动），再替换
+      const current = db
+        .prepare('SELECT content, title FROM chapter WHERE id = ? AND novel_id = ?')
+        .get(chapterId, novelId) as { content: string; title: string } | undefined
+      if (current && current.content.trim()) {
+        db.prepare("INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, '恢复前快照')").run(
+          chapterId,
+          current.content
+        )
+      }
+      db.prepare(
+        "UPDATE chapter SET content = ?, word_count = ?, updated_at = datetime('now') WHERE id = ? AND novel_id = ?"
+      ).run(row.content, (row.content.match(/[\u4e00-\u9fff]/g) ?? []).length, chapterId, novelId)
+      res.json({ content: row.content, wordCount: (row.content.match(/[\u4e00-\u9fff]/g) ?? []).length })
     } catch (err) {
       next(err)
     }

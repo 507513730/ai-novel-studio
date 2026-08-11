@@ -5,12 +5,45 @@ on:
   push:
     tags:
       - "v*"
+  # P20（T1）：PR 质量门禁（typecheck + lint + test，不打包）
+  pull_request:
 
 permissions:
   contents: write
 
 jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
   build-windows:
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -32,6 +65,9 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
 
       - name: Build + Package
         run: pnpm dist

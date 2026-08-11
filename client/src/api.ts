@@ -19,10 +19,22 @@ export function setApiBaseUrl(url: string): void {
   cachedBaseUrl = url
 }
 
+// P20（S1）：本地 API 鉴权 token（Electron renderer 经 preload 注入；浏览器调试为空则跳过）
+function authHeaders(): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = (window as unknown as { novelStudio?: { serverToken?: string } })?.novelStudio?.serverToken
+  if (token) h['X-App-Token'] = token
+  return h
+}
+
+// P20（C3）：客户端超时分级——普通 30s；AI 同步长任务 120s（服务端 OpenAI 超时 120-300s）
+const DEFAULT_TIMEOUT = 30_000
+const LONG_TIMEOUT = 120_000
+
 export async function apiFetch(path: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    signal: init?.signal ?? AbortSignal.timeout(60_000),
+    headers: authHeaders(),
+    signal: init?.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT),
     ...init
   })
   const body = (await res.json().catch(() => null)) as { error?: string } | null
@@ -32,15 +44,20 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<unknow
 
 const base = getApiBaseUrl
 
-async function j<T>(path: string, init?: RequestInit): Promise<T> {
+async function j<T>(path: string, init?: RequestInit, timeout = DEFAULT_TIMEOUT): Promise<T> {
   const res = await fetch(`${base()}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    signal: init?.signal ?? AbortSignal.timeout(60_000),
+    headers: authHeaders(),
+    signal: init?.signal ?? AbortSignal.timeout(timeout),
     ...init
   })
   const body = (await res.json().catch(() => null)) as { error?: string } | null
   if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`)
   return body as T
+}
+
+// AI 长任务专用（120s 超时，防幻象失败）
+function js<T>(path: string, init?: RequestInit): Promise<T> {
+  return j<T>(path, init, LONG_TIMEOUT)
 }
 
 export const novelApi = {
@@ -52,16 +69,16 @@ export const novelApi = {
     j(`/novels/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   remove: (id: number): Promise<{ ok: boolean }> => j(`/novels/${id}`, { method: 'DELETE' }),
   directions: (id: number, directionId?: string): Promise<{ directions: NovelDetail['direction'] }> =>
-    j(`/novels/${id}/directions`, { method: 'POST', body: JSON.stringify(directionId ? { directionId } : {}) }),
+    js(`/novels/${id}/directions`, { method: 'POST', body: JSON.stringify(directionId ? { directionId } : {}) }),
   titles: (id: number, direction: unknown): Promise<{ titles: string[] }> =>
-    j(`/novels/${id}/titles`, { method: 'POST', body: JSON.stringify({ direction }) }),
+    js(`/novels/${id}/titles`, { method: 'POST', body: JSON.stringify({ direction }) }),
   framing: (id: number, body: { title?: string; direction?: unknown; notes?: string }): Promise<{ framing: Record<string, unknown> }> =>
-    j(`/novels/${id}/framing`, { method: 'POST', body: JSON.stringify(body) }),
+    js(`/novels/${id}/framing`, { method: 'POST', body: JSON.stringify(body) }),
   // P13 G7：字段级 AI 重写
   framingField: (id: number, field: string): Promise<{ framing: Record<string, unknown> }> =>
-    j(`/novels/${id}/framing/field`, { method: 'POST', body: JSON.stringify({ field }) }),
+    js(`/novels/${id}/framing/field`, { method: 'POST', body: JSON.stringify({ field }) }),
   macro: (id: number): Promise<{ macro: Record<string, unknown> }> =>
-    j(`/novels/${id}/macro`, { method: 'POST' }),
+    js(`/novels/${id}/macro`, { method: 'POST' }),
   exportUrl: (id: number, format: 'txt' | 'md' | 'epub'): string =>
     `${base()}/novels/${id}/export?format=${format}`,
 
@@ -84,8 +101,8 @@ export const novelApi = {
   world: (id: number): Promise<{ world: WorldData }> => j(`/novels/${id}/world`),
   worldPatch: (id: number, patch: Partial<WorldData>): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/world`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  worldGenerate: (id: number): Promise<{ manual: WorldData['manual']; factions: WorldData['factions']; map: WorldData['map'] }> =>
-    j(`/novels/${id}/world/generate`, { method: 'POST' }),
+  worldGenerate: (id: number, guidance?: string): Promise<{ manual: WorldData['manual']; factions: WorldData['factions']; map: WorldData['map'] }> =>
+    js(`/novels/${id}/world/generate`, { method: 'POST', body: guidance ? JSON.stringify({ guidance }) : undefined }),
 
   characters: (id: number): Promise<{ characters: CharacterData[] }> => j(`/novels/${id}/characters`),
   characterCreate: (id: number, body: { name: string; profile?: Record<string, string>; status?: string }): Promise<{ id: number }> =>
@@ -94,54 +111,59 @@ export const novelApi = {
     j(`/novels/${id}/characters/${charId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   characterDelete: (id: number, charId: number): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/characters/${charId}`, { method: 'DELETE' }),
-  charactersGenerate: (id: number): Promise<{ characters: Array<Record<string, string>> }> =>
-    j(`/novels/${id}/characters/generate`, { method: 'POST' }),
+  charactersGenerate: (id: number, guidance?: string): Promise<{ characters: Array<Record<string, string>> }> =>
+    js(`/novels/${id}/characters/generate`, { method: 'POST', body: guidance ? JSON.stringify({ guidance }) : undefined }),
 
   volumes: (id: number): Promise<{ volumes: VolumeData[] }> => j(`/novels/${id}/volumes`),
-  volumesGenerate: (id: number, chaptersPerVolume: number): Promise<{ volumes: unknown[] }> =>
-    j(`/novels/${id}/volumes/generate`, { method: 'POST', body: JSON.stringify({ chaptersPerVolume }) }),
+  volumesGenerate: (id: number, chaptersPerVolume: number, guidance?: string): Promise<{ volumes: unknown[] }> =>
+    js(`/novels/${id}/volumes/generate`, { method: 'POST', body: JSON.stringify({ chaptersPerVolume, guidance }) }),
   // P13 G4：卷战略评审
   volumeCritique: (id: number, volId: number): Promise<{ critique: { score: number; risks: string[]; suggestion: string } }> =>
-    j(`/novels/${id}/volumes/${volId}/critique`, { method: 'POST' }),
+    js(`/novels/${id}/volumes/${volId}/critique`, { method: 'POST' }),
   volumeDelete: (id: number, volId: number): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/volumes/${volId}`, { method: 'DELETE' }),
 
   beats: (id: number, volId: number): Promise<{ beats: BeatData[] }> =>
     j(`/novels/${id}/volumes/${volId}/beats`),
-  beatsGenerate: (id: number, volId: number): Promise<{ beats: unknown[] }> =>
-    j(`/novels/${id}/volumes/${volId}/beats/generate`, { method: 'POST' }),
+  beatsGenerate: (id: number, volId: number, guidance?: string): Promise<{ beats: unknown[] }> =>
+    js(`/novels/${id}/volumes/${volId}/beats/generate`, { method: 'POST', body: guidance ? JSON.stringify({ guidance }) : undefined }),
 
   chapters: (id: number): Promise<{ chapters: ChapterSummary[] }> => j(`/novels/${id}/chapters`),
   chapterDetail: (id: number, chapterId: number): Promise<{ chapter: ChapterSummary & { content: string } }> =>
     j(`/novels/${id}/chapters/${chapterId}`),
   chapterPatch: (id: number, chapterId: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/chapters/${chapterId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  chaptersGenerate: (id: number, volId: number): Promise<{ chapters: unknown[] }> =>
-    j(`/novels/${id}/volumes/${volId}/chapters/generate`, { method: 'POST' }),
+  chaptersGenerate: (id: number, volId: number, guidance?: string): Promise<{ chapters: unknown[] }> =>
+    js(`/novels/${id}/volumes/${volId}/chapters/generate`, { method: 'POST', body: guidance ? JSON.stringify({ guidance }) : undefined }),
   chapterRefine: (id: number, chapterId: number): Promise<{ goal: Record<string, unknown> }> =>
-    j(`/novels/${id}/chapters/${chapterId}/refine`, { method: 'POST' }),
+    js(`/novels/${id}/chapters/${chapterId}/refine`, { method: 'POST' }),
   // P12 A4：批量细化（范围 + 幂等续跑）
   refineRange: (id: number, from: number, to: number): Promise<{ done: number[]; skipped: number[] }> =>
-    j(`/novels/${id}/chapters/refine-range`, { method: 'POST', body: JSON.stringify({ from, to }) }),
+    js(`/novels/${id}/chapters/refine-range`, { method: 'POST', body: JSON.stringify({ from, to }) }),
 
   review: (id: number, chapterId: number): Promise<{ review: Record<string, unknown> }> =>
-    j(`/novels/${id}/chapters/${chapterId}/review`, { method: 'POST' }),
+    js(`/novels/${id}/chapters/${chapterId}/review`, { method: 'POST' }),
   aiAction: (
     id: number,
     chapterId: number,
     body: { action: string; selection?: string; instruction?: string; cursorPosition?: number }
   ): Promise<{ action: string; isInsert: boolean; content: string; appliedAt?: number }> =>
-    j(`/novels/${id}/chapters/${chapterId}/ai-action`, { method: 'POST', body: JSON.stringify(body) }),
+    js(`/novels/${id}/chapters/${chapterId}/ai-action`, { method: 'POST', body: JSON.stringify(body) }),
   contextPreview: (id: number, chapterId: number): Promise<{ sections: Array<{ key: string; label: string; chars: number; tokens: number }>; totalTokens: number; budgetLimit: number }> =>
     j(`/novels/${id}/chapters/${chapterId}/context-preview`),
   versions: (id: number, chapterId: number): Promise<{ versions: Array<{ id: number; note: string; createdAt: string; wordCount: number; preview: string }> }> =>
     j(`/novels/${id}/chapters/${chapterId}/versions`),
   createVersion: (id: number, chapterId: number, note?: string): Promise<{ versionId: number }> =>
     j(`/novels/${id}/chapters/${chapterId}/versions`, { method: 'POST', body: JSON.stringify({ note }) }),
+  // P20?U1?????? / ??
+  chapterVersionDetail: (id: number, chapterId: number, versionId: number): Promise<{ version: { id: number; content: string; note: string; created_at: string } }> =>
+    j(`/novels/${id}/chapters/${chapterId}/versions/${versionId}`),
+  chapterVersionRestore: (id: number, chapterId: number, versionId: number): Promise<{ content: string; wordCount: number }> =>
+    js(`/novels/${id}/chapters/${chapterId}/versions/${versionId}/restore`, { method: 'POST' }),
   fix: (id: number, chapterId: number): Promise<{ fixed: boolean; round: number; content: string; rescore?: { score: number; needsFix: boolean; passed: boolean } }> =>
-    j(`/novels/${id}/chapters/${chapterId}/fix`, { method: 'POST' }),
+    js(`/novels/${id}/chapters/${chapterId}/fix`, { method: 'POST' }),
   backfill: (id: number, chapterId: number): Promise<Record<string, unknown>> =>
-    j(`/novels/${id}/chapters/${chapterId}/backfill`, { method: 'POST' }),
+    js(`/novels/${id}/chapters/${chapterId}/backfill`, { method: 'POST' }),
   confirmState: (id: number, characterStates: Array<{ name: string; state: string }>): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/confirm-state`, { method: 'POST', body: JSON.stringify({ characterStates }) }),
   pending: (id: number): Promise<{ pendingFacts: Array<{ id: number; content: string; chapter_id: number }>; pendingCharacters: Array<{ id: number; name: string; profile: Record<string, string> }> }> =>
@@ -150,7 +172,7 @@ export const novelApi = {
 
 export const automationApi = {
   directorRun: (id: number, mode: 'auto' | 'supervised', chaptersPerVolume: number): Promise<{ jobId: number }> =>
-    j(`/novels/${id}/director/run`, { method: 'POST', body: JSON.stringify({ mode, chaptersPerVolume }) }),
+    js(`/novels/${id}/director/run`, { method: 'POST', body: JSON.stringify({ mode, chaptersPerVolume }) }),
   directorResume: (id: number): Promise<{ jobId: number; resumedFrom: string }> =>
     j(`/novels/${id}/director/resume`, { method: 'POST' }),
   directorCancel: (id: number): Promise<{ cancelled: boolean }> =>
@@ -158,27 +180,29 @@ export const automationApi = {
   directorStatus: (id: number): Promise<Record<string, unknown>> =>
     j(`/novels/${id}/director/status`),
   produce: (id: number, range?: { from?: number; to?: number }): Promise<{ jobId: number; pending: number }> =>
-    j(`/novels/${id}/produce`, { method: 'POST', body: JSON.stringify(range ?? {}) }),
+    js(`/novels/${id}/produce`, { method: 'POST', body: JSON.stringify(range ?? {}) }),
   novelStatus: (id: number): Promise<Record<string, unknown>> => j(`/novels/${id}/status`),
   jobs: (): Promise<{ jobs: Array<Record<string, unknown>> }> => j('/jobs'),
+  // P19 ③：清理已完成任务（保留 running）
+  jobsClearDone: (): Promise<{ deleted: number }> => j('/jobs/done', { method: 'DELETE' }),
   hubChat: (id: number, message: string): Promise<{ reply: string; toolCalls: string[] }> =>
-    j(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) })
+    js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) })
 }
 
 export const hub = {
   chat: (id: number, message: string): Promise<{ reply: string; toolCalls: string[] }> =>
-    j(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) })
+    js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) })
 }
 
 export const analysisApi = {
   run: (id: number, depth: 'quick' | 'standard' | 'full'): Promise<{ report: Record<string, unknown> }> =>
-    j(`/novels/${id}/analysis`, { method: 'POST', body: JSON.stringify({ depth }) }),
+    js(`/novels/${id}/analysis`, { method: 'POST', body: JSON.stringify({ depth }) }),
   list: (id: number): Promise<{ analyses: Array<{ id: number; depth: string; result: Record<string, unknown>; createdAt: string }> }> =>
-    j(`/novels/${id}/analysis`),
+    js(`/novels/${id}/analysis`),
   character: (id: number, name: string, depth: 'brief' | 'standard' | 'deep' | 'full'): Promise<{ profile: Record<string, unknown> }> =>
-    j(`/novels/${id}/analysis/character`, { method: 'POST', body: JSON.stringify({ name, depth }) }),
+    js(`/novels/${id}/analysis/character`, { method: 'POST', body: JSON.stringify({ name, depth }) }),
   evolution: (id: number, name: string, coverage: string): Promise<{ evolution: Array<Record<string, unknown>> }> =>
-    j(`/novels/${id}/analysis/evolution`, { method: 'POST', body: JSON.stringify({ name, coverage }) }),
+    js(`/novels/${id}/analysis/evolution`, { method: 'POST', body: JSON.stringify({ name, coverage }) }),
   publishKb: (id: number, analysisId: number): Promise<{ kbDocId: number }> =>
     j(`/novels/${id}/analysis/${analysisId}/publish-kb`, { method: 'POST' }),
   toStyle: (id: number, analysisId: number): Promise<{ styleAssetId: number }> =>
@@ -252,7 +276,7 @@ export const agentsApi = {
   patch: (id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
     j(`/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   teamReview: (id: number, chapterId: number): Promise<{ review: Record<string, unknown> }> =>
-    j(`/novels/${id}/team/review`, { method: 'POST', body: JSON.stringify({ chapterId }) })
+    js(`/novels/${id}/team/review`, { method: 'POST', body: JSON.stringify({ chapterId }) })
 }
 
 // SSE 流式生成
@@ -270,7 +294,8 @@ export async function generateChapterSse(
   chapterId: number,
   handlers: GenerateHandlers,
   signal?: AbortSignal,
-  include?: string[]
+  include?: string[],
+  guidance?: string
 ): Promise<void> {
   const params = include && include.length > 0 ? `?include=${include.join(',')}` : ''
   let accumulated = ''
@@ -278,7 +303,8 @@ export async function generateChapterSse(
   try {
     res = await fetch(`${base()}/novels/${novelId}/chapters/${chapterId}/generate${params}`, {
       method: 'POST',
-      signal
+      signal,
+      body: guidance ? JSON.stringify({ guidance }) : undefined
     })
   } catch (err) {
     // P2.2 修复 #2：AbortError（用户取消）→ onAborted；其他网络错误 → onError
@@ -313,7 +339,14 @@ export async function generateChapterSse(
           else if (line.startsWith('data: ')) data += line.slice(6)
         }
         if (!data) continue
-        const payload = JSON.parse(data) as Record<string, unknown>
+        // P20（D1）：单事件解析失败只跳过该事件，不毁整个流（已生成内容保留）
+        let payload: Record<string, unknown>
+        try {
+          payload = JSON.parse(data) as Record<string, unknown>
+        } catch {
+          console.warn('[sse] 忽略畸形事件:', type, data.slice(0, 80))
+          continue
+        }
         if (type === 'thinking') handlers.onThinking?.(String(payload.delta ?? ''))
         else if (type === 'delta') {
           const text = String(payload.text ?? '')

@@ -277,7 +277,7 @@ export function AppLayout(): React.JSX.Element {
                     )}
                     <Icon size={16} style={{ flexShrink: 0 }} />
                     {!collapsed && (
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
                         {item.label}
                       </span>
                     )}

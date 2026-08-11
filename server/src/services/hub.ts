@@ -294,8 +294,43 @@ export function saveSession(db: DatabaseSync, session: HubSession): void {
 
 const MAX_TOOL_ROUNDS = 4
 const HUB_TIMEOUT_MS = 180_000
+// P20（M5）：工具调用级超时（长工具不拖死整体；generate 底层 300s 被收窄）
+const TOOL_TIMEOUT_MS = 150_000
+// P20（M5）：同一小说会话串行锁（并发 chat 请求排队，消息流不穿插）
+const sessionLocks = new Set<number>()
+
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      p,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`tool timeout after ${ms}ms`)), ms)
+      })
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 export async function hubChat(
+  db: DatabaseSync,
+  novelId: number,
+  userMessage: string
+): Promise<{ reply: string; toolCalls: string[] }> {
+  // P20（M5）：串行锁——同书并发请求直接提示（消息流穿插会导致模型上下文错乱）
+  if (sessionLocks.has(novelId)) {
+    return { reply: '（当前会话正在处理上一条指令，请稍候再试）', toolCalls: [] }
+  }
+  sessionLocks.add(novelId)
+  try {
+    return await doHubChat(db, novelId, userMessage)
+  } finally {
+    sessionLocks.delete(novelId)
+  }
+}
+
+async function doHubChat(
   db: DatabaseSync,
   novelId: number,
   userMessage: string
@@ -381,13 +416,15 @@ export async function hubChat(
       try {
         const args = JSON.parse(fn.arguments ?? '{}') as Record<string, unknown>
         // P5-1 审批节点：mutating 工具第一次调用 → 存提案待确认；用户确认后再次调用 → 执行
+        // P20（M5）：pendingMutation 改队列（多个写工具提案互不覆盖）
         if (tool.mutating) {
-          const pending = session.context.pendingMutation as
-            | { tool: string; args: Record<string, unknown> }
-            | undefined
-          const samePending = pending && pending.tool === tool.name
-          if (!samePending) {
-            session.context.pendingMutation = { tool: tool.name, args }
+          const pendingList = (session.context.pendingMutation ?? []) as Array<{
+            tool: string
+            args: Record<string, unknown>
+          }>
+          const idx = pendingList.findIndex((p) => p.tool === tool.name)
+          if (idx < 0) {
+            session.context.pendingMutation = [...pendingList, { tool: tool.name, args }]
             saveSession(db, session)
             out = JSON.stringify({
               status: 'pending_approval',
@@ -396,12 +433,12 @@ export async function hubChat(
               note: '这是写操作。请向用户说明拟执行的操作，用户确认后再调用同一工具执行。'
             })
           } else {
-            // 用户已确认（AI 再次调用）→ 执行并清除提案
-            session.context.pendingMutation = undefined
-            out = await tool.run(pending!.args, db, novelId)
+            // 用户已确认（AI 再次调用）→ 执行并移除该提案
+            session.context.pendingMutation = pendingList.filter((p) => p.tool !== tool.name)
+            out = await withTimeout(Promise.resolve(tool.run(pendingList[idx].args, db, novelId)), TOOL_TIMEOUT_MS)
           }
         } else {
-          out = await tool.run(args, db, novelId)
+          out = await withTimeout(Promise.resolve(tool.run(args, db, novelId)), TOOL_TIMEOUT_MS)
         }
       } catch (err) {
         out = JSON.stringify({ error: err instanceof Error ? err.message : String(err) })

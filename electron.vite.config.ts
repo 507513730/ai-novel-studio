@@ -43,7 +43,15 @@ export default defineConfig({
     build: {
       outDir: 'out/renderer',
       rollupOptions: {
-        input: resolve(__dirname, 'client/index.html')
+        input: resolve(__dirname, 'client/index.html'),
+        // P20（U4）：分包——react/codemirror/lucide 独立 chunk（4.4MB 单包拆分为缓存友好多包）
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+            codemirror: ['@codemirror/lang-markdown', '@codemirror/language', '@codemirror/state', '@codemirror/view'],
+            icons: ['lucide-react']
+          }
+        }
       }
     }
   }

@@ -36,6 +36,12 @@ export function SelectionToolbar(props: SelectionToolbarProps): React.JSX.Elemen
     setBusyAction(action)
     setError(null)
     try {
+      // P20（U2）：AI 操作前先存当前内容快照（误覆盖可恢复）
+      try {
+        await novelApi.createVersion(novelId, chapterId, 'AI 操作前快照')
+      } catch {
+        /* 快照失败不阻塞操作 */
+      }
       if (hasSelection) {
         const r = await novelApi.aiAction(novelId, chapterId, {
           action,

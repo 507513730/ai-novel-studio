@@ -78,6 +78,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId,
+          guidance: (req.body as { guidance?: string } | undefined)?.guidance,
           messages: [
             {
               role: 'user',
@@ -279,6 +280,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId,
+          guidance: (req.body as { guidance?: string } | undefined)?.guidance,
           messages: [
             {
               role: 'user',
@@ -317,6 +319,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
         for (const c of characters) {
           insert.run(
             novelId,
+
             c.name,
             JSON.stringify({
               role: c.role,

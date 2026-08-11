@@ -118,6 +118,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         direction: JSON.parse(String(row.direction_json ?? '[]')),
         titleGroup: JSON.parse(String(row.title_group_json ?? '[]')),
         framing: JSON.parse(String(row.framing_json ?? '{}')),
+        guidance: String(row.guidance ?? ''),
         charactersCount: counts.characters,
         volumesCount: counts.volumes,
         chaptersCount: counts.chapters,
@@ -139,7 +140,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           direction: z.unknown().optional(),
           titleGroup: z.unknown().optional(),
           framing: z.unknown().optional(),
-          genre: z.string().optional()
+          genre: z.string().optional(),
+          guidance: z.string().max(2000).optional()
         })
         .parse(req.body)
       const sets: string[] = []
@@ -167,6 +169,10 @@ export function createNovelsRouter(db: DatabaseSync): Router {
       if (input.genre !== undefined) {
         sets.push('genre = ?')
         params.push(input.genre)
+      }
+      if (input.guidance !== undefined) {
+        sets.push('guidance = ?')
+        params.push(input.guidance)
       }
       if (sets.length === 0) {
         res.json({ ok: true })
@@ -198,7 +204,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
   router.post('/:id/directions', async (req, res, next) => {
     try {
       const id = Number(req.params.id)
-      const input = z.object({ directionId: z.string().optional() }).parse(req.body ?? {})
+      const input = z.object({ directionId: z.string().optional(), guidance: z.string().max(1000).optional() }).parse(req.body ?? {})
       const novel = db.prepare('SELECT inspiration, direction_json FROM novel WHERE id = ?').get(id) as
         | { inspiration: string; direction_json: string }
         | undefined
@@ -220,6 +226,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId: id,
+          guidance: input.guidance,
           messages: [
             {
               role: 'user',
@@ -285,7 +292,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         .object({
           title: z.string().optional(),
           direction: z.unknown().optional(),
-          notes: z.string().optional().default('')
+          notes: z.string().optional().default(''),
+          guidance: z.string().max(1000).optional()
         })
         .parse(req.body)
       const novel = db.prepare('SELECT inspiration FROM novel WHERE id = ?').get(id) as
@@ -300,6 +308,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId: id,
+          guidance: input.guidance,
           messages: [
             {
               role: 'user',
@@ -330,7 +339,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
   router.post('/:id/framing/field', async (req, res, next) => {
     try {
       const id = Number(req.params.id)
-      const input = z.object({ field: z.enum(['summary', 'sellingPoint', 'readerFeeling', 'first30Promise']) }).parse(req.body)
+      const input = z.object({ field: z.enum(['summary', 'sellingPoint', 'readerFeeling', 'first30Promise']), guidance: z.string().max(1000).optional() }).parse(req.body)
       const novel = db.prepare('SELECT inspiration, framing_json FROM novel WHERE id = ?').get(id) as
         | { inspiration: string; framing_json: string }
         | undefined
@@ -350,6 +359,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId: id,
+          guidance: input.guidance,
           messages: [
             {
               role: 'user',
@@ -392,6 +402,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         'extraction',
         {
           novelId: id,
+          guidance: (req.body as { guidance?: string } | undefined)?.guidance,
           messages: [
             {
               role: 'user',

@@ -94,6 +94,21 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
 export function createAgentsRouter(db: DatabaseSync): Router {
   const router = Router()
 
+  // P20（M4）：LLM 调用超时包装（超时降级而非挂死端点）
+  async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        p,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)
+        })
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
   // ---------- P5-3 审校拆三岗（剧情/逻辑/文风） ----------
   const REVIEW_FOCUS: Record<string, string> = {
     plot: '剧情审核：聚焦本章剧情推进是否合理、钩子是否有力、爽点是否到位、与前文衔接是否顺畅。',
@@ -114,74 +129,97 @@ export function createAgentsRouter(db: DatabaseSync): Router {
       }
       const frozen = buildFrozenContext(db, novelId)
 
-      // 主编约束（team lead）
+      // 主编约束（team lead）——P20（M4）：产出注入三岗 prompt（不再丢弃）
       const editor = db.prepare("SELECT system_prompt FROM agent WHERE role = 'editor' AND enabled = 1 LIMIT 1").get() as
         | { system_prompt: string }
         | undefined
-      const editorConstraint = editor
-        ? await callLlmJson<{ constraint: string }>(
-            db,
-            'extraction',
-            {
-              novelId,
-              messages: [
-                {
-                  role: 'user',
-                  content: `${editor.system_prompt}\n${JSON_FORMAT}\n\n${frozen.contract}\n章节：${chapter.title}\n任务单：${chapter.goal_json}\n\n输出 JSON：{"constraint": "本章创作约束（60-120字）"}`
-                }
-              ],
-              maxTokens: 512
-            },
-            (obj) => {
-              const c = (obj as { constraint?: unknown }).constraint
-              return typeof c === 'string' && c.trim().length >= 10 ? { constraint: c.trim() } : null
-            },
-            'team-editor'
+      let editorConstraint: string | null = null
+      if (editor) {
+        try {
+          const r = await withTimeout(
+            callLlmJson<{ constraint: string }>(
+              db,
+              'extraction',
+              {
+                novelId,
+                messages: [
+                  {
+                    role: 'user',
+                    content: `${editor.system_prompt}\n${JSON_FORMAT}\n\n${frozen.contract}\n章节：${chapter.title}\n任务单：${chapter.goal_json}\n\n输出 JSON：{"constraint": "本章创作约束（60-120字）"}`
+                  }
+                ],
+                maxTokens: 512
+              },
+              (obj) => {
+                const c = (obj as { constraint?: unknown }).constraint
+                return typeof c === 'string' && c.trim().length >= 10 ? { constraint: c.trim() } : null
+              },
+              'team-editor'
+            ),
+            45_000
           )
-        : null
+          editorConstraint = r.constraint
+        } catch (err) {
+          console.warn('[team/review] 主编约束降级:', err instanceof Error ? err.message : String(err))
+        }
+      }
 
-      // 审校三岗并行
+      // 审校三岗并行（P20：60s 整体超时，部分失败降级不毁整端）
       const agents = ['plot', 'logic', 'style'] as const
-      const results = await Promise.all(
-        agents.map((focus) => {
-          const reviewer = db
-            .prepare("SELECT system_prompt FROM agent WHERE role = 'reviewer' AND enabled = 1 LIMIT 1")
-            .get() as { system_prompt: string } | undefined
-          return callLlmJson<{ score: number; issues: Array<{ severity: string; location: string; problem: string; suggestion: string }> }>(
-            db,
-            'extraction',
-            {
-              novelId,
-              messages: [
-                {
-                  role: 'user',
-                  content: `${reviewer?.system_prompt ?? '你是审校编辑。'}\n本次审核维度：${REVIEW_FOCUS[focus]}\n\n${frozen.contract}\n${frozen.characters ? `\n【角色账本】\n${frozen.characters}` : ''}\n章节：${chapter.title}\n任务单：${chapter.goal_json}\n\n【正文】\n${chapter.content.slice(0, 6000)}\n\n输出 JSON：{"score": 0-100, "issues": [{"severity":"high|medium|low","location":"..","problem":"..","suggestion":".."}]}`
+      const reviewer = db
+        .prepare("SELECT system_prompt FROM agent WHERE role = 'reviewer' AND enabled = 1 LIMIT 1")
+        .get() as { system_prompt: string } | undefined
+      const editorLine = editorConstraint ? `\n主编约束：${editorConstraint}` : ''
+      const settled = await Promise.allSettled(
+        agents.map((focus) =>
+          withTimeout(
+            callLlmJson<{ score: number; issues: Array<{ severity: string; location: string; problem: string; suggestion: string }> }>(
+              db,
+              'extraction',
+              {
+                novelId,
+                messages: [
+                  {
+                    role: 'user',
+                    content: `${reviewer?.system_prompt ?? '你是审校编辑。'}\n本次审核维度：${REVIEW_FOCUS[focus]}${editorLine}\n\n${frozen.contract}\n${frozen.characters ? `\n【角色账本】\n${frozen.characters}` : ''}\n章节：${chapter.title}\n任务单：${chapter.goal_json}\n\n【正文】\n${chapter.content.slice(0, 6000)}\n\n输出 JSON：{"score": 0-100, "issues": [{"severity":"high|medium|low","location":"..","problem":"..","suggestion":".."}]}`
+                  }
+                ],
+                maxTokens: 4096
+              },
+              (obj) => {
+                const r = obj as Record<string, unknown>
+                if (typeof r.score !== 'number') return null
+                return {
+                  score: r.score,
+                  issues: Array.isArray(r.issues)
+                    ? r.issues.map((i) => {
+                        const x = i as Record<string, unknown>
+                        return {
+                          severity: String(x.severity ?? 'medium'),
+                          location: String(x.location ?? ''),
+                          problem: String(x.problem ?? ''),
+                          suggestion: String(x.suggestion ?? '')
+                        }
+                      })
+                    : []
                 }
-              ],
-              maxTokens: 4096
-            },
-            (obj) => {
-              const r = obj as Record<string, unknown>
-              if (typeof r.score !== 'number') return null
-              return {
-                score: r.score,
-                issues: Array.isArray(r.issues)
-                  ? r.issues.map((i) => {
-                      const x = i as Record<string, unknown>
-                      return {
-                        severity: String(x.severity ?? 'medium'),
-                        location: String(x.location ?? ''),
-                        problem: String(x.problem ?? ''),
-                        suggestion: String(x.suggestion ?? '')
-                      }
-                    })
-                  : []
-              }
-            },
-            `team-${focus}`
+              },
+              `team-${focus}`
+            ),
+            60_000
           )
-        })
+        )
       )
+      // 失败维度降级为空结果（不毁整端）——统一类型：全带 degraded/focus
+      const results = settled.map((s, i) =>
+        s.status === 'fulfilled'
+          ? { ...s.value, degraded: false as boolean, focus: agents[i] as string }
+          : { score: 0, issues: [] as Array<{ severity: string; location: string; problem: string; suggestion: string }>, degraded: true as boolean, focus: agents[i] as string }
+      )
+      const degradedFoci = results.filter((r) => r.degraded).map((r) => r.focus)
+      if (degradedFoci.length > 0) {
+        console.warn(`[team/review] 降级维度: ${degradedFoci.join(',')}`)
+      }
 
       // 合并去重（location+problem 签名）
       const seen = new Set<string>()
@@ -196,62 +234,103 @@ export function createAgentsRouter(db: DatabaseSync): Router {
         }
       }
 
-      // 角色顾问 OOC 检测
+      // 角色顾问 OOC 检测（P20：45s 超时，失败降级为空）
       const charAdvisor = db
         .prepare("SELECT system_prompt FROM agent WHERE role = 'character_advisor' AND enabled = 1 LIMIT 1")
         .get() as { system_prompt: string } | undefined
-      const ooc = charAdvisor
-        ? await callLlmJson<{ issues: Array<{ severity: string; location: string; problem: string; suggestion: string }> }>(
-            db,
-            'extraction',
-            {
-              novelId,
-              messages: [
-                {
-                  role: 'user',
-                  content: `${charAdvisor.system_prompt}\n\n${frozen.characters ? `【角色账本】\n${frozen.characters}` : ''}\n\n【正文】\n${chapter.content.slice(0, 6000)}\n\n输出 JSON：{"issues": [{"severity":"high|medium|low","location":"..","problem":"..","suggestion":".."}]}（无 OOC 输出空数组）`
+      let ooc: { issues: Array<{ severity: string; location: string; problem: string; suggestion: string }> } = { issues: [] }
+      if (charAdvisor) {
+        try {
+          ooc = await withTimeout(
+            callLlmJson<{ issues: Array<{ severity: string; location: string; problem: string; suggestion: string }> }>(
+              db,
+              'extraction',
+              {
+                novelId,
+                messages: [
+                  {
+                    role: 'user',
+                    content: `${charAdvisor.system_prompt}\n\n${frozen.characters ? `【角色账本】\n${frozen.characters}` : ''}\n\n【正文】\n${chapter.content.slice(0, 6000)}\n\n输出 JSON：{"issues": [{"severity":"high|medium|low","location":"..","problem":"..","suggestion":".."}]}（无 OOC 输出空数组）`
+                  }
+                ],
+                maxTokens: 4096
+              },
+              (obj) => {
+                const r = obj as Record<string, unknown>
+                return {
+                  issues: Array.isArray(r.issues)
+                    ? r.issues.map((i) => {
+                        const x = i as Record<string, unknown>
+                        return {
+                          severity: String(x.severity ?? 'medium'),
+                          location: String(x.location ?? ''),
+                          problem: String(x.problem ?? ''),
+                          suggestion: String(x.suggestion ?? '')
+                        }
+                      })
+                    : []
                 }
-              ],
-              maxTokens: 4096
-            },
-            (obj) => {
-              const r = obj as Record<string, unknown>
-              return {
-                issues: Array.isArray(r.issues)
-                  ? r.issues.map((i) => {
-                      const x = i as Record<string, unknown>
-                      return {
-                        severity: String(x.severity ?? 'medium'),
-                        location: String(x.location ?? ''),
-                        problem: String(x.problem ?? ''),
-                        suggestion: String(x.suggestion ?? '')
-                      }
-                    })
-                  : []
-              }
-            },
-            'team-ooc'
+              },
+              'team-ooc'
+            ),
+            45_000
           )
-        : { issues: [] as Array<{ severity: string; location: string; problem: string; suggestion: string }> }
+        } catch (err) {
+          console.warn('[team/review] OOC 检测降级:', err instanceof Error ? err.message : String(err))
+        }
+      }
 
       // 反 AI 词检测（文风顾问辅助）
       const bound = getBoundStyleRules(db, novelId)
       const antiAiWords = bound ? extractAntiAiWords(bound.antiAiRules) : []
       const antiAiHits = detectAntiAiHits(chapter.content, antiAiWords)
 
-      // 汇总评分（取三岗均值）
-      const avgScore = Math.round(results.reduce((a, r) => a + r.score, 0) / 3)
+      // 汇总评分（成功维度均值；全失败时 0 并标记）
+      const active = results.filter((r) => !r.degraded)
+      const avgScore = active.length > 0 ? Math.round(active.reduce((a, r) => a + r.score, 0) / active.length) : 0
       const highCount = mergedIssues.filter((i) => i.severity === 'high').length + ooc.issues.filter((i) => i.severity === 'high').length
+
+      // P20（M4）：评审结果落库（chapter.review_json 合并，下游修复/重审可消费）
+      const persistedReview = {
+        score: avgScore,
+        needsFix: avgScore < 75,
+        strengths: [],
+        issues: [...mergedIssues, ...ooc.issues],
+        team: {
+          editorConstraint,
+          dimensions: agents.map((a, i) => ({ focus: a, score: results[i].score, degraded: results[i].degraded })),
+          antiAiHits,
+          highCount,
+          degradedFoci
+        }
+      }
+      db.prepare(
+        "UPDATE chapter SET review_json = ?, status = 'reviewed', updated_at = datetime('now') WHERE id = ?"
+      ).run(JSON.stringify(persistedReview), input.chapterId)
+      // 质量债（INSERT OR IGNORE 防重复）
+      const insertDebt = db.prepare(
+        `INSERT OR IGNORE INTO quality_debt (chapter_id, issue, severity)
+         SELECT ?, ?, ? WHERE NOT EXISTS (
+           SELECT 1 FROM quality_debt WHERE chapter_id = ? AND issue = ? AND resolved = 0
+         )`
+      )
+      for (const issue of persistedReview.issues) {
+        if (issue.severity === 'high' || issue.severity === 'medium') {
+          const sig = `${issue.location} ${issue.problem}`
+          insertDebt.run(input.chapterId, sig, issue.severity, input.chapterId, sig)
+        }
+      }
 
       res.json({
         review: {
           score: avgScore,
-          editorConstraint: editorConstraint?.constraint ?? null,
-          dimensions: agents.map((a, i) => ({ focus: a, score: results[i].score })),
+          editorConstraint,
+          dimensions: agents.map((a, i) => ({ focus: a, score: results[i].score, degraded: results[i].degraded })),
           issues: mergedIssues,
           oocIssues: ooc.issues,
           antiAiHits,
-          highCount
+          highCount,
+          degradedFoci
         }
       })
     } catch (err) {
