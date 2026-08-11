@@ -30,6 +30,7 @@ const WorldsLibraryPage = lazy(() => import('./pages/WorldsLibraryPage').then((m
 const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then((m) => ({ default: m.KnowledgePage })))
 const PromptWorkbenchPage = lazy(() => import('./pages/PromptWorkbenchPage').then((m) => ({ default: m.PromptWorkbenchPage })))
 const StudioPage = lazy(() => import('./pages/StudioPage').then((m) => ({ default: m.StudioPage })))
+const AgentsLibraryPage = lazy(() => import('./pages/AgentsLibraryPage').then((m) => ({ default: m.AgentsLibraryPage })))
 
 // P22-C2：骨架屏（路由懒加载 fallback，替代纯文字）
 function PageFallback(): React.JSX.Element {
@@ -165,6 +166,7 @@ export function App(): React.JSX.Element {
           <Route path="/knowledge" element={<Suspense fallback={<PageFallback />}><KnowledgePage /></Suspense>} />
           <Route path="/prompt-workbench" element={<Suspense fallback={<PageFallback />}><PromptWorkbenchPage /></Suspense>} />
           <Route path="/studio" element={<Suspense fallback={<PageFallback />}><StudioPage /></Suspense>} />
+          <Route path="/agents-library" element={<Suspense fallback={<PageFallback />}><AgentsLibraryPage /></Suspense>} />
           <Route path="/hub" element={<Suspense fallback={<PageFallback />}><CreativeHubPage /></Suspense>} />
           <Route path="/director" element={<NovelGate title="自动导演" desc="从灵感推进到可写章节（11 阶段）。选择一本书进入。请先创建或选择小说。" target={(n) => `/novels/${n}/director`} />} />
           <Route path="/chapters" element={<NovelGate title="章节执行" desc="逐章生成、审核、修复、回灌。选择一本书进入。请先创建或选择小说。" target={(n) => `/novels/${n}/chapters`} />} />

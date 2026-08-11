@@ -22,7 +22,8 @@ import {
   Globe2,
   Database,
   Braces,
-  WandSparkles
+  WandSparkles,
+  Bot
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { novelApi } from '../api'
@@ -124,8 +125,11 @@ export function AppLayout(): React.JSX.Element {
         { to: '/book-analysis', label: '拆书', icon: Search },
         { to: '/genres', label: '流派管理', icon: Tags },
         { to: bookPath(novelId, '/'), label: '工作台（设定/世界/角色）', icon: PanelLeft, requiresNovel: true },
-        { to: '/anti-ai', label: '反 AI 规则', icon: ShieldCheck },
+               { to: '/anti-ai', label: '反 AI 规则', icon: ShieldCheck },
         { to: '/base-characters', label: '基础角色库', icon: UsersRound },
+        { to: '/agents-library', label: '智能体库', icon: Bot },
+      
+
         { to: '/titles', label: '标题工坊', icon: Type }
       ]
     },

@@ -63,11 +63,17 @@ function buildStepPrompt(
     | undefined
   if (!agent) throw new Error(`step ${step.role} 引用不存在的智能体 #${step.agentId}`)
 
-  // 技能挂载（body 拼入）
-  const skillIds = (JSON.parse(agent.skills_json || '[]') as string[]) ?? []
+  // 技能挂载（agent_skill + skills_json 合并，body 拼入；P29 C 显示技能名）
+  const skillIds = new Set<string>((JSON.parse(agent.skills_json || '[]') as string[]) ?? [])
+  const linked = db
+    .prepare(
+      `SELECT s.name, s.body_md FROM agent_skill a JOIN skill s ON s.id = a.skill_id WHERE a.agent_id = ?`
+    )
+    .all(step.agentId) as Array<{ name: string; body_md: string }>
+  for (const l of linked) skillIds.add(l.name)
   let skillText = ''
-  if (skillIds.length > 0) {
-    const placeholders = skillIds.map(() => '?').join(',')
+  if (skillIds.size > 0) {
+    const placeholders = [...skillIds].map(() => '?').join(',')
     const skills = db
       .prepare(`SELECT name, body_md FROM skill WHERE name IN (${placeholders})`)
       .all(...skillIds) as Array<{ name: string; body_md: string }>

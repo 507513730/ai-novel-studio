@@ -332,12 +332,19 @@ export const resourcesApi = {
 }
 
 export const agentsApi = {
-  list: (): Promise<{ agents: Array<{ id: number; name: string; role: string; systemPrompt: string; enabled: boolean }> }> =>
+  list: (): Promise<{ agents: Array<{ id: number; name: string; role: string; systemPrompt: string; description: string; bodyMd: string; skills: string[]; skillCount: number; enabled: boolean; custom: boolean }> }> =>
     j('/agents'),
   create: (body: { name: string; role?: string; systemPrompt: string }): Promise<{ id: number }> =>
     j('/agents', { method: 'POST', body: JSON.stringify(body) }),
   patch: (id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
     j(`/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  // P29??????????/body_md/?????
+  skillAttach: (agentId: number, skillId: number): Promise<{ ok: boolean }> =>
+    j(`/agents/${agentId}/skills`, { method: 'POST', body: JSON.stringify({ skillId }) }),
+  skillDetach: (agentId: number, skillId: number): Promise<{ ok: boolean }> =>
+    j(`/agents/${agentId}/skills/${skillId}`, { method: 'DELETE' }),
+  createCustom: (body: { name: string; description?: string; body_md?: string }): Promise<{ id: number }> =>
+    js('/agents/custom', { method: 'POST', body: JSON.stringify(body) }),
   teamReview: (id: number, chapterId: number): Promise<{ review: Record<string, unknown> }> =>
     js(`/novels/${id}/team/review`, { method: 'POST', body: JSON.stringify({ chapterId }) })
 }

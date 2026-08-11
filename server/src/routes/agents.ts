@@ -15,7 +15,11 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
   // ---------- Agent CRUD ----------
   router.get('/', (_req, res) => {
     const rows = db
-      .prepare('SELECT id, name, role, system_prompt, tools_json, enabled FROM agent ORDER BY id')
+      .prepare(
+        `SELECT a.id, a.name, a.role, a.system_prompt, a.description, a.body_md, a.skills_json, a.tools_json, a.enabled, a.is_custom,
+                (SELECT COUNT(*) FROM agent_skill s WHERE s.agent_id = a.id) AS skill_count
+         FROM agent a ORDER BY a.id`
+      )
       .all() as Array<Record<string, unknown>>
     res.json({
       agents: rows.map((r) => ({
@@ -23,8 +27,13 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
         name: r.name,
         role: r.role,
         systemPrompt: r.system_prompt,
+        description: r.description,
+        bodyMd: r.body_md,
+        skills: JSON.parse(String(r.skills_json ?? '[]')),
+        skillCount: r.skill_count,
         tools: JSON.parse(String(r.tools_json ?? '[]')),
-        enabled: r.enabled === 1
+        enabled: r.enabled === 1,
+        custom: r.is_custom === 1
       }))
     })
   })
@@ -56,6 +65,8 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
           name: z.string().min(1).optional(),
           role: z.string().optional(),
           systemPrompt: z.string().min(10).optional(),
+          description: z.string().max(500).optional(),
+          bodyMd: z.string().max(12000).optional(),
           enabled: z.boolean().optional()
         })
         .parse(req.body)
@@ -73,6 +84,14 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
         sets.push('system_prompt = ?')
         params.push(input.systemPrompt)
       }
+      if (input.description !== undefined) {
+        sets.push('description = ?')
+        params.push(input.description)
+      }
+      if (input.bodyMd !== undefined) {
+        sets.push('body_md = ?')
+        params.push(input.bodyMd)
+      }
       if (input.enabled !== undefined) {
         sets.push('enabled = ?')
         params.push(input.enabled ? 1 : 0)
@@ -83,6 +102,50 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
       }
       db.prepare(`UPDATE agent SET ${sets.join(', ')} WHERE id = ?`).run(...params, id)
       res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- P29：技能挂载/卸载（agent_skill 表） ----------
+  router.post('/:id/skills', (req, res, next) => {
+    try {
+      const agentId = Number(req.params.id)
+      const input = z.object({ skillId: z.number().int().positive() }).parse(req.body)
+      const agent = db.prepare('SELECT id FROM agent WHERE id = ?').get(agentId) as { id: number } | undefined
+      if (!agent) {
+        res.status(404).json({ error: 'agent not found' })
+        return
+      }
+      db.prepare('INSERT OR IGNORE INTO agent_skill (agent_id, skill_id) VALUES (?, ?)').run(agentId, input.skillId)
+      res.status(201).json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  router.delete('/:id/skills/:skillId', (req, res, next) => {
+    try {
+      const agentId = Number(req.params.id)
+      const skillId = Number(req.params.skillId)
+      db.prepare('DELETE FROM agent_skill WHERE agent_id = ? AND skill_id = ?').run(agentId, skillId)
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- P29：agent 技能清单（名称 + id 全量，供多选） ----------
+  router.get('/:id/skills', (req, res, next) => {
+    try {
+      const agentId = Number(req.params.id)
+      const rows = db
+        .prepare(
+          `SELECT s.id, s.name FROM skill s
+           JOIN agent_skill a ON a.skill_id = s.id WHERE a.agent_id = ? ORDER BY s.id`
+        )
+        .all(agentId) as Array<{ id: number; name: string }>
+      res.json({ skills: rows })
     } catch (err) {
       next(err)
     }
