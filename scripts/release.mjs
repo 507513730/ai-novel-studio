@@ -305,7 +305,7 @@ if (PUSH) {
   console.log('  等待 CI 构建（最多 10 分钟）…')
   try {
     const out = execSync(
-      `gh run list --limit 1 --json databaseId --jq ".[0].databaseId"`,
+      `gh run list --workflow="Build Release" --limit 1 --json databaseId --jq ".[0].databaseId"`,
       { encoding: 'utf8', cwd: ROOT, shell: 'cmd' }
     ).trim()
     if (out) {
