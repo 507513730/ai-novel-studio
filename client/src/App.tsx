@@ -8,6 +8,8 @@ import { NovelListPage } from './pages/NovelListPage'
 import { NovelGate } from './components/NovelGate'
 import { AppLayout } from './components/AppLayout'
 import { getApiBaseUrl, setApiBaseUrl, apiFetch } from './api'
+import { initShortcuts } from './utils/shortcuts'
+import { CommandPalette } from './components/CommandPalette'
 
 // P20（U4）：路由懒加载（22 页面分包，首屏只载当前页）
 const NovelWorkspacePage = lazy(() => import('./pages/NovelWorkspacePage').then((m) => ({ default: m.NovelWorkspacePage })))
@@ -72,8 +74,7 @@ export function App(): React.JSX.Element {
           if (url) {
             setApiBaseUrl(url)
             setBaseUrl(url)
-          }
-        })
+          }        })
         .catch(() => undefined)
       return unsubscribe
     }
@@ -97,8 +98,7 @@ export function App(): React.JSX.Element {
             setApiBaseUrl('http://127.0.0.1:3000/api')
             setBaseUrl('http://127.0.0.1:3000/api')
             clearInterval(timer)
-          }
-        })
+          }        })
         .catch(() => undefined)
     }, 2000)
     return () => clearInterval(timer)
@@ -111,6 +111,16 @@ export function App(): React.JSX.Element {
     retry: 3,
     retryDelay: 1000
   })
+
+  // P27 1-9：全局快捷键注册（命令面板直接处理，其余走事件桥由页面监听）
+  useEffect(() => {
+    return initShortcuts({
+      'command-palette': () => setCommandOpen((v) => !v)
+    })
+  }, [])
+
+  // P27 2-7：命令面板（搜小说 + 跳页面）
+  const [commandOpen, setCommandOpen] = useState(false)
 
   if (!baseUrl) return <div style={{ padding: 40 }}>正在启动本地服务…</div>
   if (bootstrap.isLoading) return <div style={{ padding: 40 }}>正在连接本地服务…</div>
@@ -133,6 +143,7 @@ export function App(): React.JSX.Element {
 
   return (
     <HashRouter>
+      <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} />
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<NovelListPage />} />

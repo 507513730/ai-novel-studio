@@ -622,7 +622,7 @@ select:focus {
   height: 40px;
   display: flex;
   align-items: center;
-  padding-left: env(titlebar-area-x, 12px);
+  padding-left: max(env(titlebar-area-x, 12px), 12px);
   padding-right: calc(100% - env(titlebar-area-width, 100%) - env(titlebar-area-x, 0px));
   app-region: drag;
   user-select: none;

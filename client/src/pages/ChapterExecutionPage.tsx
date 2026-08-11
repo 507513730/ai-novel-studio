@@ -6,6 +6,8 @@ import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { novelEditorTheme } from '../editor/theme'
 import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi } from '../api'
+import { usePrompt } from '../components/PromptDialog'
+import { onShortcut } from '../utils/shortcuts'
 import type { ChapterSummary } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
@@ -43,6 +45,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const dirtyRef = useRef(false)
   const streamingRef = useRef(false)
   const generateBusyRef = useRef(false)
+  // P27 0b：应用内输入对话框（替代 window.prompt）
+  const { prompt: askChapterTitle, element: chapterPromptElement } = usePrompt()
   // P20（U6）：流式 rAF 合并缓冲
   const pendingDeltaRef = useRef('')
   const rAFRef = useRef<number | null>(null)
@@ -55,6 +59,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const snapshotDoneRef = useRef(false)
   // P20（U5）：字数统计 memo（避免每次击键重渲染时 O(n) 扫描）
   const hanCount = useMemo(() => (content.match(/[\u4e00-\u9fff]/g) ?? []).length, [content])
+  // P27 1-6???????????
+  const [focusMode, setFocusMode] = useState(false)
   // A1：选区/光标状态（ref 缓存防 onUpdate 无限重渲染）
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; cursor: number }>({ text: '', cursor: -1 })
   const selectionRef = useRef({ text: '', cursor: -1 })
@@ -190,31 +196,15 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
   // A2：Ctrl+S 保存（CodeMirror keymap）+ P22-C4 快捷键（生成/审核/回灌）
   useEffect(() => {
-    const handler = (e: KeyboardEvent): void => {
-      // P9 D16：输入框/文本域聚焦时不触发全局快捷键
-      const t = e.target as HTMLElement | null
-      if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return
-      const mod = e.ctrlKey || e.metaKey
-      const key = e.key.toLowerCase()
-      if (mod && key === 's') {
-        e.preventDefault()
-        void saveContent().catch(() => undefined)
-      } else if (mod && key === 'enter') {
-        // P22-C4：Ctrl+Enter 生成正文
-        e.preventDefault()
-        void generate()
-      } else if (mod && e.shiftKey && key === 'r') {
-        // P22-C4：Ctrl+Shift+R 审核
-        e.preventDefault()
-        void withBusy('review', () => runReview())
-      } else if (mod && e.shiftKey && key === 'b') {
-        // P22-C4：Ctrl+Shift+B 回灌
-        e.preventDefault()
-        void withBusy('backfill', () => backfill())
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    // P27 1-9：快捷键迁移到注册表（onShortcut 事件桥，用户可自定义）
+    const unsubs = [
+      onShortcut('save', () => void saveContent().catch(() => undefined)),
+      onShortcut('generate', () => void generate()),
+      onShortcut('review', () => void withBusy('review', () => runReview())),
+      onShortcut('backfill', () => void withBusy('backfill', () => backfill())),
+      onShortcut('focus-mode', () => setFocusMode((v) => !v))
+    ]
+    return () => unsubs.forEach((u) => u())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChapter, content])
 
@@ -642,9 +632,16 @@ export function ChapterExecutionPage(): React.JSX.Element {
   }
 
   return (
+    <>
+      {chapterPromptElement}
+      {focusMode && (
+        <div style={{ position: 'fixed', top: 8, right: 12, zIndex: 999, fontSize: 11 }} className="muted">
+          ???? ? Ctrl+Shift+F ? Esc ??
+        </div>
+      )}
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       {/* 左：资源树（D1：章节/角色/设定/规则 分组） */}
-      <div style={{ width: 260, borderRight: '1px solid var(--border)', padding: 12, overflowY: 'auto', background: 'var(--bg-panel)' }}>
+      <div style={{ width: 260, borderRight: '1px solid var(--border)', padding: 12, overflowY: 'auto', background: 'var(--bg-panel)', display: focusMode ? 'none' : undefined }}>
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
           <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
             {(
@@ -671,13 +668,14 @@ export function ChapterExecutionPage(): React.JSX.Element {
               className="sm"
               title="手动新建空章节（可改标题后生成正文）"
               onClick={() => {
-                const t = window.prompt('新章节标题（留空自动编号）：')
-                if (t === null) return
-                setActionError(null)
-                void withBusy('chapter-create', async () => {
-                  const r = await assetsApi.chapterCreate(id, { title: t.trim() || undefined })
-                  setActionMsg(`已创建章节 #${r.id}（空章，可编辑标题或直接生成）`)
-                  await invalidate()
+                void askChapterTitle({ title: '新章节标题（留空自动编号）', defaultValue: '' }).then((t) => {
+                  if (t === null) return
+                  setActionError(null)
+                  void withBusy('chapter-create', async () => {
+                    const r = await assetsApi.chapterCreate(id, { title: t.trim() || undefined })
+                    setActionMsg(`已创建章节 #${r.id}（空章，可编辑标题或直接生成）`)
+                    await invalidate()
+                  })
                 })
               }}
             >
@@ -921,7 +919,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
       </div>
 
       {/* 右：动作面板（P10：推荐动作卡 + 分区） */}
-      <div style={{ width: 320, borderLeft: '1px solid var(--border)', padding: 12, overflowY: 'auto', background: 'var(--bg-panel)' }}>
+      <div style={{ width: 320, borderLeft: '1px solid var(--border)', padding: 12, overflowY: 'auto', background: 'var(--bg-panel)', display: focusMode ? 'none' : undefined }}>
         <h2 style={{ fontSize: 15, marginBottom: 12 }}>执行面板</h2>
 
         {/* P12 A3：本章进度矩阵（信号从现有状态推导） */}
@@ -1309,6 +1307,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
         </details>
       </div>
     </div>
+    </>
   )
 }
 

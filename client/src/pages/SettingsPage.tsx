@@ -6,7 +6,17 @@ import { taskTypeLabels, taskTypes } from '@shared/types'
 import { apiFetch } from '../api'
 import { useToast } from '../components/Toast'
 import { THEMES, applyTheme, getStoredTheme, type ThemeKey } from '../utils/theme'
-import { SERIF_FONTS, applyFonts, getStoredFonts, DEFAULTS, type FontSettings } from '../utils/fonts'
+import { SERIF_FONTS, UI_FONTS, applyFonts, getStoredFonts, DEFAULTS, type FontSettings } from '../utils/fonts'
+import {
+  SHORTCUT_ACTIONS,
+  getStoredShortcuts,
+  saveShortcut,
+  resetShortcuts,
+  eventToCombo,
+  formatCombo,
+  type ShortcutAction,
+  type ShortcutBinding
+} from '../utils/shortcuts'
 
 function ProvidersPanel(): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -684,8 +694,79 @@ function FontPanel(): React.JSX.Element {
           <option value="prose">跟随正文</option>
           <option value="mono">等宽（JetBrains Mono）</option>
         </select>
+        <span className="t-small">界面字体：</span>
+        <select value={settings.ui} onChange={(e) => update({ ui: e.target.value })}>
+          {UI_FONTS.map((f) => (
+            <option key={f.key} value={f.key}>{f.label}</option>
+          ))}
+        </select>
         <button className="sm" onClick={() => { update({ ...DEFAULTS }); toast('ok', '已恢复默认字体') }}>恢复默认</button>
       </div>
+    </div>
+  )
+}
+
+// P27 1-9：快捷键自定义（录制 + 冲突检测 + 恢复默认）
+function ShortcutPanel(): React.JSX.Element {
+  const { toast } = useToast()
+  const [bindings, setBindings] = useState<Record<string, string>>(getStoredShortcuts())
+  const [recording, setRecording] = useState<string | null>(null)
+
+  const startRecord = (action: string): void => {
+    setRecording(action)
+    toast('info', '请按下新的组合键（Esc 取消）')
+  }
+
+  const onKey = (e: KeyboardEvent): void => {
+    if (!recording) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.key === 'Escape') {
+      setRecording(null)
+      return
+    }
+    const combo = eventToCombo(e)
+    if (!combo) return
+    // 冲突检测
+    const conflict = Object.entries(bindings).find(([a, b]) => b === combo && a !== recording)
+    if (conflict) {
+      toast('error', `与「${SHORTCUT_ACTIONS[conflict[0] as ShortcutAction]?.label ?? conflict[0]}」冲突`)
+      setRecording(null)
+      return
+    }
+    saveShortcut(recording as ShortcutAction, combo)
+    setBindings(getStoredShortcuts())
+    setRecording(null)
+    toast('ok', `已设置：${formatCombo(combo)}`)
+  }
+
+  useEffect(() => {
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording, bindings])
+
+  return (
+    <div className="col gap-2" style={{ marginBottom: 8 }}>
+      <p className="muted t-small">点击「录制」后按下组合键即可自定义。命令面板默认 Ctrl+K（搜小说/跳页面）。</p>
+      <div className="col gap-1">
+        {(Object.entries(SHORTCUT_ACTIONS) as Array<[ShortcutAction, ShortcutBinding]>).map(([action, meta]) => (
+          <div key={action} className="row justify-between" style={{ padding: '4px 0' }}>
+            <span className="t-small">{meta.label}</span>
+            <div className="row gap-2">
+              <kbd style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 8px', fontSize: 12, minWidth: 90, textAlign: 'center' }}>
+                {recording === action ? '…按下组合键' : formatCombo(bindings[action] ?? meta.combo)}
+              </kbd>
+              <button className="sm" onClick={() => startRecord(action)} disabled={recording !== null && recording !== action}>
+                录制
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="sm" onClick={() => { resetShortcuts(); setBindings(getStoredShortcuts()); toast('ok', '已恢复默认快捷键') }}>
+        恢复默认
+      </button>
     </div>
   )
 }
@@ -695,6 +776,9 @@ function AppearancePanel(): React.JSX.Element {
   const [current, setCurrent] = useState<ThemeKey>(getStoredTheme())
   return (
     <div className="panel col">
+      {/* P27 1-9：快捷键自定义 */}
+      <h2>快捷键</h2>
+      <ShortcutPanel />
       <h2>主题</h2>
       <p className="muted t-small">
         选择界面配色（灵感来自 FeelFish 色板与参考项目浅色风格）。主题即时生效并记住选择。

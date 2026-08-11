@@ -101,7 +101,12 @@ export function NovelListPage(): React.JSX.Element {
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-          {novels.data?.novels.map((n) => {
+          {/* P27 1-3：最近使用排序（lastOpenedAt 降序，无记录排后） */}
+          {(novels.data?.novels ?? []).slice().sort((a, b) => {
+            const ta = a.lastOpenedAt ? new Date(a.lastOpenedAt).getTime() : 0
+            const tb = b.lastOpenedAt ? new Date(b.lastOpenedAt).getTime() : 0
+            return tb - ta
+          }).map((n) => {
             const pct = n.chaptersTotal > 0 ? Math.round((n.chaptersDone / n.chaptersTotal) * 100) : 0
             return (
             <div

@@ -18,7 +18,6 @@ import {
   Workflow,
   ShieldCheck,
   UsersRound,
-  Route,
   Gauge,
   Globe2,
   Database,
@@ -71,8 +70,9 @@ export function AppLayout(): React.JSX.Element {
   const [failedCount, setFailedCount] = useState(0)
   const [badgeReady, setBadgeReady] = useState(false)
   const [polling, setPolling] = useState(false)
-  // P13 G8：全局运行任务（悬浮状态）
+  // P13 G8：全局运行任务（悬浮状态）+ P27 1-5：可展开进度浮层
   const [runningJobs, setRunningJobs] = useState<Array<{ id: number; type: string; progress: number }>>([])
+  const [jobsOpen, setJobsOpen] = useState(false)
   useEffect(() => {
     const timer = setTimeout(() => setBadgeReady(true), 500)
     return () => clearTimeout(timer)
@@ -132,7 +132,7 @@ export function AppLayout(): React.JSX.Element {
     {
       title: '系统',
       items: [
-        { to: '/settings/routes', label: '模型路由', icon: Route },
+        // P27 0e：模型路由并入设置页 tab（移除重复入口）
         { to: '/settings', label: '设置', icon: Settings }
       ]
     }
@@ -162,17 +162,38 @@ export function AppLayout(): React.JSX.Element {
         <span className="muted" style={{ fontSize: 11, marginLeft: 10 }}>
           v{__APP_VERSION__}
         </span>
-        {/* P13 G8：全局运行任务悬浮状态 */}
+        {/* P13 G8 + P27 1-5：全局运行任务悬浮状态（可展开浮层） */}
         {runningJobs.length > 0 && (
-          <button
-            className="sm"
-            style={{ marginLeft: 'auto', marginRight: 12, background: 'var(--accent-soft)', color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
-            onClick={() => navigate('/tasks')}
-            title="查看任务中心"
-          >
-            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, background: 'var(--accent)', marginRight: 6, animation: 'pulse 1.2s infinite' }} />
-            AI 运行中{runningJobs.length > 1 ? `（${runningJobs.length}）` : ''} · {runningJobs[0].type === 'director' ? '自动导演' : runningJobs[0].type}
-          </button>
+          <div style={{ marginLeft: 'auto', marginRight: 12, position: 'relative' }}>
+            <button
+              className="sm"
+              style={{ background: 'var(--accent-soft)', color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
+              onClick={() => setJobsOpen((v) => !v)}
+              title="查看运行中任务"
+            >
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, background: 'var(--accent)', marginRight: 6, animation: 'pulse 1.2s infinite' }} />
+              AI 运行中{runningJobs.length > 1 ? `（${runningJobs.length}）` : ''} · {runningJobs[0].type === 'director' ? '自动导演' : runningJobs[0].type}
+            </button>
+            {jobsOpen && (
+              <div className="panel" style={{ position: 'absolute', right: 0, top: 34, width: 260, zIndex: 999, background: 'var(--bg-elevated)', padding: 12 }}>
+                <div className="row justify-between mb-2">
+                  <strong className="t-small">运行中任务</strong>
+                  <button className="sm" onClick={() => navigate('/tasks')}>任务中心 →</button>
+                </div>
+                {runningJobs.map((j) => (
+                  <div key={j.id} className="mb-2">
+                    <div className="row justify-between t-small">
+                      <span>{j.type === 'director' ? '自动导演' : j.type} #{j.id}</span>
+                      <span className="muted">{Math.round((j.progress ?? 0) * 100)}%</span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-input)', marginTop: 4 }}>
+                      <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent)', width: `${Math.min(100, (j.progress ?? 0) * 100)}%`, transition: 'width 300ms' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>

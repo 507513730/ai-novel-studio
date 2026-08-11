@@ -399,6 +399,13 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     statements: [
       `ALTER TABLE prompt_asset ADD COLUMN original_template TEXT NOT NULL DEFAULT ''`
     ]
+  },
+  {
+    // P27 1-3：最近使用（小说列表排序）
+    version: 12,
+    statements: [
+      `ALTER TABLE novel ADD COLUMN last_opened_at TEXT`
+    ]
   }
 ]
 

@@ -4,6 +4,7 @@ import { WandSparkles, Play, Save, Download, Upload, Pencil, Trash2, Layers } fr
 import { novelApi, studioApi, agentsApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
+import { usePrompt } from '../components/PromptDialog'
 
 // ============================================================
 // P21-2：创造工坊——对话引导生成创作方案（agent 流水线）
@@ -46,6 +47,7 @@ export function StudioPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { prompt: askName, element: promptElement } = usePrompt()
 
   const solutions = useQuery({ queryKey: ['studio-solutions'], queryFn: studioApi.solutions })
   const skills = useQuery({ queryKey: ['studio-skills'], queryFn: studioApi.skills })
@@ -262,6 +264,8 @@ export function StudioPage(): React.JSX.Element {
   }
 
   return (
+    <>
+      {promptElement}
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <div className="row gap-2">
@@ -351,20 +355,25 @@ export function StudioPage(): React.JSX.Element {
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>技能库（{skills.data?.skills?.length ?? 0}）</div>
-              {/* P23（N7）：技能创建入口 */}
+              {/* P23（N7）+ P27 0b：技能创建（应用内对话框，Electron 兼容） */}
               <button
                 className="sm"
                 onClick={() => {
-                  const name = window.prompt('技能名称：')
-                  if (!name?.trim()) return
-                  const desc = window.prompt('技能说明（可选）：') ?? ''
-                  const body = window.prompt('技能内容（正文，可粘贴 Feelfish 技能 md）：') ?? ''
-                  setBusy('skill-create')
-                  void studioApi
-                    .skillCreate({ name: name.trim(), description: desc, body_md: body })
-                    .then(() => toast('ok', `技能「${name.trim()}」已创建`))
-                    .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-                    .finally(() => { setBusy(null); void queryClient.invalidateQueries({ queryKey: ['studio-skills'] }) })
+                  void askName({ title: '技能名称' }).then(async (name) => {
+                    if (!name?.trim()) return
+                    const desc = (await askName({ title: '技能说明（可选）' })) ?? ''
+                    const body = (await askName({ title: '技能内容（正文，可粘贴 Feelfish 技能 md）' })) ?? ''
+                    setBusy('skill-create')
+                    try {
+                      await studioApi.skillCreate({ name: name.trim(), description: desc, body_md: body })
+                      toast('ok', `技能「${name.trim()}」已创建`)
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setBusy(null)
+                      void queryClient.invalidateQueries({ queryKey: ['studio-skills'] })
+                    }
+                  })
                 }}
                 disabled={busy !== null}
                 title="手动创建技能（agent 可挂载）"
@@ -580,6 +589,7 @@ export function StudioPage(): React.JSX.Element {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

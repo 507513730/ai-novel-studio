@@ -53,11 +53,11 @@ export function createNovelsRouter(db: DatabaseSync): Router {
   router.get('/', (_req, res) => {
     const rows = db
       .prepare(
-        `SELECT n.id, n.title, n.inspiration, n.status, n.framing_json,
+        `SELECT n.id, n.title, n.inspiration, n.status, n.framing_json, n.last_opened_at,
                 (SELECT COUNT(*) FROM chapter c WHERE c.novel_id = n.id AND c.status IN ('done','reviewed','written')) AS chapters_done,
                 (SELECT COUNT(*) FROM chapter c WHERE c.novel_id = n.id) AS chapters_total,
                 (SELECT COUNT(*) FROM character ch WHERE ch.novel_id = n.id) AS characters
-         FROM novel n ORDER BY n.updated_at DESC`
+         FROM novel n ORDER BY COALESCE(n.last_opened_at, n.updated_at) DESC`
       )
       .all() as Array<Record<string, unknown>>
     res.json({
@@ -68,7 +68,9 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         status: r.status,
         chaptersDone: r.chapters_done,
         chaptersTotal: r.chapters_total,
-        characters: r.characters
+        characters: r.characters,
+        // P27 1-3：最近使用
+        lastOpenedAt: r.last_opened_at ?? null
       }))
     })
   })
@@ -88,6 +90,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
 
   router.get('/:id', (req, res) => {
     const id = Number(req.params.id)
+    // P27 1-3：记录最近打开时间
+    db.prepare("UPDATE novel SET last_opened_at = datetime('now') WHERE id = ?").run(id)
     const row = db.prepare('SELECT * FROM novel WHERE id = ?').get(id) as
       | Record<string, unknown>
       | undefined

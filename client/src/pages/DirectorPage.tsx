@@ -191,6 +191,15 @@ export function DirectorPage(): React.JSX.Element {
             value={chaptersPerVolume}
             onChange={(e) => setChaptersPerVolume(e.target.value === '' ? 0 : Number(e.target.value))}
           />
+          {/* P27 1-1：启动前预览（预计调用/耗时/可中断） */}
+          <div className="panel" style={{ marginTop: 8, padding: 10, fontSize: 12 }}>
+            <div className="muted">
+              启动前须知：导演将按 11 阶段依次调用模型（预计{' '}
+              <strong style={{ color: 'var(--text)' }}>10-20 次调用</strong>，视书复杂度约{' '}
+              <strong style={{ color: 'var(--text)' }}>5-20 分钟</strong>）
+              · 可随时点「取消」停止（当前阶段完成后生效）· 全部过程可断点恢复
+            </div>
+          </div>
           <button className="primary" disabled={busy} onClick={() => void run()}>
             启动导演
           </button>

@@ -4,6 +4,7 @@ import { Braces, Save, Play, RotateCcw } from 'lucide-react'
 import { apiFetch } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
+import { usePrompt } from '../components/PromptDialog'
 import { useNavigate } from 'react-router-dom'
 
 // P17-5A：提示词工作台（14 系统提示词 + 反 AI 词库；编辑/预览/试跑）
@@ -26,6 +27,7 @@ export function PromptWorkbenchPage(): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const [vars, setVars] = useState<Record<string, string>>({})
   const [testOut, setTestOut] = useState<string | null>(null)
+  const { prompt: askName, element: promptElement } = usePrompt()
 
   const prompts = useQuery<{ prompts: PromptAsset[] }>({
     queryKey: ['prompts'],
@@ -79,7 +81,9 @@ export function PromptWorkbenchPage(): React.JSX.Element {
   const placeholders = draft.match(/\$\{(\w+)\}/g) ?? []
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
+    <>
+      {promptElement}
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
       <div className="row mb-4">
         <Braces size={20} />
         <h1 className="ml-2">提示词工作台</h1>
@@ -151,29 +155,30 @@ export function PromptWorkbenchPage(): React.JSX.Element {
                   >
                     <RotateCcw size={12} className="icon-gap" />还原出厂
                   </button>
-                  {/* P23（N8）：新建提示词 */}
+                  {/* P23（N8）+ P27 0b：新建提示词（应用内对话框，Electron 兼容） */}
                   <button
                     className="sm"
                     disabled={busy !== false}
                     onClick={() => {
-                      const name = window.prompt('新提示词名称：')
-                      if (!name?.trim()) return
-                      setBusy('create')
-                      void apiFetch('/prompts', {
-                        method: 'POST',
-                        body: JSON.stringify({ name: name.trim(), template: '（在此编写提示词模板，支持 ${变量} 插值）', notes: '自定义' })
-                      })
-                        .then(async () => {
-                          toast('ok', '已创建，刷新列表')
-                          const all = (await apiFetch('/prompts')) as { prompts: Array<{ id: number; name: string; template: string; taskType: string; slots: Record<string, unknown>; notes: string }> }
+                      void askName({ title: '新提示词名称', placeholder: '输入名称后确定' }).then(async (name) => {
+                        if (!name?.trim()) return
+                        setBusy('create')
+                        try {
+                          await apiFetch('/prompts', {
+                            method: 'POST',
+                            body: JSON.stringify({ name: name.trim(), template: '（在此编写提示词模板，支持 ${变量} 插值）', notes: '自定义' })
+                          })
+                          toast('ok', '已创建')
+                          await queryClient.invalidateQueries({ queryKey: ['prompts'] })
+                          const all = (await apiFetch('/prompts')) as { prompts: PromptAsset[] }
                           const created = all.prompts.find((x) => x.name === name.trim())
-                          if (created) {
-                            setSelected(created)
-                            setDraft(created.template)
-                          }
-                        })
-                        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-                        .finally(() => setBusy(false))
+                          if (created) open(created)
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : String(err))
+                        } finally {
+                          setBusy(false)
+                        }
+                      })
                     }}
                   >
                     + 新建
@@ -217,6 +222,7 @@ export function PromptWorkbenchPage(): React.JSX.Element {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   )
 }

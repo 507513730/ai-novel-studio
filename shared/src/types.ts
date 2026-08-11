@@ -99,6 +99,7 @@ export interface NovelSummary {
   chaptersDone: number
   chaptersTotal: number
   characters: number
+  lastOpenedAt: string | null
 }
 
 export interface DirectionScheme {

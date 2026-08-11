@@ -3,6 +3,7 @@ import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { novelApi } from '../api'
+import { usePrompt } from '../components/PromptDialog'
 import type { ChapterSummary } from '../types'
 
 export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element {
@@ -10,6 +11,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
   const navigate = useNavigate()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { prompt: askTitle, element: promptElement } = usePrompt()
   const [chaptersPerVolume, setChaptersPerVolume] = useState(20)
   const [expandedVol, setExpandedVol] = useState<number | null>(null)
   // P12 A4：批量细化范围
@@ -60,7 +62,9 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
   }
 
   return (
-    <div className="col">
+    <>
+      {promptElement}
+      <div className="col">
       {error && <ErrorMsg error={error} />}
 
       <div className="panel">
@@ -88,20 +92,21 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
             >
               {busy === 'volumes' ? '生成中…' : 'AI 生成卷规划'}
             </button>
-            {/* P23（N3）：手动新建卷 */}
+            {/* P23（N3）+ P27 0b：手动新建卷（应用内对话框） */}
             <button
               className="sm"
               disabled={busy !== null}
               onClick={() => {
-                const t = window.prompt('新卷标题：')
-                if (!t?.trim()) return
-                setBusy('volume-create')
-                setError(null)
-                void novelApi
-                  .volumeCreate(novelId, t.trim())
-                  .then(() => inval())
-                  .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-                  .finally(() => setBusy(null))
+                void askTitle({ title: '新卷标题', placeholder: '输入卷标题后确定' }).then((t) => {
+                  if (!t?.trim()) return
+                  setBusy('volume-create')
+                  setError(null)
+                  void novelApi
+                    .volumeCreate(novelId, t.trim())
+                    .then(() => inval())
+                    .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                    .finally(() => setBusy(null))
+                })
               }}
             >
               + 手动建卷
@@ -216,6 +221,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
         </div>
       </div>
     </div>
+    </>
   )
 }
 

@@ -6,6 +6,8 @@ export interface FontSettings {
   prose: string
   // 编辑器字体：'prose'（跟随正文）| 'mono'（等宽）
   editor: 'prose' | 'mono'
+  // P27 0d：界面字体 key（见 UI_FONTS）
+  ui: string
   // 排版
   indent: boolean // 首行缩进 2 字符
   lineHeight: number // 1.5 - 2.2
@@ -19,6 +21,14 @@ export interface FontOption {
   stack: string
   desc?: string
 }
+
+// P27 0d：界面字体选项（应用于 --font-sans，全站界面）
+export const UI_FONTS: FontOption[] = [
+  { key: 'system', label: '系统默认', stack: "'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif", desc: '默认字体栈' },
+  { key: 'yahei', label: '微软雅黑', stack: "'Microsoft YaHei', system-ui, sans-serif", desc: 'Windows 默认' },
+  { key: 'simhei', label: '黑体', stack: "'SimHei', system-ui, sans-serif", desc: 'Windows 自带黑体' },
+  { key: 'noto-sans', label: '思源黑体', stack: "'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif", desc: '打包开源字体' }
+]
 
 export const SERIF_FONTS: FontOption[] = [
   { key: 'lxgw', label: '霞鹜文楷', stack: "'LXGW WenKai', 'KaiTi', 'SimSun', serif", desc: '开源楷体，网文写作手感（默认）' },
@@ -36,6 +46,7 @@ const STORAGE_KEY = 'ai-novel.fonts'
 export const DEFAULTS: FontSettings = {
   prose: 'lxgw',
   editor: 'prose',
+  ui: 'system',
   indent: true,
   lineHeight: 1.75,
   fontSize: 15,
@@ -64,6 +75,9 @@ function fontStack(settings: FontSettings): string {
 export function applyFonts(settings: FontSettings): void {
   const root = document.documentElement
   root.style.setProperty('--font-serif', fontStack(settings))
+  // P27 0d：界面字体（--font-sans）
+  const uiOpt = UI_FONTS.find((f) => f.key === settings.ui)
+  if (uiOpt) root.style.setProperty('--font-sans', uiOpt.stack)
   root.style.setProperty('--prose-font-size', `${settings.fontSize}px`)
   root.style.setProperty('--prose-line-height', String(settings.lineHeight))
   root.style.setProperty('--prose-indent', settings.indent ? '2em' : '0')
