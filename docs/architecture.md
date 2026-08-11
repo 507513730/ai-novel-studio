@@ -50,6 +50,18 @@ Web API → INSERT job（queued）→ Scheduler 原子抢占(running)
 失败恢复：retry(可换模型 modelOverride) / cancel / 从断点继续(resume)
 ```
 
+### 创作方案运行时（P21，创造工坊）
+
+```
+用户描述 → POST /solutions/generate（AI 编排骨架）
+  → solution 表（steps_json: [{agentId, role, stage, include, maxTokens, if}]）
+  → 章节页「跑方案」/ hub run_solution → solutionRunner
+  → 按步骤顺序：buildStepPrompt（agent 资产 + 技能 + 冻结上下文 + 前序输出）
+    → callLlmJson（90s 超时 / 失败降级继续 / humanOverride 单步调试）
+  → 输出聚合展示（不直接写库；写操作仍走 hub 审批）
+stage 语义：post_generate（正文后增强）/ review（审核增强）/ whole_book（整本，预留）
+```
+
 ### 检索链路（P17-5B）
 
 ```

@@ -63,6 +63,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 版本规范化（P21 追加）：tag 必须与 package.json 版本一致（防"0.2.x 打 v0.3.0"类错误发布）
+      - name: Verify tag matches package.json
+        run: node -e "
+          const p = require('./package.json');
+          const tag = process.env.GITHUB_REF_NAME ?? '';
+          if (!tag.startsWith('v')) throw new Error('tag must start with v');
+          if (tag.slice(1) !== p.version) throw new Error('tag ' + tag + ' != package.json version ' + p.version);
+          console.log('OK: tag ' + tag + ' matches package.json ' + p.version);
+        "
+
       - name: Typecheck
         run: pnpm typecheck
 

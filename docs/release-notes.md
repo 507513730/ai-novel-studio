@@ -1,5 +1,24 @@
 # AI-Novel-Studio 发布说明
 
+## v0.3.0（2026-08-11）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.3.0.exe`（NSIS 向导版：可选安装目录 + 卸载入口）
+- **便携版**：`AI-Novel-Studio-0.3.0-portable-x64.exe`（数据跟随可执行文件 data/ 目录，可放 U 盘）
+
+### 创造工坊（P21）
+- **创造工坊页面**（侧边栏「创作」区）：描述一句话 → AI 生成方案骨架（3-8 步 agent 流水线），可视化编辑（选智能体/职责/阶段/顺序），保存即用
+- **创作方案**：有序智能体流水线（post_generate 正文后增强 / review 审核增强 / whole_book 整本预留），步骤间传递前序输出，每步独立超时与降级
+- **章节执行页「跑方案」**：对当前章跑任意方案，输出聚合展示
+- **创作中枢新增 run_solution 工具**：对话可直接触发方案
+- **技能体系**：skill 资产 + agent 挂载（方案步骤自动带技能上下文）
+- **导入导出**：方案自包含 JSON（含依赖 agent/skill）；**支持导入 Feelfish 的 agent md（YAML frontmatter）与 solution.json**——Feelfish 流程可直接搬过来
+- **内置 3 套模板**：标准章节复核 / 世界观一致性审校 / 短篇冲刺
+- 预留：整本模式执行器（whole_book）、在线方案市场（MarketProvider 接口）
+
+### 工程与规范
+- **版本管理规范化**（docs/versioning.md）：SemVer 语义、发布流程、CI 强制 tag 与 package.json 版本一致（杜绝 2026-08-10 的 v0.3.0 错位事件再发生）
+
 ## v0.2.2（2026-08-11）
 
 ### 安全与数据（P20 批1）
