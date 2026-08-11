@@ -16,17 +16,37 @@
 - tag 名 = `v` + version，**必须一致**，由 CI 强制校验（见 §5）。
 - 发布前检查：`node -p "require('./package.json').version"`。
 
-## 3. 发布流程（每次发布按序执行）
+## 3. 发布流程（发布清单，推荐用 `pnpm release` 自动执行）
+
+> **唯一入口**：`pnpm release`（scripts/release.mjs）——文档检查 → 全量验证 → 本地构建 → 提交/tag 指引，任一步失败即终止。`--push` 半自动提交推送。
+
+**手动执行时按以下清单逐项打勾（缺一项即不完整）：**
 
 ```powershell
+# 0) 文档更新（先于一切——脚本会强制检查，手动时不得跳过）
+#    □ release-notes.md 新版本段落（## vX.Y.Z：安装方式 + 功能 + 工程）
+#    □ PLAN.md 对应段落勾选
+#    □ decision-log.md 本次关键决策
+#    □ test-report.md 验证记录
+#    □ README.md（功能变化时）/ audit-report.md（预留项状态）/ versioning.md §7（规划表）
+
 # 1) 全量验证（必须全绿）
 pnpm typecheck; pnpm lint; pnpm test; pnpm build; pnpm db:smoke
 
-# 2) 按 §1 语义 bump package.json（提交信息含版本号，如 "chore: v0.3.1"）
-# 3) 打 tag（指向该提交）并推送
+# 2) 本地构建（release/ 与远程 Release 同步——每次发布都必须跑）
+pnpm dist        # 或直接 pnpm release 一并完成
+
+# 3) 按 §1 语义确认 package.json 版本号已 bump（提交信息含版本号）
+# 4) 提交 + 打 tag + 推送
+git add -A && git commit -m "chore: release vX.Y.Z"
 git tag vX.Y.Z
 git push origin main
 git push origin vX.Y.Z        # 触发 CI（自动构建 + 发布 Release）
+
+# 5) 发布后确认
+#    □ CI 通过（gh run list）
+#    □ Release 资产齐全（gh release view vX.Y.Z）
+#    □ 本地 release/ 产物版本号 = vX.Y.Z
 ```
 
 ## 4. 禁则

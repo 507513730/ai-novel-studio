@@ -14,6 +14,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "db:smoke": "node scripts/db-smoke.mjs",
+    "release": "node scripts/release.mjs",
     "calibrate": "node --experimental-strip-types scripts/calibrate.ts",
     "dist": "electron-vite build && electron-builder --win --publish never",
     "dist:dir": "electron-vite build && electron-builder --win --dir",
