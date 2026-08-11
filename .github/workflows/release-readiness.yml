@@ -41,23 +41,24 @@ jobs:
 
       - name: Verify version bumped + release-notes updated
         if: steps.src.outputs.src_changed == 'true'
-        run: node -e "
-          const { execSync } = require('node:child_process');
-          const fs = require('node:fs');
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          const version = pkg.version;
-          let lastTag = '';
-          try { lastTag = execSync('git describe --tags --abbrev=0 HEAD~1 2>/dev/null || git describe --tags --abbrev=0').toString().trim(); } catch { lastTag = ''; }
-          console.log('current version:', version, '| last tag:', lastTag || '(none)');
-          const lastVersion = lastTag.replace(/^v/, '');
-          if (lastVersion && version === lastVersion) {
-            console.error('FAIL: src 已变更但 package.json 版本未 bump（' + version + ' == ' + lastVersion + '）。规则：versioning.md §3.1 合入门禁——功能合入必须 bump 版本并发版。');
-            process.exit(1);
-          }
-          const rn = fs.readFileSync('docs/release-notes.md', 'utf8');
-          if (!rn.includes('## v' + version)) {
-            console.error('FAIL: release-notes.md 缺少 \"## v' + version + '\" 段落。先写发布说明（release-notes/PLAN/decision-log）。');
-            process.exit(1);
-          }
-          console.log('OK: 版本已 bump 且 release-notes 已更新');
-        "
+        run: |
+          node -e "
+            const { execSync } = require('node:child_process');
+            const fs = require('node:fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const version = pkg.version;
+            let lastTag = '';
+            try { lastTag = execSync('git describe --tags --abbrev=0 HEAD~1 2>/dev/null || git describe --tags --abbrev=0').toString().trim(); } catch { lastTag = ''; }
+            console.log('current version:', version, '| last tag:', lastTag || '(none)');
+            const lastVersion = lastTag.replace(/^v/, '');
+            if (lastVersion && version === lastVersion) {
+              console.error('FAIL: src changed but package.json version not bumped (' + version + ' == ' + lastVersion + '). Rule: versioning.md 3.1');
+              process.exit(1);
+            }
+            const rn = fs.readFileSync('docs/release-notes.md', 'utf8');
+            if (!rn.includes('## v' + version)) {
+              console.error('FAIL: release-notes.md missing ## v' + version + ' section');
+              process.exit(1);
+            }
+            console.log('OK: version bumped and release-notes updated');
+          "
