@@ -305,8 +305,8 @@ if (PUSH) {
   console.log('  等待 CI 构建（最多 10 分钟）…')
   try {
     const out = execSync(
-      `gh run list --limit 1 --json databaseId,status,conclusion,workflowName --jq '.[0] | .databaseId'`,
-      { encoding: 'utf8', cwd: ROOT }
+      `gh run list --limit 1 --json databaseId --jq ".[0].databaseId"`,
+      { encoding: 'utf8', cwd: ROOT, shell: 'cmd' }
     ).trim()
     if (out) {
       try {
@@ -327,8 +327,8 @@ if (PUSH) {
   }
   try {
     const rel = execSync(
-      `gh release view v${version} --json publishedAt,assets --jq '{publishedAt, assets: [.assets[].name]}'`,
-      { encoding: 'utf8', cwd: ROOT }
+      `gh release view v${version} --json publishedAt,assets --jq "{publishedAt, assets: [.assets[].name]}"`,
+      { encoding: 'utf8', cwd: ROOT, shell: 'cmd' }
     ).trim()
     ok(`Release v${version} 已发布：${rel}`)
   } catch {
