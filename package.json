@@ -1,6 +1,6 @@
 {
   "name": "ai-novel-studio",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "AI 小说创作工作台 - AI Novel Production Engine Desktop",
   "main": "out/main/index.js",
   "author": "ai-novel-studio",
@@ -52,6 +52,7 @@
     "eslint": "^9.30.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.5.3",
+    "sharp": "^0.35.3",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.35.0",
     "vite": "7.3.6",

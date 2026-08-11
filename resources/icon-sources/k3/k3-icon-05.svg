@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="badge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1f2b"/>
+      <stop offset="1" stop-color="#0e0f13"/>
+    </linearGradient>
+    <linearGradient id="quill" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#3E68E8"/>
+      <stop offset="1" stop-color="#7CA0FF"/>
+    </linearGradient>
+  </defs>
+  <rect x="112" y="112" width="800" height="800" rx="190" fill="url(#badge)" stroke="#262e40" stroke-width="2"/>
+  <circle cx="512" cy="476" r="270" fill="#4F7CFF" opacity="0.07"/>
+  <path d="M372 714 L456 574 C436 498 449 424 483 384 C512 350 585 296 655 290 C670 289 676 302 668 322 C674 384 656 452 637 494 C616 542 556 572 474 586 Z" fill="url(#quill)"/>
+  <path d="M384 702 L648 316" stroke="#0e0f13" stroke-width="16" stroke-linecap="round"/>
+  <path d="M637 490 L575 448" stroke="#0e0f13" stroke-width="13" stroke-linecap="round"/>
+  <path d="M655 410 L612 374" stroke="#0e0f13" stroke-width="11" stroke-linecap="round"/>
+  <path d="M748 162 Q759 197 794 208 Q759 219 748 254 Q737 219 702 208 Q737 197 748 162 Z" fill="#4F7CFF"/>
+</svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1f2b"/>
+      <stop offset="1" stop-color="#0e0f13"/>
+    </linearGradient>
+    <mask id="nibCut" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <path d="M512 292C436 300 386 342 360 400C396 520 452 636 512 736C572 636 628 520 664 400C638 342 588 300 512 292Z" fill="#ffffff"/>
+      <path d="M512 700V452" stroke="#000000" stroke-width="16" stroke-linecap="round" fill="none"/>
+      <circle cx="512" cy="440" r="28" fill="#000000"/>
+    </mask>
+  </defs>
+  <rect x="80" y="80" width="864" height="864" rx="200" fill="url(#badge)"/>
+  <path d="M512 292C436 300 386 342 360 400C396 520 452 636 512 736C572 636 628 520 664 400C638 342 588 300 512 292Z" fill="#4F7CFF" mask="url(#nibCut)"/>
+</svg>

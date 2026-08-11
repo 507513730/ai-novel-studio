@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1f2b"/>
+      <stop offset="1" stop-color="#0e0f13"/>
+    </linearGradient>
+    <linearGradient id="penG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b93ff"/>
+      <stop offset="1" stop-color="#4F7CFF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="72" y="72" width="880" height="880" rx="208" fill="url(#bg)"/>
+  <rect x="74" y="74" width="876" height="876" rx="206" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"/>
+
+  <g>
+    <path d="M512 442 C424 392 326 370 244 360 L244 578 C326 588 424 610 512 640 Z" fill="#bfc9dc"/>
+    <path d="M512 442 C600 392 698 370 780 360 L780 578 C698 588 600 610 512 640 Z" fill="#bfc9dc"/>
+    <path d="M512 456 C428 410 334 392 256 380 L256 596 C334 606 428 626 512 654 Z" fill="#d3dbe9"/>
+    <path d="M512 456 C596 410 690 392 768 380 L768 596 C690 606 596 626 512 654 Z" fill="#d3dbe9"/>
+    <path d="M512 470 C430 430 342 412 268 402 L268 614 C342 624 430 642 512 668 Z" fill="#f4f6fb"/>
+    <path d="M512 470 C594 430 682 412 756 402 L756 614 C682 624 594 642 512 668 Z" fill="#f4f6fb"/>
+
+    <path d="M512 470 L512 668" stroke="#b3bdd1" stroke-width="3" stroke-opacity="0.8" fill="none"/>
+
+    <g stroke="#1a1f2b" stroke-opacity="0.16" stroke-width="15" stroke-linecap="round" fill="none">
+      <path d="M318 478 L448 463"/>
+      <path d="M318 532 L452 518"/>
+      <path d="M318 586 L420 574"/>
+      <path d="M576 463 L706 478"/>
+      <path d="M572 518 L706 532"/>
+    </g>
+
+    <path d="M446 620 C416 630 388 632 362 626" stroke="#4F7CFF" stroke-width="9" stroke-linecap="round" fill="none"/>
+
+    <ellipse cx="566" cy="554" rx="122" ry="12" fill="#0e0f13" opacity="0.14" transform="rotate(-42 566 554)"/>
+
+    <g transform="translate(556 520) rotate(-42)">
+      <path d="M-80 -15 L-132 0 L-80 15 Z" fill="#e8edf6"/>
+      <path d="M-126 0 L-98 0" stroke="#9aa7c4" stroke-width="3.5" fill="none"/>
+      <circle cx="-102" cy="0" r="3.2" fill="#9aa7c4"/>
+      <rect x="-80" y="-17" width="200" height="34" rx="17" fill="url(#penG)"/>
+      <rect x="-70" y="-12.5" width="158" height="6" rx="3" fill="#ffffff" opacity="0.28"/>
+      <rect x="84" y="-17" width="12" height="34" fill="#ffffff" opacity="0.25"/>
+    </g>
+  </g>
+</svg>

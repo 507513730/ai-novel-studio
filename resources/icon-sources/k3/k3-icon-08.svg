@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1f2b"/>
+      <stop offset="1" stop-color="#0e0f13"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4F7CFF" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#4F7CFF" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#4F7CFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="96" y="96" width="832" height="832" rx="196" fill="url(#badge)"/>
+  <rect x="97.5" y="97.5" width="829" height="829" rx="194.5" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="3"/>
+  <circle cx="512" cy="286" r="178" fill="url(#glow)"/>
+  <circle cx="668" cy="196" r="11" fill="#4F7CFF" opacity="0.9"/>
+  <circle cx="362" cy="216" r="7" fill="#4F7CFF" opacity="0.7"/>
+  <path d="M512 176 L537.9 250.4 L616.6 252 L553.8 299.6 L576.7 375 L512 330 L447.3 375 L470.2 299.6 L407.4 252 L486.1 250.4 Z" fill="#4F7CFF"/>
+  <path d="M512 540 C468 512 392 496 292 496 L292 716 C392 716 468 732 512 760 C556 732 632 716 732 716 L732 496 C632 496 556 512 512 540 Z" fill="#E9EDF6"/>
+  <path d="M350 582 L444 582" stroke="#C4CEDF" stroke-width="18" stroke-linecap="round"/>
+  <path d="M350 650 L444 650" stroke="#C4CEDF" stroke-width="18" stroke-linecap="round"/>
+  <path d="M580 582 L674 582" stroke="#C4CEDF" stroke-width="18" stroke-linecap="round"/>
+  <path d="M580 650 L674 650" stroke="#C4CEDF" stroke-width="18" stroke-linecap="round"/>
+  <path d="M512 548 L512 752" stroke="#0e0f13" stroke-width="16" stroke-linecap="round"/>
+</svg>
