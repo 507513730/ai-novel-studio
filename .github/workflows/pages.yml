@@ -1,5 +1,10 @@
 name: Deploy Site
 
+# P25：停用自动触发——GitHub Pages 未启用（configure-pages 权限不足，3 连败）。
+# 介绍站建设时：1) 仓库 Settings → Pages → Source: GitHub Actions 手动启用
+#                 2) 本文件恢复 push 触发（移除下方 if: false）
+# 手动触发也不执行（占位站无部署意义）。
+
 on:
   workflow_dispatch:
   push:
@@ -19,6 +24,7 @@ concurrency:
 
 jobs:
   build:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

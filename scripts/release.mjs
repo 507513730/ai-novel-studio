@@ -59,7 +59,13 @@ const plan = readFileSync(join(ROOT, 'PLAN.md'), 'utf8')
 if (plan.includes(`v${version}`)) {
   ok('PLAN.md 含对应版本记录')
 } else {
-  console.log(`  ⚠ PLAN.md 未找到 v${version} 记录（建议补 P 段落勾选）`)
+  fail(`PLAN.md 未找到 v${version} 记录（补 PLAN 段落再发布）`)
+}
+const dl = readFileSync(join(ROOT, 'docs', 'decision-log.md'), 'utf8')
+if (dl.length > 20000 && dl.trim().endsWith('```') || dl.includes('D60')) {
+  ok('decision-log.md 有近期决策记录')
+} else {
+  console.log('  ⚠ decision-log.md 未见近期决策（建议补充）')
 }
 if (failures > 0) {
   console.error('\n文档未就绪，发布终止。补完文档后重跑。')

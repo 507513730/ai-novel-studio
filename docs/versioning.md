@@ -49,6 +49,20 @@ git push origin vX.Y.Z        # 触发 CI（自动构建 + 发布 Release）
 #    □ 本地 release/ 产物版本号 = vX.Y.Z
 ```
 
+## 3.1 合入门禁（2026-08-11 增补，P25 违规教训）
+
+> **任何功能/修复合入 main 即须 bump 版本（PATCH 起）并发版——禁止"合入未发版"状态。**
+
+- 合入 main 的唯一动作：`pnpm release --push`（自动完成：文档检查 → 验证 → 本地构建 → 提交 → tag → push）
+- 代码合入但版本未 bump = 违规（本地 release/ 与文档必然落后，P25 教训）
+- 极小改动（纯注释/文档）可免发版，但必须在同批提交中同步 PLAN.md/decision-log 并明确说明
+
+## 3.2 CI 红叉纪律（2026-08-11 增补）
+
+- **红叉不隔夜**：CI 失败当天处理（修复或按 §7 删除记录），不留历史失败
+- workflow 禁用采用 `jobs.*.if: false` + 注释说明启用条件（如 pages.yml）
+- 删除历史失败 run：`gh run delete <id>`（GitHub 支持）
+
 ## 4. 禁则
 
 - ❌ 禁止 force 已有 tag（`git push --force origin vX.Y.Z`）

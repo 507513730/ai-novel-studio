@@ -1,5 +1,22 @@
 # AI-Novel-Studio 发布说明
 
+## v0.5.1（2026-08-11）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.5.1.exe`（NSIS 向导版：可选安装目录 + 卸载入口）
+- **便携版**：`AI-Novel-Studio-0.5.1-portable-x64.exe`（数据跟随可执行文件 data/ 目录，可放 U 盘）
+
+### UI 统一化（P25）
+- **间距/字号/圆角标准**：CSS 工具类（mt/mb/gap/p 栅格、t1-t3 文本层级、icon-gap）——内联样式 849 → 585 处收敛，全站视觉一致
+- **状态反馈**：按钮/列表项按压动效（:active scale）、hover 过渡统一、面板 hover 提亮
+- **badge 语义变体**：ok/warn/danger/plain 类（收敛内联色）
+- **版本号单一来源**：侧栏显示改为 vite define 注入（修复硬编码 v0.2.0 与实际版本脱节）
+
+### 规范补强（清理红叉）
+- **合入门禁**（versioning §3.1）：功能合入 main 即 bump 发版，禁止"合入未发版"（本地 release/ 与文档落后）
+- **CI 红叉清零**：13 个失败/取消记录已删除；Deploy Site 停用（GitHub Pages 未启用，启用条件写入 site/README.md）
+- **红叉不隔夜纪律**（versioning §3.2 + AGENTS 58）
+
 ## v0.5.0（2026-08-11）
 
 ### 安装方式
