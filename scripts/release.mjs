@@ -190,7 +190,33 @@ if (failures > 0) {
 // ---------- 4.5) 可选：真机 e2e（--e2e，P26） ----------
 if (E2E) {
   console.log('\n[4.5/7] 真机 e2e（round.mjs R1，消耗真实额度）')
+  const userData = join(ROOT, 'release', '.e2e-data')
+  const serverEnv = {
+    ...process.env,
+    AI_NOVEL_USER_DATA: userData,
+    AI_NOVEL_PORT: '3000'
+  }
+  const { spawn } = await import('node:child_process')
+  const server = spawn(process.execPath, [join(ROOT, 'out', 'main', 'server.js')], {
+    env: serverEnv,
+    stdio: 'ignore'
+  })
   try {
+    // 等 server ready（最多 15s）
+    let ready = false
+    for (let i = 0; i < 30; i++) {
+      try {
+        const r = await fetch('http://127.0.0.1:3000/api/health')
+        if (r.ok) {
+          ready = true
+          break
+        }
+      } catch {
+        /* 未就绪 */
+      }
+      await new Promise((r2) => setTimeout(r2, 500))
+    }
+    if (!ready) throw new Error('server 未在 15s 内就绪')
     run('node scripts/e2e/round.mjs 1', { stdio: 'pipe', timeout: 40 * 60 * 1000 })
     ok('e2e R1 通过（含 T1 配置 / T2 创作链）')
   } catch (err) {
@@ -198,6 +224,13 @@ if (E2E) {
     fail('e2e 失败（见输出）')
     console.error(out)
     process.exit(1)
+  } finally {
+    server.kill()
+    try {
+      rmSync(userData, { recursive: true, force: true })
+    } catch {
+      /* 忽略清理失败 */
+    }
   }
 }
 
