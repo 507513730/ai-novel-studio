@@ -1,0 +1,11 @@
+# P26：依赖安全（npm weekly + 自动 PR）
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    versioning-strategy: increase
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies

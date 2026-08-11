@@ -1,0 +1,63 @@
+name: Release Readiness
+
+# P26 项1：合入门禁技术强制（versioning.md §3.1）
+# src/** 变更时必须已 bump 版本 + 已写 release-notes；否则 fail——"合入未发版"从自觉变编译错误。
+# 纯文档/配置变更（docs/site/.github/scripts/根配置）不触发。
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect source changes
+        id: src
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          echo "base=$BASE head=$HEAD"
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD" || echo "")
+          if echo "$CHANGED" | grep -qE "^(client/src|server/src|electron|shared/src)/"; then
+            echo "src_changed=true"
+            echo "src_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "src_changed=false"
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify version bumped + release-notes updated
+        if: steps.src.outputs.src_changed == 'true'
+        run: node -e "
+          const { execSync } = require('node:child_process');
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const version = pkg.version;
+          let lastTag = '';
+          try { lastTag = execSync('git describe --tags --abbrev=0 HEAD~1 2>/dev/null || git describe --tags --abbrev=0').toString().trim(); } catch { lastTag = ''; }
+          console.log('current version:', version, '| last tag:', lastTag || '(none)');
+          const lastVersion = lastTag.replace(/^v/, '');
+          if (lastVersion && version === lastVersion) {
+            console.error('FAIL: src 已变更但 package.json 版本未 bump（' + version + ' == ' + lastVersion + '）。规则：versioning.md §3.1 合入门禁——功能合入必须 bump 版本并发版。');
+            process.exit(1);
+          }
+          const rn = fs.readFileSync('docs/release-notes.md', 'utf8');
+          if (!rn.includes('## v' + version)) {
+            console.error('FAIL: release-notes.md 缺少 \"## v' + version + '\" 段落。先写发布说明（release-notes/PLAN/decision-log）。');
+            process.exit(1);
+          }
+          console.log('OK: 版本已 bump 且 release-notes 已更新');
+        "

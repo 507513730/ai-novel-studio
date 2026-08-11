@@ -3,6 +3,8 @@
 //   node scripts/release.mjs          # 校验 + 验证 + 本地构建 + 输出下一步
 //   node scripts/release.mjs --push   # 额外执行 git commit + tag + push（需先文档就绪）
 //   node scripts/release.mjs --skip-dist  # 跳过本地构建（仅校验+验证，用于纯文档发布）
+//   node scripts/release.mjs --e2e    # 额外跑真机全功能 e2e（round.mjs R1，需真实 API key，消耗少量额度）
+//   node scripts/release.mjs --bump=patch|minor|major  # 自动 bump 版本 + 生成 release-notes 草稿（P26）
 import { execSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
@@ -11,6 +13,8 @@ const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '
 const args = process.argv.slice(2)
 const PUSH = args.includes('--push')
 const SKIP_DIST = args.includes('--skip-dist')
+const E2E = args.includes('--e2e')
+const BUMP = args.find((a) => a.startsWith('--bump='))?.split('=')[1] ?? null
 
 let failures = 0
 const fail = (msg) => {
@@ -22,6 +26,59 @@ const run = (cmd, opts = {}) =>
   execSync(cmd, { stdio: 'pipe', encoding: 'utf8', cwd: ROOT, ...opts }).trim()
 
 console.log('=== AI-Novel-Studio 发布流程 ===\n')
+
+// ---------- 0) --bump：自动 bump 版本 + 生成 release-notes 草稿（P26） ----------
+if (BUMP) {
+  console.log('[0/7] 自动 bump 版本（--bump=' + BUMP + '）')
+  if (!['patch', 'minor', 'major'].includes(BUMP)) {
+    console.error(`--bump 参数非法: ${BUMP}（patch|minor|major）`)
+    process.exit(1)
+  }
+  const pkgPath = join(ROOT, 'package.json')
+  const pkgNow = JSON.parse(readFileSync(pkgPath, 'utf8'))
+  const [maj, min, pat] = pkgNow.version.split('.').map(Number)
+  const next =
+    BUMP === 'major' ? `${maj + 1}.0.0` : BUMP === 'minor' ? `${maj}.${min + 1}.0` : `${maj}.${min}.${pat + 1}`
+  pkgNow.version = next
+  writeFileSync(pkgPath, JSON.stringify(pkgNow, null, 2) + '\n')
+  ok(`版本 ${pkgNow.version} → ${next}`)
+  // release-notes 草稿段落（git log 上次 tag 起）
+  try {
+    const lastTag = execSync('git describe --tags --abbrev=0', { encoding: 'utf8', cwd: ROOT }).trim()
+    const log = execSync(`git log --oneline ${lastTag}..HEAD`, { encoding: 'utf8', cwd: ROOT })
+      .split('\n')
+      .filter(Boolean)
+      .slice(0, 20)
+      .join('\n')
+    const rnPath = join(ROOT, 'docs', 'release-notes.md')
+    const rn = readFileSync(rnPath, 'utf8')
+    const draft = `# AI-Novel-Studio 发布说明
+
+## v${next}（${new Date().toISOString().slice(0, 10)}）
+
+### 安装方式
+- **安装版**：\`AI-Novel-Studio Setup ${next}.exe\`（NSIS 向导版）
+- **便携版**：\`AI-Novel-Studio-${next}-portable-x64.exe\`
+
+### 变更（草稿，请润色）
+
+${log.split('\n').map((l) => '- ' + l.trim()).join('\n')}
+
+## v${pkgNow.version}`
+    // 在旧版本标题前插入完整草稿段
+    const anchor = `## v${pkgNow.version}`
+    const anchorIdx = rn.indexOf(anchor)
+    const headerEnd = rn.indexOf('\n', rn.indexOf('# AI-Novel-Studio')) + 1
+    if (anchorIdx > 0) {
+      writeFileSync(rnPath, draft + '\n' + rn.slice(anchorIdx), 'utf8')
+    } else {
+      writeFileSync(rnPath, draft + '\n' + rn.slice(headerEnd), 'utf8')
+    }
+    console.log('  release-notes 草稿已生成（请润色后发布）')
+  } catch (err) {
+    console.log('  ⚠ 无法生成草稿（无历史 tag？）:', err instanceof Error ? err.message : String(err))
+  }
+}
 
 // ---------- 1) 工作区必须干净 ----------
 console.log('[1/7] 工作区检查')
@@ -74,6 +131,20 @@ if (failures > 0) {
 
 // ---------- 4) 全量验证 ----------
 console.log('\n[4/7] 全量验证')
+// P26：依赖安全（高危漏洞阻断发布）
+try {
+  const auditOut = run('pnpm audit --prod --audit-level=high', { stdio: ['ignore', 'pipe', 'pipe'] })
+  ok('pnpm audit 通过（无高危漏洞）')
+  void auditOut
+} catch (err) {
+  const out = String(err.stdout ?? '').slice(-600)
+  if (/0 vulnerabilities/.test(out)) {
+    ok('pnpm audit 通过（0 vulnerabilities）')
+  } else {
+    fail('pnpm audit：存在高危漏洞（见输出）')
+    console.error(out)
+  }
+}
 const checks = [
   ['typecheck', 'pnpm typecheck'],
   ['lint', 'pnpm lint -- --max-warnings=0 2>&1 || pnpm lint'],
@@ -114,6 +185,20 @@ try {
 if (failures > 0) {
   console.error('\n验证失败，发布终止。')
   process.exit(1)
+}
+
+// ---------- 4.5) 可选：真机 e2e（--e2e，P26） ----------
+if (E2E) {
+  console.log('\n[4.5/7] 真机 e2e（round.mjs R1，消耗真实额度）')
+  try {
+    run('node scripts/e2e/round.mjs 1', { stdio: 'pipe', timeout: 40 * 60 * 1000 })
+    ok('e2e R1 通过（含 T1 配置 / T2 创作链）')
+  } catch (err) {
+    const out = String(err.stdout ?? '').slice(-1200)
+    fail('e2e 失败（见输出）')
+    console.error(out)
+    process.exit(1)
+  }
 }
 
 // ---------- 5) 本地构建 ----------
@@ -176,11 +261,47 @@ if (PUSH) {
   console.log('  3. git tag v' + version + ' && git push origin v' + version)
 }
 
-// ---------- 7) 发布后清单 ----------
+// ---------- 7) 发布后确认（P26：--push 后自动验证 CI + Release） ----------
 console.log('\n[7/7] 发布后确认（参考 docs/versioning.md §3）')
-console.log('  □ CI 通过（gh run list）')
-console.log('  □ Release 资产齐全（gh release view v' + version + '）')
+if (PUSH) {
+  console.log('  等待 CI 构建（最多 10 分钟）…')
+  try {
+    const out = execSync(
+      `gh run list --limit 1 --json databaseId,status,conclusion,workflowName --jq '.[0] | .databaseId'`,
+      { encoding: 'utf8', cwd: ROOT }
+    ).trim()
+    if (out) {
+      try {
+        execSync(`gh run watch ${out} --exit-status --interval 10`, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          encoding: 'utf8',
+          cwd: ROOT,
+          timeout: 10 * 60 * 1000
+        })
+        ok(`CI 通过（run ${out}）`)
+      } catch {
+        console.error(`  ✗ CI 失败（run ${out}）——见 docs/versioning.md §8 回滚决策树`)
+        process.exit(1)
+      }
+    }
+  } catch {
+    console.log('  ⚠ 无法自动查询 CI（gh 未登录或网络问题），请手动 gh run list 确认')
+  }
+  try {
+    const rel = execSync(
+      `gh release view v${version} --json publishedAt,assets --jq '{publishedAt, assets: [.assets[].name]}'`,
+      { encoding: 'utf8', cwd: ROOT }
+    ).trim()
+    ok(`Release v${version} 已发布：${rel}`)
+  } catch {
+    console.error(`  ✗ Release v${version} 未找到——见 versioning.md §8 回滚/排查`)
+  }
+} else {
+  console.log('  □ CI 通过（gh run list）')
+  console.log('  □ Release 资产齐全（gh release view v' + version + '）')
+}
 console.log('  □ test-report.md 追加版本验证记录')
 console.log('  □ 本地安装验证（可选）')
+console.log('  □ 发现问题？→ docs/versioning.md §8 回滚决策树')
 
 console.log('\n=== 完成' + (failures > 0 ? `（${failures} 个问题）` : '') + ' ===')

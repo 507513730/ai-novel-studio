@@ -33,6 +33,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # P26：依赖安全（高危漏洞阻断）
+      - name: Audit dependencies
+        run: pnpm audit --prod --audit-level=high || (echo "::error::存在高危依赖漏洞，请升级或评估"; exit 1)
+
       - name: Typecheck
         run: pnpm typecheck
 
