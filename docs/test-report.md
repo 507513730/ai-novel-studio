@@ -84,3 +84,12 @@
 | T2 创作主链（R1） | 2 | 11 | 生成 2 套方向 — provider DeepSeek has no API key configured; 生成 framing — provider DeepSeek has no API key configured; 字段级 AI 重写（卖点） — provider DeepSeek has no API key configured; 宏观规划 — provider DeepSeek has no API key configured; 世界观生成 — provider DeepSeek has no API key configured; 世界手册非空; 角色阵容生成 — pro | novelId=1 |
 | T3 资产与智能（R1） | 1 | 3 | 拆书（标准档） — provider DeepSeek has no API key configured; 写法特征提取 — provider DeepSeek has no API key configured; 标题工坊生成 — provider DeepSeek has no API key configured |  |
 | T4 导演与恢复（R1） | 5 | 0 |  |  |
+
+---
+
+## v0.6.0 ?????2026-08-11?
+
+- vitest 48/48?+3 P27 ??????eventToCombo/formatCombo/????
+- typecheck 0 / lint 0 / build ? / db-smoke 6/6 / audit 0 ?? / e2e R1 ????
+- ??????pnpm release --push --e2e?????????e2e????? 0.6.0?tag?CI?Release 11:51:30Z?
+- ???? Setup 0.6.0.exe?125MB?? Release ??
