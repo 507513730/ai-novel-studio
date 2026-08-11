@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -110,7 +111,7 @@ export function WorldsLibraryPage(): React.JSX.Element {
             </div>
           </div>
         ))}
-        {!templates.isLoading && templates.data?.templates.length === 0 && <p className="muted">暂无世界样本。</p>}
+        {!templates.isLoading && templates.data?.templates.length === 0 && <EmptyState icon="??" title="??????" desc="????????????????" />}
       </div>
     </div>
   )

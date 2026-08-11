@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Workflow, Plus, Trash2 } from 'lucide-react'
@@ -78,7 +79,7 @@ export function StoryModesPage(): React.JSX.Element {
             </div>
           </div>
         ))}
-        {!modes.isLoading && modes.data?.modes.length === 0 && <p className="muted">暂无推进模式。</p>}
+        {!modes.isLoading && modes.data?.modes.length === 0 && <EmptyState icon="??" title="??????" desc="?????????????????" />}
       </div>
     </div>
   )

@@ -1,12 +1,12 @@
 import { EditorView } from '@codemirror/view'
 
-// P8-1：CodeMirror 主题与应用令牌对齐；P13 F0：颜色走 CSS 变量（多主题联动）
+// P8-1：CodeMirror 主题（颜色随 CSS 变量）；P22-A/B：字体与排版走 --font-editor / --prose-* 变量（设置页即时生效）
 export const novelEditorTheme = EditorView.theme(
   {
     '&': {
       backgroundColor: 'var(--bg)',
       color: 'var(--text)',
-      fontSize: '15px'
+      fontSize: 'var(--prose-font-size)'
     },
     '.cm-scroller': {
       backgroundColor: 'var(--bg)'
@@ -15,10 +15,15 @@ export const novelEditorTheme = EditorView.theme(
       outline: 'none'
     },
     '.cm-content': {
-      fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace",
-      lineHeight: '1.75',
+      fontFamily: 'var(--font-editor)',
+      lineHeight: 'var(--prose-line-height)',
       padding: '16px 20px',
-      caretColor: 'var(--accent-bright)'
+      caretColor: 'var(--accent-bright)',
+      maxWidth: 'var(--prose-max-width)',
+      margin: '0 auto'
+    },
+    '.cm-line': {
+      textIndent: 'var(--prose-indent)'
     },
     '.cm-cursor': {
       borderLeftColor: 'var(--accent-bright)'

@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -94,7 +95,7 @@ export function BaseCharactersPage(): React.JSX.Element {
             </div>
           ))}
           {!templates.isLoading && templates.data?.templates.length === 0 && (
-            <p className="muted" style={{ fontSize: 13 }}>暂无模板。在下方书角色旁点「⭐ 存为模板」。</p>
+            <EmptyState icon="?" title="????????" desc="???????????????????" />
           )}
         </div>
       </div>

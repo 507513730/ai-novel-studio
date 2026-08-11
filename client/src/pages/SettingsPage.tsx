@@ -6,6 +6,7 @@ import { taskTypeLabels, taskTypes } from '@shared/types'
 import { apiFetch } from '../api'
 import { useToast } from '../components/Toast'
 import { THEMES, applyTheme, getStoredTheme, type ThemeKey } from '../utils/theme'
+import { SERIF_FONTS, applyFonts, getStoredFonts, DEFAULTS, type FontSettings } from '../utils/fonts'
 
 function ProvidersPanel(): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -512,10 +513,18 @@ export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'provi
   )
 }
 
-// P19 ②⑤：写作偏好（语言 / 格式 / 写作模式）
+// P19 ②⑤：写作偏好（语言 / 格式 / 写作模式）+ P22-B 正文排版
 function WritingPanel(): React.JSX.Element {
   const { toast } = useToast()
   const [settings, setSettings] = useState<{ lang: string; format: string; writingMode: string } | null>(null)
+  // P22-B：排版状态（同步 fonts 工具，即时生效）
+  const [typeIndent, setTypeIndent] = useState(getStoredFonts().indent)
+  const [typeLineHeight, setTypeLineHeight] = useState(getStoredFonts().lineHeight)
+  const [typeFontSize, setTypeFontSize] = useState(getStoredFonts().fontSize)
+  const [typeMaxWidth, setTypeMaxWidth] = useState(getStoredFonts().maxWidth)
+  const patchType = (patch: Partial<FontSettings>): void => {
+    applyFonts({ ...getStoredFonts(), ...patch })
+  }
   useEffect(() => {
     let alive = true
     void fetch('/api/settings/writing')
@@ -580,11 +589,107 @@ function WritingPanel(): React.JSX.Element {
         <Option label="标准" desc="默认，适度铺陈" current={settings.writingMode === 'standard'} onPick={() => void patch({ writingMode: 'standard' })} />
         <Option label="自由" desc="允许支线发散，结尾回落主线" current={settings.writingMode === 'free'} onPick={() => void patch({ writingMode: 'free' })} />
       </div>
+
+      {/* P22-B：正文排版（编辑器即时生效） */}
+      <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>正文排版</h3>
+      <div className="col" style={{ gap: 8 }}>
+        <label className="row" style={{ fontSize: 12, gap: 8 }}>
+          <input type="checkbox" checked={typeIndent} onChange={(e) => { setTypeIndent(e.target.checked); patchType({ indent: e.target.checked }) }} />
+          首行缩进 2 字符（每行缩进；段落=一行时视觉正确）
+        </label>
+        <div className="row" style={{ fontSize: 12, gap: 8 }}>
+          <span style={{ minWidth: 48 }}>行距</span>
+          <input
+            type="range" min={1.5} max={2.2} step={0.05}
+            value={typeLineHeight}
+            onChange={(e) => { const v = Number(e.target.value); setTypeLineHeight(v); patchType({ lineHeight: v }) }}
+          />
+          <span className="muted">{typeLineHeight.toFixed(2)}</span>
+        </div>
+        <div className="row" style={{ fontSize: 12, gap: 8 }}>
+          <span style={{ minWidth: 48 }}>字号</span>
+          <input
+            type="range" min={14} max={18} step={1}
+            value={typeFontSize}
+            onChange={(e) => { const v = Number(e.target.value); setTypeFontSize(v); patchType({ fontSize: v }) }}
+          />
+          <span className="muted">{typeFontSize}px</span>
+        </div>
+        <label className="row" style={{ fontSize: 12, gap: 8 }}>
+          <input type="checkbox" checked={typeMaxWidth} onChange={(e) => { setTypeMaxWidth(e.target.checked); patchType({ maxWidth: e.target.checked }) }} />
+          阅读宽度（720px 居中，长行更易读）
+        </label>
+      </div>
     </div>
   )
 }
 
 // P13 F0：外观设置（多主题选择器）
+// P22-A：字体选择（正文字体 + 编辑器字体）
+function FontPanel(): React.JSX.Element {
+  const { toast } = useToast()
+  const [settings, setSettings] = useState<FontSettings>(getStoredFonts())
+  const update = (patch: Partial<FontSettings>): void => {
+    const next = { ...settings, ...patch }
+    setSettings(next)
+    applyFonts(next)
+  }
+  return (
+    <div className="col" style={{ gap: 10, marginTop: 6 }}>
+      <div>
+        <div style={{ fontSize: 13, marginBottom: 4 }}>正文字体</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+          {SERIF_FONTS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => update({ prose: f.key })}
+              title={f.desc}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-m)',
+                background: 'var(--bg-card)',
+                border: `1px solid ${settings.prose === f.key ? 'var(--accent)' : 'var(--border)'}`,
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              <div style={{ fontSize: 15, color: 'var(--text)', fontFamily: f.stack }}>
+                {f.label} {settings.prose === f.key ? '✓' : ''}
+              </div>
+              <div className="muted" style={{ fontSize: 11 }}>{f.desc}</div>
+            </button>
+          ))}
+        </div>
+        <div
+          style={{
+            marginTop: 8,
+            padding: '10px 14px',
+            borderRadius: 8,
+            background: 'var(--bg-panel)',
+            fontFamily: SERIF_FONTS.find((f) => f.key === settings.prose)?.stack,
+            fontSize: 15,
+            lineHeight: 1.8,
+            color: 'var(--text-dim)'
+          }}
+        >
+          仿佛面前展开了全新的世界。他推开那扇尘封的门，光线涌了进来——预览文字，用于感受字体观感。
+        </div>
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <span style={{ fontSize: 12 }}>编辑器字体：</span>
+        <select
+          value={settings.editor}
+          onChange={(e) => update({ editor: e.target.value as 'prose' | 'mono' })}
+        >
+          <option value="prose">跟随正文</option>
+          <option value="mono">等宽（JetBrains Mono）</option>
+        </select>
+        <button className="sm" onClick={() => { update({ ...DEFAULTS }); toast('ok', '已恢复默认字体') }}>恢复默认</button>
+      </div>
+    </div>
+  )
+}
+
 function AppearancePanel(): React.JSX.Element {
   const { toast } = useToast()
   const [current, setCurrent] = useState<ThemeKey>(getStoredTheme())
@@ -620,6 +725,13 @@ function AppearancePanel(): React.JSX.Element {
           </button>
         ))}
       </div>
+
+      {/* P22-A：字体设置 */}
+      <h2 style={{ marginTop: 8 }}>字体</h2>
+      <p className="muted" style={{ fontSize: 12 }}>
+        正文字体作用于写作编辑器与预览；界面字体保持系统栈。打包字体为开源 OFL 协议（霞鹜文楷/思源宋体/思源黑体），离线可用。
+      </p>
+      <FontPanel />
 
       {/* P16 P0：数据管理 */}
       <h2 style={{ marginTop: 8 }}>数据与卸载</h2>

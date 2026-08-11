@@ -71,6 +71,37 @@
   /* ---- 字体 ---- */
   --font-sans: 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  /* P22-A：正文字体（设置页可切换；--font-serif 由 utils/fonts.ts 运行时覆盖） */
+  --font-serif: 'LXGW WenKai', 'KaiTi', 'SimSun', serif;
+  --font-editor: var(--font-serif);
+  /* P22-B：正文排版（设置页可调，CSS 变量驱动） */
+  --prose-font-size: 15px;
+  --prose-line-height: 1.75;
+  --prose-indent: 2em;
+  --prose-max-width: 720px;
+}
+
+/* P22-A：打包开源字体（OFL）——霞鹜文楷 / 思源宋体 / 思源黑体 */
+@font-face {
+  font-family: 'LXGW WenKai';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/lxgw-wenkai-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/noto-serif-sc-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/noto-sans-sc-400.woff2') format('woff2');
 }
 
 /* ============================================================
@@ -326,6 +357,19 @@ select:focus,
 textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* P22-C7：键盘导航焦点可见性（鼠标点击不显示 ring，Tab 导航清晰） */
+:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible,
+[role='button']:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
 }
 
 textarea {

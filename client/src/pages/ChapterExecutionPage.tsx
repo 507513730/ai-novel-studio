@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, memo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import CodeMirror from '@uiw/react-codemirror'
@@ -6,6 +6,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { novelEditorTheme } from '../editor/theme'
 import { novelApi, generateChapterSse, styleApi, studioApi } from '../api'
+import type { ChapterSummary } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
@@ -187,15 +188,29 @@ export function ChapterExecutionPage(): React.JSX.Element {
     await queryClient.invalidateQueries({ queryKey: ['chapters', id] })
   }
 
-  // A2：Ctrl+S 保存（CodeMirror keymap）
+  // A2：Ctrl+S 保存（CodeMirror keymap）+ P22-C4 快捷键（生成/审核/回灌）
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
-      // P9 D16：输入框/文本域聚焦时不触发全局保存
+      // P9 D16：输入框/文本域聚焦时不触发全局快捷键
       const t = e.target as HTMLElement | null
       if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+      if (mod && key === 's') {
         e.preventDefault()
         void saveContent().catch(() => undefined)
+      } else if (mod && key === 'enter') {
+        // P22-C4：Ctrl+Enter 生成正文
+        e.preventDefault()
+        void generate()
+      } else if (mod && e.shiftKey && key === 'r') {
+        // P22-C4：Ctrl+Shift+R 审核
+        e.preventDefault()
+        void withBusy('review', () => runReview())
+      } else if (mod && e.shiftKey && key === 'b') {
+        // P22-C4：Ctrl+Shift+B 回灌
+        e.preventDefault()
+        void withBusy('backfill', () => backfill())
       }
     }
     window.addEventListener('keydown', handler)
@@ -657,60 +672,15 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
         {resourceTab === 'chapters' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {list.map((c) => {
-              const stColor =
-                c.status === 'reviewed' || c.status === 'done'
-                  ? 'var(--ok)'
-                  : c.status === 'written'
-                    ? 'var(--accent)'
-                    : c.status === 'failed'
-                      ? 'var(--danger)'
-                      : 'var(--text-faint)'
-              return (
-                <div
-                  key={c.id}
-                  role="button"
-                  tabIndex={0}
-                  className={`list-item${selectedChapter === c.id ? ' active' : ''}`}
-                  onClick={() => void selectChapter(c.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      void selectChapter(c.id)
-                    }
-                  }}
-                >
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.title || `第 ${c.id} 章`}
-                    </span>
-                    {c.wordCount > 0 && <span className="muted" style={{ fontSize: 11 }}>{c.wordCount}</span>}
-                  </div>
-                  <div className="row" style={{ gap: 6, marginTop: 2 }}>
-                    <span
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: 4,
-                        background: stColor,
-                        display: 'inline-block',
-                        flexShrink: 0
-                      }}
-                    />
-                    <span className="muted" style={{ fontSize: 11 }}>
-                      {c.status} {c.volumeTitle ? `· ${c.volumeTitle}` : ''}
-                    </span>
-                  </div>
-                  {/* P12 B1：下一步提示 */}
-                  <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-faint)' }}>
-                    {c.status === 'planned' && '下一步：生成正文'}
-                    {c.status === 'written' && '下一步：AI 审核'}
-                    {['reviewed', 'done'].includes(c.status) && '✓ 可进入下一章'}
-                    {c.status === 'failed' && '⚠️ 生成失败，可重试'}
-                  </div>
-                </div>
-              )
-            })}
+            {list.map((c) => (
+              // P22-C1：memo 化列表项（100+ 章时避免整列表重渲染）
+              <ChapterListItem
+                key={c.id}
+                c={c}
+                selected={selectedChapter === c.id}
+                onSelect={() => void selectChapter(c.id)}
+              />
+            ))}
             {chapters.isLoading && <p className="muted" style={{ fontSize: 12 }}>加载中…</p>}
             {chapters.isError && (
               <p className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
@@ -1322,3 +1292,58 @@ export function ChapterExecutionPage(): React.JSX.Element {
     </div>
   )
 }
+
+// P22-C1???????memo ??100+ ??????
+const ChapterListItem = memo(function ChapterListItem({
+  c,
+  selected,
+  onSelect
+}: {
+  c: ChapterSummary
+  selected: boolean
+  onSelect: () => void
+}): React.JSX.Element {
+  const stColor =
+    c.status === 'reviewed' || c.status === 'done'
+      ? 'var(--ok)'
+      : c.status === 'written'
+        ? 'var(--accent)'
+        : c.status === 'failed'
+          ? 'var(--danger)'
+          : 'var(--text-faint)'
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`list-item${selected ? ' active' : ''}`}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+    >
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {c.title || `? ${c.id} ?`}
+        </span>
+        {c.wordCount > 0 && <span className="muted" style={{ fontSize: 11 }}>{c.wordCount}</span>}
+      </div>
+      <div className="row" style={{ gap: 6, marginTop: 2 }}>
+        <span
+          style={{ width: 7, height: 7, borderRadius: 4, background: stColor, display: 'inline-block', flexShrink: 0 }}
+        />
+        <span className="muted" style={{ fontSize: 11 }}>
+          {c.status} {c.volumeTitle ? `? ${c.volumeTitle}` : ''}
+        </span>
+      </div>
+      <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-faint)' }}>
+        {c.status === 'planned' && '????????'}
+        {c.status === 'written' && '????AI ??'}
+        {['reviewed', 'done'].includes(c.status) && '? ??????'}
+        {c.status === 'failed' && '?? ????????'}
+      </div>
+    </div>
+  )
+})

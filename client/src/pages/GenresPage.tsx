@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Tags, Plus } from 'lucide-react'
@@ -69,7 +70,7 @@ export function GenresPage(): React.JSX.Element {
 
       <div className="panel">
         <h2 style={{ marginBottom: 10 }}>书内自定义流派</h2>
-        {customGenres.length === 0 && <p className="muted" style={{ fontSize: 13 }}>暂无书内自定义流派。</p>}
+        {customGenres.length === 0 && <EmptyState icon="??" title="?????????" desc="??????????????????" />}
         <div className="col" style={{ gap: 6 }}>
           {novels.data?.novels.map((n) => {
             const cg = customGenres.filter((g) => g.novelId === n.id)

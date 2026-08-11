@@ -55,6 +55,8 @@ export function StudioPage(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [draft, setDraft] = useState<SolutionView | null>(null)
   const [isNew, setIsNew] = useState(false)
+  // P22-C5：拖拽中的步骤索引
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
   // P21-5h：AI 生成方案
   const [genPrompt, setGenPrompt] = useState('')
   const [genBusy, setGenBusy] = useState(false)
@@ -384,10 +386,38 @@ export function StudioPage(): React.JSX.Element {
                   </button>
                 </div>
                 {draft.steps.length === 0 && (
-                  <p className="muted" style={{ fontSize: 12 }}>还没有步骤。添加步骤选择智能体，或用右侧「AI 生成方案」自动创建。</p>
+                  <p className="muted" style={{ fontSize: 12 }}>还没有步骤。添加步骤选择智能体，或用「AI 生成方案」自动创建。</p>
                 )}
                 {draft.steps.map((step, i) => (
-                  <div key={i} style={{ borderTop: '1px solid var(--border)', padding: '8px 0' }}>
+                  // P22-C5：拖拽排序（draggable + drop 交换）
+                  <div
+                    key={i}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', String(i))
+                      e.dataTransfer.effectAllowed = 'move'
+                      setDragIdx(i)
+                    }}
+                    onDragEnd={() => setDragIdx(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      const from = Number(e.dataTransfer.getData('text/plain'))
+                      if (Number.isInteger(from) && from >= 0 && from < draft.steps.length && from !== i) {
+                        const next = [...draft.steps]
+                        const [moved] = next.splice(from, 1)
+                        next.splice(i, 0, moved)
+                        patchDraft({ steps: next })
+                      }
+                    }}
+                    style={{
+                      borderTop: '1px solid var(--border)',
+                      padding: '8px 0',
+                      cursor: 'grab',
+                      opacity: dragIdx === i ? 0.4 : 1,
+                      transition: 'opacity 150ms'
+                    }}
+                  >
                     <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                       <span className="badge">{i + 1}</span>
                       <select

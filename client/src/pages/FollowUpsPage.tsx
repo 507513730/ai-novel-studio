@@ -1,3 +1,4 @@
+import { EmptyState } from '../components/EmptyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Workflow } from 'lucide-react'
@@ -21,7 +22,7 @@ export function FollowUpsPage(): React.JSX.Element {
 
       <div className="panel" style={{ marginBottom: 16, background: 'var(--bg-card)' }}>
         <h2 style={{ marginBottom: 8 }}>失败任务（需处理）</h2>
-        {failed.length === 0 && <p className="muted" style={{ fontSize: 13 }}>暂无失败任务。自动导演的阻塞/失败会出现在这里。</p>}
+        {failed.length === 0 && <EmptyState icon="?" title="??????" desc="???????/?????????" />}
         <div className="col" style={{ gap: 8 }}>
           {failed.map((j) => {
             const nid = Number(j.payload.novelId ?? 0)

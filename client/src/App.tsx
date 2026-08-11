@@ -29,9 +29,30 @@ const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then((m) => ({ 
 const PromptWorkbenchPage = lazy(() => import('./pages/PromptWorkbenchPage').then((m) => ({ default: m.PromptWorkbenchPage })))
 const StudioPage = lazy(() => import('./pages/StudioPage').then((m) => ({ default: m.StudioPage })))
 
+// P22-C2：骨架屏（路由懒加载 fallback，替代纯文字）
 function PageFallback(): React.JSX.Element {
+  const shimmer: React.CSSProperties = {
+    background: 'linear-gradient(90deg, var(--bg-card) 25%, var(--bg-elevated) 50%, var(--bg-card) 75%)',
+    backgroundSize: '200% 100%',
+    animation: 'shimmer 1.4s infinite',
+    borderRadius: 8
+  }
   return (
-    <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>加载中…</div>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ width: '40%', height: 24, ...shimmer }} />
+      <div className="panel" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ width: '70%', height: 14, ...shimmer }} />
+        <div style={{ width: '55%', height: 14, ...shimmer }} />
+        <div style={{ width: '85%', height: 14, ...shimmer }} />
+        <div style={{ width: '60%', height: 14, ...shimmer }} />
+      </div>
+      <div className="panel" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ width: '45%', height: 14, ...shimmer }} />
+        <div style={{ width: '75%', height: 14, ...shimmer }} />
+        <div style={{ width: '50%', height: 14, ...shimmer }} />
+      </div>
+      <style>{`@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
+    </div>
   )
 }
 

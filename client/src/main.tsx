@@ -5,10 +5,13 @@ import { App } from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider, toastGlobal } from './components/Toast'
 import { initTheme } from './utils/theme'
+import { initFonts } from './utils/fonts'
 import './index.css'
 
 // P13 F0：主题在 React 渲染前应用（防闪烁）
 initTheme()
+// P22-A：字体与排版同样前置应用（防字体闪变）
+initFonts()
 
 // E3 全局 unhandledrejection 兜底（P9 B6：用户可见提示）
 window.addEventListener('unhandledrejection', (e) => {

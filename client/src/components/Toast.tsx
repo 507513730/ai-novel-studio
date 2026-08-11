@@ -28,7 +28,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
 
   const toast = useCallback((type: ToastType, text: string): void => {
     const id = ++seq.current
-    setToasts((t) => [...t, { id, type, text }])
+    // P22-C6：堆叠上限 3 条（连发不铺满屏幕）
+    setToasts((t) => [...t, { id, type, text }].slice(-3))
     setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id))
     }, 3000)
