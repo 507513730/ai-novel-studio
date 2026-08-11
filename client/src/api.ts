@@ -207,6 +207,8 @@ export const studioApi = {
     js(`/solutions/${id}/run`, { method: 'POST', body: JSON.stringify({ novelId, chapterId, humanOverride }) }),
   solutionGenerate: (body: { description: string; genre?: string }): Promise<{ name: string; description: string; steps: Array<Record<string, unknown>> }> =>
     js('/solutions/generate', { method: 'POST', body: JSON.stringify(body) }),
+  solutionProduceChapter: (id: number, novelId: number, chapterId: number): Promise<{ content: string; wordCount: number; title: string | null; degraded: boolean; outputs: Array<{ role: string; ok: boolean }> }> =>
+    js(`/solutions/${id}/produce-chapter`, { method: 'POST', body: JSON.stringify({ novelId, chapterId }) }),
   solutionExport: (id: number): Promise<string> => j(`/solutions/${id}/export`),
   solutionImport: (bundle: string): Promise<{ solutionId: number; name: string }> =>
     js('/solutions/import', { method: 'POST', body: JSON.stringify({ bundle }) }),

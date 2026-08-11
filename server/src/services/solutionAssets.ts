@@ -67,6 +67,13 @@ export interface SolutionStep {
   maxTokens?: number
   // P21-5c 预留：条件分支（依赖上一步输出字段）
   if?: { field: string; op: '<' | '>' | '=='; value: number } | null
+  // P30：生产模式字段（stage='whole_book' 时生效——章节生产流水线）
+  production?: {
+    // 每步产出类型：outline=本章大纲 / draft=正文片段 / dialogue=对话 / scene=场景 / review=审校意见 / final=最终合并
+    output: 'outline' | 'draft' | 'dialogue' | 'scene' | 'review' | 'final'
+    // 审校步骤的修订轮数（默认 1；仅 review 步骤有效）
+    reviewRounds?: number
+  }
 }
 
 export interface Solution {
@@ -84,11 +91,16 @@ export interface Solution {
 const STEP_SCHEMA = (s: unknown): s is SolutionStep => {
   if (typeof s !== 'object' || s === null) return false
   const r = s as Record<string, unknown>
-  return (
-    typeof r.agentId === 'number' &&
-    typeof r.role === 'string' &&
-    (r.stage === 'post_generate' || r.stage === 'review' || r.stage === 'whole_book')
-  )
+  if (typeof r.agentId !== 'number' || typeof r.role !== 'string') return false
+  if (r.stage !== 'post_generate' && r.stage !== 'review' && r.stage !== 'whole_book') return false
+  // P30：production 字段校验（stage='whole_book' 时建议但非强制）
+  if (r.production !== undefined && r.production !== null) {
+    const p = r.production as Record<string, unknown>
+    if (typeof p.output !== 'string') return false
+    const outputs = ['outline', 'draft', 'dialogue', 'scene', 'review', 'final']
+    if (!outputs.includes(p.output)) return false
+  }
+  return true
 }
 
 /** 解析 steps_json（宽松：非法 step 丢弃） */

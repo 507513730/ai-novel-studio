@@ -406,6 +406,13 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     statements: [
       `ALTER TABLE novel ADD COLUMN last_opened_at TEXT`
     ]
+  },
+  {
+    // P30：书级生产方案绑定（production pipeline 逐章走流水线）
+    version: 13,
+    statements: [
+      `ALTER TABLE novel ADD COLUMN current_solution_id INTEGER`
+    ]
   }
 ]
 

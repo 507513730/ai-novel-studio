@@ -145,11 +145,13 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           titleGroup: z.unknown().optional(),
           framing: z.unknown().optional(),
           genre: z.string().optional(),
-          guidance: z.string().max(2000).optional()
+          guidance: z.string().max(2000).optional(),
+          // P30：书级生产方案绑定（production pipeline 逐章走流水线）
+          currentSolutionId: z.number().int().positive().nullable().optional()
         })
         .parse(req.body)
       const sets: string[] = []
-      const params: Array<string | number> = []
+      const params: Array<string | number | null> = []
       if (input.title !== undefined) {
         sets.push('title = ?')
         params.push(input.title)
@@ -177,6 +179,10 @@ export function createNovelsRouter(db: DatabaseSync): Router {
       if (input.guidance !== undefined) {
         sets.push('guidance = ?')
         params.push(input.guidance)
+      }
+      if (input.currentSolutionId !== undefined) {
+        sets.push('current_solution_id = ?')
+        params.push(input.currentSolutionId)
       }
       if (sets.length === 0) {
         res.json({ ok: true })

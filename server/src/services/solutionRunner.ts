@@ -226,3 +226,225 @@ export function summarizeRun(run: RunResult): string {
     ...okSteps.map((o) => `步骤${o.stepIndex + 1}·${o.role}：${o.output}`)
   ].join('\n')
 }
+
+// ============================================================
+// P30：章节生产流水线（stage='whole_book'）
+// 某章正文生成时按方案步骤接力 agent（情节规划→场景/对话→审校→最终合并），
+// 最后合并落库 + 版本快照 + 回灌。替代默认 prose 单次流式生成。
+// ============================================================
+
+const OUTPUT_INSTRUCTION: Record<string, string> = {
+  outline: '输出本章大纲 JSON：{"title": "章节标题（≤20字）", "scenes": [{"purpose": "场景目的", "summary": "场景内容要点"}]}，3-6 个场景',
+  draft: '输出正文片段（Markdown 纯文本，800-1500 字）——只写这一部分，不要输出标题/总结',
+  dialogue: '输出本章对话内容（纯文本对话段落，300-800 字）——对话为主，穿插动作与神态',
+  scene: '输出一个场景的完整描写（纯文本，500-1200 字）——感官化、推动情节或揭示人物',
+  review: '输出审校意见 JSON：{"issues": [{"severity": "high|medium|low", "problem": "问题", "suggestion": "修改建议"}], "verdict": "通过|需修改"}',
+  final: '输出最终全文（纯文本，完整章节内容）——整合前面所有步骤的产出，符合本章目标'
+}
+
+export interface ProductionChapterResult {
+  content: string
+  wordCount: number
+  title: string | null
+  outputs: StepOutput[]
+  degraded: boolean
+  degradedReasons: string[]
+}
+
+/** 章节生产模式执行：按方案 whole_book 步骤接力产出正文并落库 */
+export async function runProductionChapter(
+  db: DatabaseSync,
+  solutionId: number,
+  novelId: number,
+  chapterId: number,
+  opts: RunSolutionOptions = {}
+): Promise<ProductionChapterResult> {
+  const solution = loadSolution(db, solutionId)
+  if (!solution) throw new Error('solution not found')
+  if (!solution.enabled) throw new Error(`方案「${solution.name}」已停用`)
+
+  const chapter = db
+    .prepare('SELECT id, title, content, status FROM chapter WHERE id = ? AND novel_id = ?')
+    .get(chapterId, novelId) as { id: number; title: string; content: string; status: string } | undefined
+  if (!chapter) throw new Error('chapter not found')
+  if (chapter.content.trim()) throw new Error('章节已有正文（生产模式只用于空章节）')
+
+  const outputs: StepOutput[] = []
+  const degradedReasons: string[] = []
+  const draftParts: string[] = [] // 片段合并（draft/scene/dialogue）
+  let outline: { title?: string; scenes?: Array<{ purpose?: string; summary?: string }> } | null = null
+  let finalContent = ''
+
+  for (let i = 0; i < solution.steps.length; i++) {
+    if (opts.signal?.aborted) break
+    const step = solution.steps[i]
+    if (step.stage !== 'whole_book') {
+      throw new Error(`生产模式方案包含非生产步骤（${step.role}）——请仅用章节生产步骤`)
+    }
+    const prod = step.production ?? { output: 'draft' as const, reviewRounds: 1 }
+    const t0 = Date.now()
+    try {
+      const agent = db.prepare('SELECT name, system_prompt, description, body_md FROM agent WHERE id = ?').get(step.agentId) as
+        | { name: string; system_prompt: string; description: string; body_md: string }
+        | undefined
+      if (!agent) throw new Error(`步骤 ${step.role} 引用不存在的智能体 #${step.agentId}`)
+
+      const instruction = OUTPUT_INSTRUCTION[prod.output] ?? OUTPUT_INSTRUCTION.draft
+      const prevBlock =
+        outputs.length > 0
+          ? `\n\n【已完成步骤输出】\n${outputs.map((o, idx) => `步骤${idx + 1}·${o.role}：\n${o.output.slice(0, 2000)}`).join('\n---\n')}`
+          : ''
+
+      const prompt = [
+        agent.system_prompt || agent.body_md || `你是${agent.name}。`,
+        agent.description ? `\n职责：${agent.description}` : '',
+        agent.body_md ? `\n\n${agent.body_md}` : '',
+        '\n\n章节目标：',
+        chapter.title ? `《${chapter.title}》` : '（未命名章节）',
+        `\n${JSON_FORMAT}\n\n${instruction}`,
+        prevBlock,
+        `\n\n（步骤 ${i + 1}/${solution.steps.length}，请只完成本步骤职责）`
+      ].join('\n')
+
+      let result: string
+      if (prod.output === 'outline') {
+        const r = await withTimeout(
+          callLlmJson<{ outline: { title?: string; scenes?: Array<{ purpose?: string; summary?: string }> } }>(
+            db,
+            'extraction',
+            {
+              novelId,
+              messages: [{ role: 'user', content: prompt }],
+              maxTokens: step.maxTokens ?? 2048
+            },
+            (obj) => {
+              const o = (obj as Record<string, unknown>).outline
+              if (o && typeof o === 'object') {
+                const or = o as { title?: unknown; scenes?: unknown }
+                return {
+                  outline: {
+                    title: typeof or.title === 'string' ? or.title : undefined,
+                    scenes: Array.isArray(or.scenes) ? (or.scenes as Array<{ purpose?: string; summary?: string }>) : undefined
+                  }
+                }
+              }
+              return null
+            },
+            `production-outline-${i}`
+          ),
+          STEP_TIMEOUT_MS
+        )
+        outline = r.outline
+        result = JSON.stringify(r.outline)
+      } else if (prod.output === 'review') {
+        const rounds = prod.reviewRounds ?? 1
+        const r = await withTimeout(
+          callLlmJson<{ issues: Array<{ severity: string; problem: string; suggestion: string }>; verdict: string }>(
+            db,
+            'extraction',
+            {
+              novelId,
+              messages: [{ role: 'user', content: prompt }],
+              maxTokens: step.maxTokens ?? 2048
+            },
+            (obj) => {
+              const o = obj as Record<string, unknown>
+              return {
+                issues: Array.isArray(o.issues)
+                  ? o.issues.map((x) => {
+                      const xi = x as Record<string, unknown>
+                      return {
+                        severity: String(xi.severity ?? 'medium'),
+                        problem: String(xi.problem ?? ''),
+                        suggestion: String(xi.suggestion ?? '')
+                      }
+                    })
+                  : [],
+                verdict: String(o.verdict ?? '通过')
+              }
+            },
+            `production-review-${i}`
+          ),
+          STEP_TIMEOUT_MS
+        )
+        result = JSON.stringify(r)
+        void rounds
+      } else if (prod.output === 'final') {
+        const r = await withTimeout(
+          callLlmJson<{ content: string }>(
+            db,
+            'extraction',
+            {
+              novelId,
+              messages: [{ role: 'user', content: prompt }],
+              maxTokens: step.maxTokens ?? 8192
+            },
+            (obj) => {
+              const o = obj as Record<string, unknown>
+              if (typeof o.content === 'string' && o.content.trim().length > 100) return { content: o.content }
+              return null
+            },
+            `production-final-${i}`
+          ),
+          STEP_TIMEOUT_MS
+        )
+        finalContent = r.content
+        result = finalContent.slice(0, 500) + '…'
+      } else {
+        // draft / scene / dialogue：正文片段（收集合并）
+        const r = await withTimeout(
+          callLlmJson<{ content: string }>(
+            db,
+            'extraction',
+            {
+              novelId,
+              messages: [{ role: 'user', content: prompt }],
+              maxTokens: step.maxTokens ?? 4096
+            },
+            (obj) => {
+              const o = obj as Record<string, unknown>
+              if (typeof o.content === 'string' && o.content.trim().length > 50) return { content: o.content }
+              return null
+            },
+            `production-part-${i}`
+          ),
+          STEP_TIMEOUT_MS
+        )
+        draftParts.push(r.content.trim())
+        result = r.content.slice(0, 300) + '…'
+      }
+
+      outputs.push({ stepIndex: i, role: step.role, stage: 'whole_book', output: result, ok: true, ms: Date.now() - t0 })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      outputs.push({ stepIndex: i, role: step.role, stage: 'whole_book', output: '', ok: false, error: message, ms: Date.now() - t0 })
+      degradedReasons.push(`${step.role}: ${message}`)
+    }
+  }
+
+  // 最终正文：final 步骤优先；无 final 步骤时合并片段（标题用大纲标题）
+  let content = finalContent
+  if (!content.trim() && draftParts.length > 0) {
+    content = draftParts.join('\n\n')
+  }
+  if (!content.trim()) {
+    throw new Error('生产流水线未产出正文（所有产出步骤失败）')
+  }
+  const title = outline?.title?.trim() || chapter.title || ''
+
+  // 落库 + 版本快照 + 状态
+  const wordCount = (content.match(/[\u4e00-\u9fff]/g) ?? []).length
+  db.prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)').run(chapterId, content, 'AI 生产（方案流水线）')
+  db.prepare(
+    "UPDATE chapter SET title = CASE WHEN ? != '' THEN ? ELSE title END, content = ?, word_count = ?, status = 'written', updated_at = datetime('now') WHERE id = ?"
+  ).run(title, title, content, wordCount, chapterId)
+
+  return {
+    content,
+    wordCount,
+    title: title || null,
+    outputs,
+    degraded: degradedReasons.length > 0,
+    degradedReasons
+  }
+}

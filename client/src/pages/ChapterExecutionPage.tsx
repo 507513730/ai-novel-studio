@@ -388,6 +388,21 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const solutionsForRun = useQuery({ queryKey: ['studio-solutions', 'run'], queryFn: studioApi.solutions })
   const [solutionId, setSolutionId] = useState<number | null>(null)
   const [solutionRunSummary, setSolutionRunSummary] = useState<string | null>(null)
+  // P30：以方案生产正文（whole_book 步骤接力，空章节）
+  const produceWithSolution = async (): Promise<void> => {
+    if (!selectedChapter || !solutionId) return
+    if (!window.confirm('用方案步骤接力生产正文（将替换本章内容）？')) return
+    setActionError(null)
+    setSolutionRunSummary(null)
+    const r = await studioApi.solutionProduceChapter(solutionId, id, selectedChapter)
+    setContent(r.content)
+    savedContentRef.current = r.content
+    dirtyRef.current = false
+    setActionMsg(`方案生产完成：${r.wordCount} 字${r.degraded ? '（部分步骤降级）' : ''}`)
+    setSolutionRunSummary(r.outputs.map((o, i) => `${i + 1}.${o.role}${o.ok ? '' : ' ✗'}`).join(' | '))
+    await invalidate()
+  }
+
   const runSolutionOnChapter = async (): Promise<void> => {
     if (!selectedChapter || !solutionId) return
     setSolutionRunSummary(null)
@@ -1007,13 +1022,13 @@ export function ChapterExecutionPage(): React.JSX.Element {
           >
             {actionBusy === 'review' ? '审核中…' : 'AI 审核'}
           </button>
-          {/* P21-3：跑创作方案（工坊定义的 agent 流水线） */}
+          {/* P21-3：跑创作方案（工坊定义的 agent 流水线）+ P30：以方案生产正文（whole_book 步骤） */}
           <div className="col gap-2">
             <div className="row gap-2">
               <select
                 style={{ flex: 1, fontSize: 12 }}
                 value={solutionId ?? ''}
-                disabled={actionBusy !== null || !selectedChapter || !content}
+                disabled={actionBusy !== null || !selectedChapter}
                 onChange={(e) => setSolutionId(Number(e.target.value) || null)}
               >
                 <option value="">方案流水线（可选）…</option>
@@ -1027,6 +1042,16 @@ export function ChapterExecutionPage(): React.JSX.Element {
                 onClick={() => void withBusy('solution-run', () => runSolutionOnChapter())}
               >
                 {actionBusy === 'solution-run' ? '运行中…' : '跑方案'}
+              </button>
+              {/* P30：以方案生产正文（whole_book 步骤接力，空章节专用） */}
+              <button
+                className="sm"
+                style={{ color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
+                disabled={actionBusy !== null || !selectedChapter || content !== '' || !solutionId}
+                title="用方案的章节生产步骤接力生成正文（需空章节）"
+                onClick={() => void withBusy('solution-produce', () => produceWithSolution())}
+              >
+                {actionBusy === 'solution-produce' ? '流水线生产中…' : '以方案生产正文'}
               </button>
             </div>
             {solutionRunSummary && (

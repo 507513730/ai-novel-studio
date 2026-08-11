@@ -12,7 +12,7 @@ import {
   parseSolutionSteps,
   type SolutionStep
 } from '../services/solutionAssets'
-import { runSolutionById, summarizeRun } from '../services/solutionRunner'
+import { runSolutionById, summarizeRun, runProductionChapter } from '../services/solutionRunner'
 import { parseAgentMd } from '../services/solutionAssets'
 
 // ============================================================
@@ -187,6 +187,23 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
         },
         'solution-generate'
       )
+      res.json(result)
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- P30：章节生产模式（方案 whole_book 步骤接力生成正文） ----------
+  router.post('/solutions/:id/produce-chapter', async (req, res, next) => {
+    try {
+      const id = Number(req.params.id)
+      const input = z
+        .object({
+          novelId: z.number().int().positive(),
+          chapterId: z.number().int().positive()
+        })
+        .parse(req.body ?? {})
+      const result = await runProductionChapter(db, id, input.novelId, input.chapterId)
       res.json(result)
     } catch (err) {
       next(err)

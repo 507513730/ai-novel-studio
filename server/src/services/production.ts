@@ -4,6 +4,7 @@ import { callLlmJson } from './jsonSafe'
 import { buildChapterReviewContext, buildBackfillContext, buildFixContext, buildPatchContext, applyPatches } from './context'
 import { writeCharacterStates } from './ledger'
 import { isJobCancelled } from './jobQueue'
+import { runProductionChapter } from './solutionRunner'
 
 // ============================================================
 // 整本批量生产 pipeline（PLAN §7.2 / P2）
@@ -71,7 +72,24 @@ export async function runProductionPipeline(
 
     try {
       // 1. 生成（非流式，P2.1 🟡9：字数不足或失败重试 1 次）
-      let gen = await generateChapter(db, novelId, ch.id)
+      // P30：书级绑定生产方案（whole_book）时逐章走流水线
+      let gen: Awaited<ReturnType<typeof generateChapter>>
+      const bound = db
+        .prepare("SELECT s.id, s.steps_json FROM novel n JOIN solution s ON s.id = n.current_solution_id WHERE n.id = ? AND s.enabled = 1")
+        .get(novelId) as { id: number; steps_json: string } | undefined
+      if (bound && /whole_book/.test(bound.steps_json)) {
+        progress.currentAction = '方案流水线生产'
+        onProgress(progress)
+        try {
+          const prod = await runProductionChapter(db, bound.id, novelId, ch.id)
+          gen = { content: prod.content, wordCount: prod.wordCount, aborted: false, usage: { input: 0, output: 0, cacheHit: 0, cacheMiss: 0 } }
+        } catch {
+          // 流水线失败 → 回退默认生成
+          gen = await generateChapter(db, novelId, ch.id)
+        }
+      } else {
+        gen = await generateChapter(db, novelId, ch.id)
+      }
       if (!gen.content || gen.wordCount < 200) {
         progress.currentAction = '生成重试（第 1 次不达标）'
         onProgress(progress)

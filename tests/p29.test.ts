@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
+import { parseSolutionSteps, createSolution, loadSolution } from '../server/src/services/solutionAssets'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 5000 })
@@ -45,3 +46,35 @@ describe('P29 智能体资产化', () => {
     db.close()
   })
 })
+
+describe('P30 ?????????????', () => {
+  it('step ???production.output ????', () => {
+    const steps = parseSolutionSteps(JSON.stringify([
+      { agentId: 1, role: 'a', stage: 'whole_book', production: { output: 'outline' } },
+      { agentId: 1, role: 'b', stage: 'whole_book', production: { output: 'final' } },
+      { agentId: 1, role: 'c', stage: 'whole_book', production: { output: 'BAD' } },
+      { agentId: 1, role: 'd', stage: 'whole_book' }
+    ]))
+    expect(steps.length).toBe(3) // BAD ???
+    expect(steps.filter((s) => s.production?.output === 'final').length).toBe(1)
+    expect(steps.filter((s) => !s.production).length).toBe(1) // ? production ????? draft?
+  })
+
+  it('???????????? ? ??????????????', () => {
+    const db = makeDb()
+    const editor = db.prepare("SELECT id FROM agent WHERE role = 'editor'").get() as { id: number }
+    const id = createSolution(db, {
+      name: '????',
+      description: '',
+      steps: [
+        { agentId: editor.id, role: '??', stage: 'whole_book', production: { output: 'draft' } },
+        { agentId: editor.id, role: '??', stage: 'post_generate' }
+      ]
+    })
+    const sol = loadSolution(db, id)
+    // ???? runProductionChapter ????????????????????
+    expect(sol?.steps.length).toBe(2)
+    expect(sol?.steps[0].stage).toBe('whole_book')
+    db.close()
+  })
+});

@@ -18,6 +18,8 @@ interface StepView {
   maxTokens?: number
   include?: string[]
   if?: unknown
+  // P30：章节生产模式字段
+  production?: { output: string; reviewRounds?: number }
 }
 
 interface SolutionView {
@@ -523,6 +525,23 @@ export function StudioPage(): React.JSX.Element {
                           <option key={s.key} value={s.key}>{s.label}</option>
                         ))}
                       </select>
+                      {step.stage === 'whole_book' && (
+                        <select
+                          value={step.production?.output ?? 'draft'}
+                          onChange={(e) => {
+                            const next = [...draft.steps]
+                            next[i] = { ...step, production: { output: e.target.value as never, reviewRounds: 1 } }
+                            patchDraft({ steps: next })
+                          }}
+                        >
+                          <option value="outline">???????</option>
+                          <option value="draft">???????</option>
+                          <option value="dialogue">?????</option>
+                          <option value="scene">?????</option>
+                          <option value="review">???????</option>
+                          <option value="final">???????</option>
+                        </select>
+                      )}
                       <button
                         className="sm"
                         style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
