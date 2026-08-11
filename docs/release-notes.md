@@ -1,5 +1,15 @@
 # AI-Novel-Studio 发布说明
 
+## v0.5.2（2026-08-11）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.5.2.exe`（NSIS 向导版：可选安装目录 + 卸载入口）
+- **便携版**：`AI-Novel-Studio-0.5.2-portable-x64.exe`（数据跟随可执行文件 data/ 目录，可放 U 盘）
+
+### 体积修复
+- **安装包 343MB → 约 136MB**：@fontsource 三包（207MB 构建期资源）从运行时依赖转 devDependencies（字体已由 vite 打包进渲染层，node_modules 源包无需进 asar）
+- 功能无变化（v0.5.1 等价）
+
 ## v0.5.1（2026-08-11）
 
 ### 安装方式

@@ -11,15 +11,6 @@ importers:
       '@codemirror/lang-markdown':
         specifier: ^6.5.2
         version: 6.5.2
-      '@fontsource/lxgw-wenkai':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/noto-sans-sc':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/noto-serif-sc':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@tanstack/react-query':
         specifier: 5.101.4
         version: 5.101.4(react@19.2.8)
@@ -63,6 +54,15 @@ importers:
       '@eslint/js':
         specifier: ^9.30.0
         version: 9.39.5
+      '@fontsource/lxgw-wenkai':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-sans-sc':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/noto-serif-sc':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.6
