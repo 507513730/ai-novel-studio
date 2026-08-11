@@ -2,9 +2,10 @@ import { EmptyState } from '../components/EmptyState'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Tags, Plus } from 'lucide-react'
-import { novelApi } from '../api'
+import { novelApi, assetsApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
+import { AssetCreator } from '../components/AssetCreator'
 
 // P17-1：流派管理全局页（全局预设 + 各书自定义）
 export function GenresPage(): React.JSX.Element {
@@ -47,6 +48,26 @@ export function GenresPage(): React.JSX.Element {
       </div>
       {error && <ErrorMsg error={error} />}
 
+      {/* P23：上传/粘贴/手动 → AI 生成流派模板（推进/兑现/冲突/节拍） */}
+      <AssetCreator
+        type="genre"
+        typeLabel="流派模板"
+        placeholder="粘贴该流派的代表段落、套路描述或题材分析…（AI 提炼推进/兑现/冲突/黄金三章）"
+        maxLen={10000}
+        onSave={async (draft) => {
+          const name = String(draft.name ?? '未命名流派').slice(0, 30)
+          const r = await novelApi.genreCreate(name, undefined)
+          await assetsApi.genrePatch(r.id, {
+            genreType: String(draft.genreType ?? name).slice(0, 30),
+            propulsion: Array.isArray(draft.propulsion) ? (draft.propulsion as string[]) : [],
+            payoff: Array.isArray(draft.payoff) ? (draft.payoff as string[]) : [],
+            conflict: Array.isArray(draft.conflict) ? (draft.conflict as string[]) : [],
+            beats: Array.isArray(draft.beats) ? (draft.beats as string[]) : []
+          })
+        }}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['genres'] })}
+      />
+
       <div className="panel" style={{ marginBottom: 16 }}>
         <h2 style={{ marginBottom: 8 }}>创建全局流派</h2>
         <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
@@ -70,7 +91,7 @@ export function GenresPage(): React.JSX.Element {
 
       <div className="panel">
         <h2 style={{ marginBottom: 10 }}>书内自定义流派</h2>
-        {customGenres.length === 0 && <EmptyState icon="??" title="?????????" desc="??????????????????" />}
+        {customGenres.length === 0 && <EmptyState icon={Tags} title="?????????" desc="??????????????????" />}
         <div className="col" style={{ gap: 6 }}>
           {novels.data?.novels.map((n) => {
             const cg = customGenres.filter((g) => g.novelId === n.id)

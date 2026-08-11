@@ -122,6 +122,9 @@ export const novelApi = {
     js(`/novels/${id}/volumes/${volId}/critique`, { method: 'POST' }),
   volumeDelete: (id: number, volId: number): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/volumes/${volId}`, { method: 'DELETE' }),
+  // P23（N3）：手动创建卷
+  volumeCreate: (id: number, title: string): Promise<{ id: number }> =>
+    j(`/novels/${id}/volumes`, { method: 'POST', body: JSON.stringify({ title }) }),
 
   beats: (id: number, volId: number): Promise<{ beats: BeatData[] }> =>
     j(`/novels/${id}/volumes/${volId}/beats`),
@@ -217,6 +220,36 @@ export const studioApi = {
     js('/agents/custom', { method: 'POST', body: JSON.stringify(body) }),
   runTargets: (novelId: number): Promise<{ chapters: Array<{ id: number; title: string; status: string }> }> =>
     j(`/run-targets/${novelId}`)
+}
+
+
+// P23 ?1???????????? / AI ?? / ?????
+export const assetsApi = {
+  importFile: (filename: string, base64: string, asChapters = false): Promise<{ title: string; text: string; chapters?: Array<{ title: string; content: string }>; chapterCount?: number }> =>
+    js('/import/file', { method: 'POST', body: JSON.stringify({ filename, base64, asChapters }) }),
+  extract: (type: string, text: string, title?: string): Promise<{ type: string; draft: Record<string, unknown> }> =>
+    js('/assets/extract', { method: 'POST', body: JSON.stringify({ type, text, title }) }),
+  knowledgeCreate: (body: { title: string; content: string; status?: string }): Promise<{ id: number }> =>
+    js('/knowledge', { method: 'POST', body: JSON.stringify(body) }),
+  worldTemplateCreate: (body: { name: string; manual?: Record<string, string>; factions?: string[]; map?: Record<string, string>; timeline?: string[] }): Promise<{ id: number }> =>
+    js('/world-templates', { method: 'POST', body: JSON.stringify(body) }),
+  genrePatch: (id: number, body: Record<string, unknown>): Promise<{ ok: boolean }> =>
+    j(`/genres/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  antiAiAssetCreate: (body: { name: string; words: string[] }): Promise<{ id: number }> =>
+    js('/anti-ai/assets', { method: 'POST', body: JSON.stringify(body) }),
+  titlesGenerate: (body: { description: string; style?: string }): Promise<{ titles: Array<{ title: string; reason: string }> }> =>
+    js('/titles/generate', { method: 'POST', body: JSON.stringify(body) }),
+  baseCharacterCreate: (body: { name: string; profile?: Record<string, string> }): Promise<{ id: number }> =>
+    js('/base-characters', { method: 'POST', body: JSON.stringify(body) }),
+  styleAssetCreate: (body: { name: string; features: Array<{ category: string; name: string; description: string }>; antiAiWords?: string[]; sample?: string }): Promise<{ id: number }> =>
+    js('/style-assets', { method: 'POST', body: JSON.stringify(body) }),
+  importBook: (body: { title: string; chapters: Array<{ title: string; content: string }> }): Promise<{ id: number; chapterCount: number }> =>
+    js('/import/book', { method: 'POST', body: JSON.stringify(body) }),
+  chapterCreate: (novelId: number, body: { title?: string; volumeId?: number | null }): Promise<{ id: number }> =>
+    js(`/novels/${novelId}/chapters`, { method: 'POST', body: JSON.stringify(body) }),
+  promptCreate: (body: { name: string; template: string; notes?: string }): Promise<{ id: number }> =>
+    js('/prompts', { method: 'POST', body: JSON.stringify(body) }),
+  promptRestore: (id: number): Promise<{ ok: boolean }> => j(`/prompts/${id}/restore`, { method: 'POST' })
 }
 
 export const hub = {

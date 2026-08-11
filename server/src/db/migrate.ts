@@ -384,6 +384,21 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       )`
     ]
+  },
+  {
+    // P23 批2：外部书容器（拆书导入——不参与导演/生产链）
+    version: 10,
+    statements: [
+      `ALTER TABLE novel ADD COLUMN is_external INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE novel ADD COLUMN source_file TEXT NOT NULL DEFAULT ''`
+    ]
+  },
+  {
+    // P23 批3（N8）：提示词出厂模板（还原用）
+    version: 11,
+    statements: [
+      `ALTER TABLE prompt_asset ADD COLUMN original_template TEXT NOT NULL DEFAULT ''`
+    ]
   }
 ]
 

@@ -317,7 +317,29 @@ export function StudioPage(): React.JSX.Element {
                     <strong style={{ fontSize: 13 }}>{sol.name}</strong>
                     <span className="badge">v{sol.version}</span>
                   </div>
-                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{sol.steps.length} 步{sol.enabled ? '' : ' · 已停用'}</div>
+                  <div className="row" style={{ justifyContent: 'space-between', marginTop: 2 }}>
+                    <span className="muted" style={{ fontSize: 11 }}>{sol.steps.length} 步{sol.enabled ? '' : ' · 已停用'}</span>
+                    {/* P23（N7）：方案删除 */}
+                    <button
+                      className="sm"
+                      style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '0 6px', fontSize: 10 }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (!window.confirm(`删除方案「${sol.name}」？`)) return
+                        setBusy('solution-del')
+                        void studioApi
+                          .solutionDelete(sol.id)
+                          .then(() => {
+                            toast('ok', '已删除')
+                            if (selectedId === sol.id) { setSelectedId(null); setDraft(null) }
+                          })
+                          .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                          .finally(() => { setBusy(null); void queryClient.invalidateQueries({ queryKey: ['studio-solutions'] }) })
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </button>
               )
             })}
@@ -327,14 +349,51 @@ export function StudioPage(): React.JSX.Element {
           </div>
 
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>技能库（{skills.data?.skills?.length ?? 0}）</div>
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>技能库（{skills.data?.skills?.length ?? 0}）</div>
+              {/* P23（N7）：技能创建入口 */}
+              <button
+                className="sm"
+                onClick={() => {
+                  const name = window.prompt('技能名称：')
+                  if (!name?.trim()) return
+                  const desc = window.prompt('技能说明（可选）：') ?? ''
+                  const body = window.prompt('技能内容（正文，可粘贴 Feelfish 技能 md）：') ?? ''
+                  setBusy('skill-create')
+                  void studioApi
+                    .skillCreate({ name: name.trim(), description: desc, body_md: body })
+                    .then(() => toast('ok', `技能「${name.trim()}」已创建`))
+                    .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                    .finally(() => { setBusy(null); void queryClient.invalidateQueries({ queryKey: ['studio-skills'] }) })
+                }}
+                disabled={busy !== null}
+                title="手动创建技能（agent 可挂载）"
+              >
+                + 新建
+              </button>
+            </div>
             <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
               {(skills.data?.skills ?? []).map((sk) => (
-                <div key={Number(sk.id)} className="muted" style={{ fontSize: 11 }}>
-                  {String(sk.name)} <span style={{ opacity: 0.6 }}>· {String(sk.description).slice(0, 30)}</span>
+                <div key={Number(sk.id)} className="row" style={{ justifyContent: 'space-between' }}>
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    {String(sk.name)} <span style={{ opacity: 0.6 }}>· {String(sk.description).slice(0, 30)}</span>
+                  </span>
+                  <button
+                    className="sm"
+                    style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '0 6px', fontSize: 10 }}
+                    onClick={() => {
+                      if (!window.confirm(`删除技能「${String(sk.name)}」？`)) return
+                      void studioApi.skillDelete(Number(sk.id)).then(() => {
+                        toast('ok', '已删除')
+                        void queryClient.invalidateQueries({ queryKey: ['studio-skills'] })
+                      })
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
               ))}
-              {(skills.data?.skills ?? []).length === 0 && <span className="muted" style={{ fontSize: 11 }}>空（导入 Feelfish agent 时会自动建）</span>}
+              {(skills.data?.skills ?? []).length === 0 && <span className="muted" style={{ fontSize: 11 }}>空（可手动新建或导入 Feelfish agent 自动建）</span>}
             </div>
           </div>
         </div>

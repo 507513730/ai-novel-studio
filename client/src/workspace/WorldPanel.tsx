@@ -22,10 +22,12 @@ export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
   const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: ['world', novelId] })
 
   const generate = useMutation({
-    mutationFn: () => novelApi.worldGenerate(novelId),
+    mutationFn: (guidance?: string) => novelApi.worldGenerate(novelId, guidance),
     onSuccess: () => void invalidate(),
     onError: (err) => setError(err instanceof Error ? err.message : String(err))
   })
+  // P23（N4）：生成引导输入
+  const [genGuidance, setGenGuidance] = useState('')
 
   const saveManual = async (): Promise<void> => {
     try {
@@ -45,17 +47,25 @@ export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
       <div className="panel">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2>世界观</h2>
-          <button
-            className="primary"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true)
-              setError(null)
-              void generate.mutateAsync().finally(() => setBusy(false))
-            }}
-          >
-            {busy ? '生成中（分 3 步，约 1 分钟）…' : data?.manual && Object.keys(data.manual).length > 0 ? '重新生成' : 'AI 生成世界观'}
-          </button>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <input
+              style={{ width: 220 }}
+              placeholder="可选：本次生成要求（如：蒸汽朋克背景、三足鼎立势力）"
+              value={genGuidance}
+              onChange={(e) => setGenGuidance(e.target.value)}
+            />
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true)
+                setError(null)
+                void generate.mutateAsync(genGuidance.trim() || undefined).finally(() => setBusy(false))
+              }}
+            >
+              {busy ? '生成中（分 3 步，约 1 分钟）…' : data?.manual && Object.keys(data.manual).length > 0 ? '重新生成' : 'AI 生成世界观'}
+            </button>
+          </div>
         </div>
 
         {/* 手册（P11-1.1：递归渲染对象/数组值，防 React #31） */}

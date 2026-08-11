@@ -5,6 +5,7 @@ import { WandSparkles } from 'lucide-react'
 import { novelApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
+import { AssetCreator } from '../components/AssetCreator'
 import type { NovelSummary } from '../types'
 
 // P12 A5：标题工坊（跨书管理书名：查看/批量生成/编辑/选用）
@@ -61,6 +62,17 @@ export function TitlesPage(): React.JSX.Element {
         <WandSparkles size={20} />
         <h1 style={{ marginLeft: 8 }}>标题工坊</h1>
       </div>
+      {/* P23：自由输入 → AI 生成标题（不依赖已有书籍方向方案） */}
+      <AssetCreator
+        type="title"
+        typeLabel="标题组"
+        placeholder="输入题材、故事梗概或风格偏好，例如：重生流都市爽文，主角金融大佬复仇…"
+        maxLen={1000}
+        saveable={false}
+        onSave={async () => undefined}
+        onSaved={() => undefined}
+        hint="生成结果展示在下方草稿区（AI 生成的 JSON），复制标题使用即可。"
+      />
       {error && <ErrorMsg error={error} />}
       {novels.isLoading && <p className="muted">加载中…</p>}
       {novels.data?.novels.length === 0 && <p className="muted">还没有小说，先去创建一本吧。</p>}

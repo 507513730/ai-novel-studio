@@ -3,8 +3,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { UsersRound, Star, Trash2 } from 'lucide-react'
-import { novelApi, resourcesApi } from '../api'
+import { novelApi, resourcesApi, assetsApi } from '../api'
 import { useToast } from '../components/Toast'
+import { AssetCreator } from '../components/AssetCreator'
 
 // P18 D1：基础角色库（跨书角色模板：从书角色存模板 / 应用模板到书）
 export function BaseCharactersPage(): React.JSX.Element {
@@ -60,6 +61,22 @@ export function BaseCharactersPage(): React.JSX.Element {
         <UsersRound size={20} />
         <h1 style={{ marginLeft: 8 }}>基础角色库</h1>
       </div>
+      {/* P23（N5）：上传/粘贴/手动 → AI 生成角色模板 */}
+      <AssetCreator
+        type="base-character"
+        typeLabel="角色模板"
+        placeholder="粘贴角色描写片段或人设思路…（AI 提炼身份/性格/目标/弱点/关系）"
+        maxLen={6000}
+        onSave={async (draft) => {
+          const profile: Record<string, string> = {}
+          for (const k of ['role', 'identity', 'personality', 'goal', 'weakness', 'relation']) {
+            const v = draft[k]
+            if (v !== undefined && v !== null && String(v).trim()) profile[k] = String(v)
+          }
+          await assetsApi.baseCharacterCreate({ name: String(draft.name ?? '新角色模板').slice(0, 40), profile })
+        }}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['base-characters'] })}
+      />
 
       {/* 模板区 */}
       <div className="panel" style={{ marginBottom: 16 }}>
@@ -95,7 +112,7 @@ export function BaseCharactersPage(): React.JSX.Element {
             </div>
           ))}
           {!templates.isLoading && templates.data?.templates.length === 0 && (
-            <EmptyState icon="?" title="????????" desc="???????????????????" />
+            <EmptyState icon={Star} title="????????" desc="???????????????????????????" />
           )}
         </div>
       </div>

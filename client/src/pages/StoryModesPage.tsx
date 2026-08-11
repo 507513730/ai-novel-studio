@@ -1,10 +1,11 @@
 import { EmptyState } from '../components/EmptyState'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Workflow, Plus, Trash2 } from 'lucide-react'
+import { Workflow, Plus, Trash2, Gauge } from 'lucide-react'
 import { resourcesApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
+import { AssetCreator } from '../components/AssetCreator'
 
 // P17-2：推进模式库（升级流/日常流等节奏模板管理）
 export function StoryModesPage(): React.JSX.Element {
@@ -21,8 +22,8 @@ export function StoryModesPage(): React.JSX.Element {
     setError(null)
     try {
       await resourcesApi.storyModeCreate(name.trim(), desc.trim(), {
-        cadence: '建议节奏描述（可选）',
-        density: '爽点密度提示（可选）'
+        cadence: '（未配置——用「AI 生成」从内容提炼节奏）',
+        density: '（未配置——用「AI 生成」从内容提炼爽点密度）'
       })
       setName('')
       setDesc('')
@@ -55,6 +56,21 @@ export function StoryModesPage(): React.JSX.Element {
       <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
         推进节奏模板（升级流 / 日常流 / 群像流…），供章节生成时参考节奏与爽点密度。
       </p>
+      {/* P23：上传/粘贴/手动 → AI 生成推进模式 */}
+      <AssetCreator
+        type="mode"
+        typeLabel="推进模式"
+        placeholder="粘贴小说片段或节奏描述（AI 提炼 cadence/density/beats）"
+        maxLen={8000}
+        onSave={async (draft) => {
+          await resourcesApi.storyModeCreate(
+            String(draft.name ?? '未命名模式').slice(0, 30),
+            String(draft.description ?? '').slice(0, 300),
+            (draft.pattern as Record<string, unknown>) ?? {}
+          )
+        }}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['story-modes'] })}
+      />
       {error && <ErrorMsg error={error} />}
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="row">
@@ -79,7 +95,7 @@ export function StoryModesPage(): React.JSX.Element {
             </div>
           </div>
         ))}
-        {!modes.isLoading && modes.data?.modes.length === 0 && <EmptyState icon="??" title="??????" desc="?????????????????" />}
+        {!modes.isLoading && modes.data?.modes.length === 0 && <EmptyState icon={Gauge} title="??????" desc="???????????????????????" />}
       </div>
     </div>
   )

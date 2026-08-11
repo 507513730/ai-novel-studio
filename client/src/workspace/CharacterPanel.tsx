@@ -18,12 +18,13 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
   const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: ['characters', novelId] })
 
   const generate = useMutation({
-    mutationFn: () => novelApi.charactersGenerate(novelId),
+    mutationFn: (guidance?: string) => novelApi.charactersGenerate(novelId, guidance),
     onSuccess: () => void invalidate(),
     onError: (err) => setError(err instanceof Error ? err.message : String(err))
   })
 
   const [charBusy, setCharBusy] = useState<number | null>(null)
+  const [genGuidance, setGenGuidance] = useState('')
 
   const confirmCharacter = async (charId: number): Promise<void> => {
     if (charBusy !== null) return
@@ -71,17 +72,25 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
       <div className="panel">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2>角色</h2>
-          <button
-            className="primary"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true)
-              setError(null)
-              void generate.mutateAsync().finally(() => setBusy(false))
-            }}
-          >
-            {busy ? '生成中…' : 'AI 生成角色阵容'}
-          </button>
+          <div className="row" style={{ gap: 6 }}>
+            <input
+              style={{ width: 220 }}
+              placeholder="可选：本次生成要求（如：主角是腹黑医生、双女主）"
+              value={genGuidance}
+              onChange={(e) => setGenGuidance(e.target.value)}
+            />
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true)
+                setError(null)
+                void generate.mutateAsync(genGuidance.trim() || undefined).finally(() => setBusy(false))
+              }}
+            >
+              {busy ? '生成中…' : 'AI 生成角色阵容'}
+            </button>
+          </div>
         </div>
         <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
           AI 生成的角色进入"待确认"区，确认后进入正式名册（防止未确认设定被写入正文）。

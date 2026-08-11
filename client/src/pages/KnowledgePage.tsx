@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, Trash2 } from 'lucide-react'
-import { resourcesApi } from '../api'
+import { resourcesApi, assetsApi } from '../api'
 import { useToast } from '../components/Toast'
+import { AssetCreator } from '../components/AssetCreator'
 
 // P17-2：知识库页（kb_doc 总览：拆书发布物/外部资料/反 AI 规则）
 export function KnowledgePage(): React.JSX.Element {
@@ -32,9 +33,25 @@ export function KnowledgePage(): React.JSX.Element {
         <h1 style={{ marginLeft: 8 }}>知识库</h1>
       </div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
-        全部文档总览（拆书发布物 / 外部资料 / 反 AI 规则）。直塞文档会注入章节生成上下文。
+        全局文档库（拆书发布 / 外部资料 / AI 导入）。直塞文档会注入正文生成。
       </p>
-      <div className="col" style={{ gap: 8 }}>
+      {/* P23：上传/粘贴 → AI 生成知识库文档 */}
+      <AssetCreator
+        type="knowledge"
+        typeLabel="知识库文档"
+        placeholder="粘贴小说片段、设定资料、灵感素材…（AI 会整理成文档草稿）"
+        maxLen={12000}
+        onSave={async (draft, source) => {
+          await assetsApi.knowledgeCreate({
+            title: String(draft.title ?? source.title ?? '未命名文档').slice(0, 100),
+            content: String(draft.content ?? JSON.stringify(draft)).slice(0, 50000),
+            status: 'indexed'
+          })
+        }}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['knowledge'] })}
+        hint="保存为全局知识库文档（可被检索注入生成上下文）。"
+      />
+      <div className="col" style={{ gap: 8, marginTop: 12 }}>
         {docs.data?.docs.map((d) => (
           <div key={d.id} className="panel" style={{ background: 'var(--bg-card)', padding: 12 }}>
             <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useQuery } from '@tanstack/react-query'
-import { agentsApi } from '../api'
+import { agentsApi, novelApi } from '../api'
+import type { ChapterSummary } from '../types'
 
 export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element {
   const [name, setName] = useState('')
@@ -13,6 +14,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [chapterId, setChapterId] = useState('')
+  const chapters = useQuery({ queryKey: ['chapters', novelId], queryFn: () => novelApi.chapters(novelId) })
   const [teamResult, setTeamResult] = useState<Record<string, unknown> | null>(null)
 
   const agents = useQuery({
@@ -88,11 +90,24 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
           主编给出本章约束 → 审校按剧情/逻辑/文风三岗并行审核（问题合并去重）→ 角色顾问查 OOC → 反 AI 词检测。
         </p>
         <div className="row">
-          <input
-            style={{ width: 160 }}
-            placeholder="章节 ID"
+          {/* P23（N9）：章节下拉（替代手输 ID） */}
+          <select
+            style={{ width: 220, padding: '6px 10px', fontSize: 13 }}
             value={chapterId}
             onChange={(e) => setChapterId(e.target.value)}
+          >
+            <option value="">选择章节…（或手输 ID）</option>
+            {chapters.data?.chapters.map((ch: ChapterSummary) => (
+              <option key={ch.id} value={String(ch.id)}>
+                #{ch.id} {ch.title || `第 ${ch.id} 章`}（{ch.status}）
+              </option>
+            ))}
+          </select>
+          <input
+            style={{ width: 90 }}
+            placeholder="或手输 ID"
+            value={chapterId}
+            onChange={(e) => setChapterId(e.target.value.replace(/\D/g, ''))}
           />
           <button className="primary" disabled={busy} onClick={() => void runTeamReview()}>
             {busy ? '审校中…' : '开始团队审校'}

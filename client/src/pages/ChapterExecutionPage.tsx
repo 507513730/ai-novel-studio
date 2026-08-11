@@ -5,7 +5,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { novelEditorTheme } from '../editor/theme'
-import { novelApi, generateChapterSse, styleApi, studioApi } from '../api'
+import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi } from '../api'
 import type { ChapterSummary } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
@@ -665,9 +665,28 @@ export function ChapterExecutionPage(): React.JSX.Element {
               </button>
             ))}
           </div>
-          <button className="sm" onClick={() => navigate(`/novels/${id}`)}>
-            工作台
-          </button>
+          <div className="row" style={{ gap: 4 }}>
+            {/* P23（N2）：手动新建章节 */}
+            <button
+              className="sm"
+              title="手动新建空章节（可改标题后生成正文）"
+              onClick={() => {
+                const t = window.prompt('新章节标题（留空自动编号）：')
+                if (t === null) return
+                setActionError(null)
+                void withBusy('chapter-create', async () => {
+                  const r = await assetsApi.chapterCreate(id, { title: t.trim() || undefined })
+                  setActionMsg(`已创建章节 #${r.id}（空章，可编辑标题或直接生成）`)
+                  await invalidate()
+                })
+              }}
+            >
+              + 章节
+            </button>
+            <button className="sm" onClick={() => navigate(`/novels/${id}`)}>
+              工作台
+            </button>
+          </div>
         </div>
 
         {resourceTab === 'chapters' && (
@@ -1326,7 +1345,7 @@ const ChapterListItem = memo(function ChapterListItem({
     >
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {c.title || `? ${c.id} ?`}
+          {c.title || `第 ${c.id} 章`}
         </span>
         {c.wordCount > 0 && <span className="muted" style={{ fontSize: 11 }}>{c.wordCount}</span>}
       </div>
@@ -1335,14 +1354,14 @@ const ChapterListItem = memo(function ChapterListItem({
           style={{ width: 7, height: 7, borderRadius: 4, background: stColor, display: 'inline-block', flexShrink: 0 }}
         />
         <span className="muted" style={{ fontSize: 11 }}>
-          {c.status} {c.volumeTitle ? `? ${c.volumeTitle}` : ''}
+          {c.status} {c.volumeTitle ? `· ${c.volumeTitle}` : ''}
         </span>
       </div>
       <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-faint)' }}>
-        {c.status === 'planned' && '????????'}
-        {c.status === 'written' && '????AI ??'}
-        {['reviewed', 'done'].includes(c.status) && '? ??????'}
-        {c.status === 'failed' && '?? ????????'}
+        {c.status === 'planned' && '下一步：生成正文'}
+        {c.status === 'written' && '下一步：AI 审核'}
+        {['reviewed', 'done'].includes(c.status) && '✓ 可进入下一章'}
+        {c.status === 'failed' && '⚠️ 生成失败，可重试'}
       </div>
     </div>
   )

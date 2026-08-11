@@ -88,6 +88,24 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
             >
               {busy === 'volumes' ? '生成中…' : 'AI 生成卷规划'}
             </button>
+            {/* P23（N3）：手动新建卷 */}
+            <button
+              className="sm"
+              disabled={busy !== null}
+              onClick={() => {
+                const t = window.prompt('新卷标题：')
+                if (!t?.trim()) return
+                setBusy('volume-create')
+                setError(null)
+                void novelApi
+                  .volumeCreate(novelId, t.trim())
+                  .then(() => inval())
+                  .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                  .finally(() => setBusy(null))
+              }}
+            >
+              + 手动建卷
+            </button>
           </div>
         </div>
         <p className="muted" style={{ fontSize: 12 }}>先生成卷规划，再逐卷生成节奏板和章节清单（章节名 AI 生成多样约束，可手动修改）。</p>

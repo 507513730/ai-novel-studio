@@ -18,7 +18,8 @@ import { createAgentsRouter, createAgentAdminRouter } from './routes/agents'
 import { createGenresRouter } from './routes/genres'
 import { createResourcesRouter } from './routes/resources'                        
 import { createPromptsRouter } from './routes/prompts'                        
-import { createSolutionsRouter } from './routes/solutions'                    
+import { createSolutionsRouter } from './routes/solutions'                   
+import { createAssetsRouter } from './routes/assets'                         
 import { initPromptDb } from './prompts/promptAsset'
 import { startScheduler } from './services/scheduler'
 import { originGuard } from './services/security'
@@ -49,6 +50,7 @@ export function createApp(db: DatabaseSync): express.Express {
   app.use('/api', createResourcesRouter(db))
   app.use('/api/prompts', createPromptsRouter(db))
   app.use('/api', createSolutionsRouter(db)) // /api/solutions /api/skills /api/agents/custom（创造工坊）
+  app.use('/api', createAssetsRouter(db)) // /api/import/file /api/assets/extract /api/knowledge 等（P23 资产库统一）
   // 任务中心（全局挂载）
   app.use('/api', createJobsRouter(db))
 

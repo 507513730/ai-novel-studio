@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ListChecks, RotateCcw, XCircle, RefreshCw, Trash2 } from 'lucide-react'
+import { ListChecks, RotateCcw, XCircle, RefreshCw, Trash2, Inbox } from 'lucide-react'
 import { novelApi, automationApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { EmptyState } from '../components/EmptyState'
@@ -119,7 +119,7 @@ export function TasksPage(): React.JSX.Element {
       </div>
       {error && <ErrorMsg error={error} />}
       {jobs.isLoading && <p className="muted">加载中…</p>}
-      {!jobs.isLoading && list.length === 0 && <EmptyState icon="📭" title="暂无任务" desc="启动自动导演后，任务会出现在这里。" />}
+      {!jobs.isLoading && list.length === 0 && <EmptyState icon={Inbox} title="暂无任务" desc="启动自动导演后，任务会出现在这里。" />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {list.map((j) => {
           const meta = STATUS_META[j.status] ?? { color: 'var(--text-dim)', label: j.status }

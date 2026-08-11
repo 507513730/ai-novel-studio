@@ -1,16 +1,15 @@
 import { EmptyState } from '../components/EmptyState'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Globe2, Save, Trash2, Copy } from 'lucide-react'
-import { resourcesApi, novelApi } from '../api'
+import { resourcesApi, novelApi, assetsApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
+import { AssetCreator } from '../components/AssetCreator'
 import { useToast } from '../components/Toast'
 
 // P17-2：世界样本库（从书保存样本 / 应用样本到书）
 export function WorldsLibraryPage(): React.JSX.Element {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
   const { toast } = useToast()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -68,7 +67,25 @@ export function WorldsLibraryPage(): React.JSX.Element {
         <h1 style={{ marginLeft: 8 }}>世界样本库</h1>
       </div>
       {error && <ErrorMsg error={error} />}
-      <div className="panel" style={{ marginBottom: 16 }}>
+      {/* P23：上传/粘贴/手动 → AI 生成世界样本 */}
+      <AssetCreator
+        type="world"
+        typeLabel="世界样本"
+        placeholder="粘贴设定文本、世界观描写、背景资料…（AI 提炼世界手册与势力）"
+        maxLen={12000}
+        onSave={async (draft) => {
+          await assetsApi.worldTemplateCreate({
+            name: String(draft.name ?? '未命名世界').slice(0, 60),
+            manual: (draft.manual as Record<string, string>) ?? {},
+            factions: Array.isArray(draft.factions) ? (draft.factions as string[]) : [],
+            map: (draft.map as Record<string, string>) ?? {},
+            timeline: Array.isArray(draft.timeline) ? (draft.timeline as string[]) : []
+          })
+        }}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['world-templates'] })}
+        hint="保存后可应用到任意书籍（世界 → 本书世界）。"
+      />
+      <div className="panel" style={{ marginBottom: 16, marginTop: 12 }}>
         <h2 style={{ marginBottom: 8 }}>从书保存为样本</h2>
         <div className="row">
           <select style={{ flex: 2 }} value={saveFrom} onChange={(e) => setSaveFrom(Number(e.target.value))}>
@@ -105,13 +122,13 @@ export function WorldsLibraryPage(): React.JSX.Element {
                   <option value="" disabled>应用样本到…</option>
                   {novels.data?.novels.map((n) => <option key={n.id} value={n.id}>{n.title || `#${n.id}`}</option>)}
                 </select>
-                <button className="sm" title="在浏览器打开示例" onClick={() => navigate('/')}><Copy size={12} /></button>
+                <button className="sm" title="复制样本 JSON" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ name: t.name, manual: t.manual, factions: t.factions, map: t.map }, null, 2)).then(() => toast('ok', '已复制样本 JSON'))}><Copy size={12} /></button>
                 <button className="sm danger" onClick={() => void remove(t.id)}><Trash2 size={12} /></button>
               </div>
             </div>
           </div>
         ))}
-        {!templates.isLoading && templates.data?.templates.length === 0 && <EmptyState icon="??" title="??????" desc="????????????????" />}
+        {!templates.isLoading && templates.data?.templates.length === 0 && <EmptyState icon={Globe2} title="暂无世界样本" desc="可导入示例或从书籍内容提取世界观。" />}
       </div>
     </div>
   )

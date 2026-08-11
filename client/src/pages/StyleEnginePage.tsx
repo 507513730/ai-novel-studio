@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { WandSparkles } from 'lucide-react'
-import { globalStyleApi, novelApi } from '../api'
+import { globalStyleApi, novelApi, assetsApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
+import { AssetCreator } from '../components/AssetCreator'
 
 // P17-1：写法引擎全局页（跨书资产总览 + 全局写法创建 + 导入到书）
 export function StyleEnginePage(): React.JSX.Element {
@@ -63,6 +64,27 @@ export function StyleEnginePage(): React.JSX.Element {
         <WandSparkles size={20} />
         <h1 style={{ marginLeft: 8 }}>写法引擎</h1>
       </div>
+      {/* P23：上传/粘贴/手动 → AI 生成写法资产（含反 AI 词提炼） */}
+      <AssetCreator
+        type="style"
+        typeLabel="写法资产"
+        placeholder="粘贴代表性文本（≥200 字，AI 提炼写法特征与反 AI 词）"
+        maxLen={10000}
+        onSave={async (draft) => {
+          await assetsApi.styleAssetCreate({
+            name: String(draft.name ?? '我的写法').slice(0, 40),
+            features: Array.isArray(draft.features)
+              ? (draft.features as Array<{ category?: string; name?: string; description?: string }>).map((f) => ({
+                  category: String(f.category ?? 'other'),
+                  name: String(f.name ?? '特征'),
+                  description: String(f.description ?? '')
+                }))
+              : [],
+            antiAiWords: Array.isArray(draft.antiAiWords) ? (draft.antiAiWords as string[]).map(String) : []
+          })
+        }}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['style-global'] })}
+      />
       {error && <ErrorMsg error={error} />}
 
       <div className="panel" style={{ marginBottom: 16 }}>

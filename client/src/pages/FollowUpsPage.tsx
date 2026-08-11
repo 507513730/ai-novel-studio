@@ -1,7 +1,7 @@
 import { EmptyState } from '../components/EmptyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Workflow } from 'lucide-react'
+import { Workflow , CheckCircle2 } from 'lucide-react'
 import { novelApi } from '../api'
 
 // P16 P1：导演跟进（待审核/待处理聚合：failed jobs + pending 待确认 + 导演阻塞）
@@ -22,7 +22,7 @@ export function FollowUpsPage(): React.JSX.Element {
 
       <div className="panel" style={{ marginBottom: 16, background: 'var(--bg-card)' }}>
         <h2 style={{ marginBottom: 8 }}>失败任务（需处理）</h2>
-        {failed.length === 0 && <EmptyState icon="?" title="??????" desc="???????/?????????" />}
+        {failed.length === 0 && <EmptyState icon={CheckCircle2} title="暂无失败任务" desc="自动导演的阻塞/失败会出现在这里。" />}
         <div className="col" style={{ gap: 8 }}>
           {failed.map((j) => {
             const nid = Number(j.payload.novelId ?? 0)

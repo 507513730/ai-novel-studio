@@ -21,7 +21,7 @@ export function PromptWorkbenchPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { toast } = useToast()
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<string | boolean>(false)
   const [selected, setSelected] = useState<PromptAsset | null>(null)
   const [draft, setDraft] = useState('')
   const [vars, setVars] = useState<Record<string, string>>({})
@@ -124,14 +124,59 @@ export function PromptWorkbenchPage(): React.JSX.Element {
               <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
                 <strong>{selected.name}</strong>
                 <div className="row">
-                  <button className="sm" disabled={busy} onClick={() => void testRun()}>
+                  <button className="sm" disabled={busy !== false} onClick={() => void testRun()}>
                     <Play size={12} style={{ verticalAlign: -1, marginRight: 4 }} />试跑
                   </button>
-                  <button className="sm primary" disabled={busy} onClick={() => void save()}>
+                  <button className="sm primary" disabled={busy !== false} onClick={() => void save()}>
                     <Save size={12} style={{ verticalAlign: -1, marginRight: 4 }} />保存
                   </button>
-                  <button className="sm" onClick={() => { setDraft(selected.template); setTestOut(null) }}>
-                    <RotateCcw size={12} style={{ verticalAlign: -1, marginRight: 4 }} />还原
+                  {/* P23（N8）：还原出厂模板（内置提示词；自定义提示词提示不可还原） */}
+                  <button
+                    className="sm"
+                    disabled={busy !== false}
+                    onClick={() => {
+                      setBusy('restore')
+                      void apiFetch(`/prompts/${selected.id}/restore`, { method: 'POST' })
+                        .then(async () => {
+                          const all = (await apiFetch('/prompts')) as { prompts: Array<{ id: number; template: string }> }
+                          const target = all.prompts.find((x) => x.id === selected.id)
+                          if (target) setDraft(target.template)
+                          setTestOut(null)
+                          toast('ok', '已还原出厂模板')
+                        })
+                        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                        .finally(() => setBusy(false))
+                    }}
+                    title="还原为出厂模板（自定义提示词不可还原）"
+                  >
+                    <RotateCcw size={12} style={{ verticalAlign: -1, marginRight: 4 }} />还原出厂
+                  </button>
+                  {/* P23（N8）：新建提示词 */}
+                  <button
+                    className="sm"
+                    disabled={busy !== false}
+                    onClick={() => {
+                      const name = window.prompt('新提示词名称：')
+                      if (!name?.trim()) return
+                      setBusy('create')
+                      void apiFetch('/prompts', {
+                        method: 'POST',
+                        body: JSON.stringify({ name: name.trim(), template: '（在此编写提示词模板，支持 ${变量} 插值）', notes: '自定义' })
+                      })
+                        .then(async () => {
+                          toast('ok', '已创建，刷新列表')
+                          const all = (await apiFetch('/prompts')) as { prompts: Array<{ id: number; name: string; template: string; taskType: string; slots: Record<string, unknown>; notes: string }> }
+                          const created = all.prompts.find((x) => x.name === name.trim())
+                          if (created) {
+                            setSelected(created)
+                            setDraft(created.template)
+                          }
+                        })
+                        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                        .finally(() => setBusy(false))
+                    }}
+                  >
+                    + 新建
                   </button>
                 </div>
               </div>

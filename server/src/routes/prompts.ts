@@ -38,6 +38,48 @@ export function createPromptsRouter(db: DatabaseSync): Router {
     }
   })
 
+  // ---------- P23 批3（N8）：新建提示词 + 出厂还原 ----------
+  router.post('/', (req, res, next) => {
+    try {
+      const input = z
+        .object({
+          name: z.string().min(1).max(60),
+          template: z.string().min(1).max(20_000),
+          notes: z.string().max(200).default('')
+        })
+        .parse(req.body ?? {})
+      const rid = db
+        .prepare(
+          "INSERT INTO prompt_asset (name, task_type, template, slots_json, notes, original_template) VALUES (?, 'custom', ?, '{}', ?, ?)"
+        )
+        .run(input.name, input.template, input.notes, input.template)
+      res.status(201).json({ id: Number(rid.lastInsertRowid) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  router.post('/:id/restore', (req, res, next) => {
+    try {
+      const id = Number(req.params.id)
+      const row = db
+        .prepare("SELECT original_template, template FROM prompt_asset WHERE id = ? AND original_template != ''")
+        .get(id) as { original_template: string; template: string } | undefined
+      if (!row) {
+        res.status(400).json({ error: '该提示词无出厂模板（自定义提示词无需还原）' })
+        return
+      }
+      db.prepare("UPDATE prompt_asset SET template = ?, notes = '已还原出厂' WHERE id = ?").run(
+        row.original_template,
+        id
+      )
+      invalidatePromptCache()
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // 试跑：用渲染后的模板作为 system，最小生成测试
   router.post('/test', async (req, res, next) => {
     try {
