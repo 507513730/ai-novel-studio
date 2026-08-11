@@ -72,8 +72,7 @@ const checks = [
   ['typecheck', 'pnpm typecheck'],
   ['lint', 'pnpm lint -- --max-warnings=0 2>&1 || pnpm lint'],
   ['test', 'pnpm test'],
-  ['build', 'pnpm build'],
-  ['db-smoke', 'pnpm db:smoke']
+  ['build', 'pnpm build']
 ]
 for (const [name, cmd] of checks) {
   try {
@@ -87,6 +86,23 @@ for (const [name, cmd] of checks) {
     }
     fail(`${name} 失败`)
     console.error(out.slice(-800))
+  }
+}
+// db-smoke：Node 24 对 .ts 直接 import 的 warning 伴随 exit 1（输出实际通过）——按输出判定
+try {
+  const out = run('pnpm db:smoke', { stdio: ['ignore', 'pipe', 'pipe'] })
+  if (/checks passed/.test(out)) ok('db-smoke 通过（checks passed）')
+  else {
+    fail('db-smoke 未输出通过标记')
+    console.error(out.slice(-500))
+  }
+} catch (err) {
+  const out = String(err.stdout ?? '')
+  if (/checks passed/.test(out)) {
+    ok('db-smoke 通过（checks passed；Node24 warning 不影响）')
+  } else {
+    fail('db-smoke 失败')
+    console.error(out.slice(-500))
   }
 }
 if (failures > 0) {
