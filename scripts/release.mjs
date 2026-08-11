@@ -226,10 +226,15 @@ if (E2E) {
     process.exit(1)
   } finally {
     server.kill()
-    try {
-      rmSync(userData, { recursive: true, force: true })
-    } catch {
-      /* 忽略清理失败 */
+    // P26 强化：Windows 下文件句柄释放有延迟——等待后重试清理（防 .e2e-data 残留）
+    await new Promise((r) => setTimeout(r, 2000))
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        rmSync(userData, { recursive: true, force: true })
+        break
+      } catch {
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500))
+      }
     }
   }
 }
