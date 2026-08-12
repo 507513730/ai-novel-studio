@@ -219,6 +219,27 @@ if (E2E) {
     if (!ready) throw new Error('server 未在 15s 内就绪')
     run('node scripts/e2e/round.mjs 1', { stdio: 'pipe', timeout: 40 * 60 * 1000 })
     ok('e2e R1 通过（含 T1 配置 / T2 创作链）')
+    // v0.9.2（O3）：配置了 FF_DIR 时追加跑方案生产真机验收（mc-good2.0 导入 → 10 步流水线 → 章节产出）
+    // p30 脚本自起独立 server（3000 端口 + 独立临时库），先释放本段 server 防端口冲突
+    server.kill()
+    await new Promise((r) => setTimeout(r, 1500))
+    if (process.env.FF_DIR) {
+      try {
+        run('node scripts/p30-mcgood2-e2e.mjs', {
+          stdio: 'pipe',
+          timeout: 30 * 60 * 1000,
+          env: { ...process.env, FF_DIR: process.env.FF_DIR, AI_NOVEL_PORT: '3000' }
+        })
+        ok('p30-mcgood2 方案生产真机验收通过（FF_DIR）')
+      } catch (err) {
+        const out = String(err.stdout ?? '').slice(-800)
+        fail('p30-mcgood2 真机验收失败（FF_DIR 配置下必过）')
+        console.error(out)
+        process.exit(1)
+      }
+    } else {
+      console.log('  ⏭ p30-mcgood2 真机段跳过（未配置 FF_DIR）')
+    }
   } catch (err) {
     const out = String(err.stdout ?? '').slice(-1200)
     fail('e2e 失败（见输出）')
@@ -333,6 +354,35 @@ if (PUSH) {
     ok(`Release v${version} 已发布：${rel}`)
   } catch {
     console.error(`  ✗ Release v${version} 未找到——见 versioning.md §8 回滚/排查`)
+  }
+  // v0.9.2（O1）：发布后自动跑打包态等价验收——SSE 生成/导出/鉴权 403 全链路
+  // 防"打包态坏了发布照样出"（Node24 SSE 回归教训）
+  try {
+    console.log('  运行打包态等价验收（模拟 file:// Origin:null + token）…')
+    const out = execSync(`node scripts/v072-pack-verify.mjs`, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      cwd: ROOT,
+      timeout: 10 * 60 * 1000,
+      env: {
+        ...process.env,
+        BASE: 'http://127.0.0.1:39999/api',
+        TOKEN: 'release-verify-token',
+        UDATA: join(ROOT, 'release', '.verify-tmp')
+      }
+    })
+    if (/PASS/.test(out)) ok('打包态等价验收 PASS（SSE/导出/鉴权）')
+    else {
+      fail('打包态等价验收未通过')
+      console.error(out.slice(-600))
+    }
+  } catch (err) {
+    const out = String(err.stdout ?? '')
+    if (/PASS/.test(out)) ok('打包态等价验收 PASS（SSE/导出/鉴权）')
+    else {
+      fail('打包态等价验收失败（v072-pack-verify）——见 versioning.md §8 排查')
+      console.error(out.slice(-600))
+    }
   }
 } else {
   console.log('  □ CI 通过（gh run list）')

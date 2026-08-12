@@ -74,6 +74,11 @@ export interface LlmCallOptions {
   signal?: AbortSignal
   novelId?: number | null
   guidance?: string // P19 ??????????????
+  // v0.9.2（审查 #25）：流式模式——章节 SSE 生成并入统一路径（此前 generate.ts 独立 OpenAI client，
+  // 不参与候选链降级/错误分类/记账，且 body 构造已出现漂移）
+  stream?: boolean
+  onDelta?: (text: string) => void
+  onThinking?: (text: string) => void
 }
 
 export interface LlmResult {
@@ -228,6 +233,65 @@ export async function callLlm(
           opts,
           candidate.model
         )
+        if (opts.stream) {
+          // v0.9.2（审查 #25）：流式分支——章节 SSE 生成并入统一路径（候选链降级/记账/signal 一致）
+          const stream = await client.chat.completions.create(
+            {
+              ...(body as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming),
+              stream: true,
+              stream_options: { include_usage: true }
+            },
+            { signal: opts.signal }
+          )
+          let content = ''
+          let reasoning = ''
+          let usage: LlmResult['usage'] = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0 }
+          try {
+            for await (const chunk of stream) {
+              if (opts.signal?.aborted) break
+              const delta = chunk.choices[0]?.delta
+              if (delta) {
+                const r = delta as unknown as { reasoning_content?: string }
+                if (r.reasoning_content) {
+                  reasoning += r.reasoning_content
+                  opts.onThinking?.(r.reasoning_content)
+                }
+                if (delta.content) {
+                  content += delta.content
+                  opts.onDelta?.(delta.content)
+                }
+              }
+              if (chunk.usage) usage = extractUsage(chunk.usage)
+            }
+          } catch (err) {
+            if (!opts.signal?.aborted) throw err
+            // abort：返回部分结果，调用方按 signal.aborted 感知
+          }
+          const result: LlmResult = {
+            content,
+            reasoningContent: reasoning || undefined,
+            usage,
+            model: candidate.model,
+            provider: providerRow.name,
+            degraded: candidate.degraded
+          }
+          // abort 时不记账（调用方按上下文预算估算补账，见 generate.ts）；正常完成统一记账
+          if (!opts.signal?.aborted) {
+            recordUsage(db, {
+              novelId: opts.novelId ?? null,
+              taskType,
+              provider: result.provider,
+              model: result.model,
+              inputTokens: usage.input,
+              outputTokens: usage.output,
+              cacheHit: usage.cacheHit,
+              cacheMiss: usage.cacheMiss,
+              costEstimate: 0,
+              degraded: result.degraded
+            })
+          }
+          return result
+        }
         const response = await client.chat.completions.create(
           body as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
           // v0.9.0（审查 #11）：signal 转发——此前声明但从未传入 SDK，所有经 callLlm 的中止均无效

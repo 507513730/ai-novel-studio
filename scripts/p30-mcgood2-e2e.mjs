@@ -35,12 +35,12 @@ async function api(path, init) {
   return body
 }
 
-// 1) 启动临时 server
+// 1) 启动临时 server（PORT 可经 AI_NOVEL_PORT 覆盖，release --e2e 集成时复用 3000）
 const userData = join(ROOT, 'release', '.p30-e2e')
 rmSync(userData, { recursive: true, force: true })
 mkdirSync(userData, { recursive: true })
 const server = spawn(process.execPath, [join(ROOT, 'out', 'main', 'server.js')], {
-  env: { ...process.env, AI_NOVEL_USER_DATA: userData, AI_NOVEL_PORT: '3000' },
+  env: { ...process.env, AI_NOVEL_USER_DATA: userData, AI_NOVEL_PORT: process.env.AI_NOVEL_PORT ?? '3000' },
   stdio: 'ignore'
 })
 let ready = false

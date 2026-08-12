@@ -21,6 +21,9 @@ const api = {
   // P18 B + P20（S2）：备份导出/恢复（恢复会停止并重启服务，恢复后触发 onDataRestored）
   exportBackup: (): Promise<{ ok: boolean; canceled?: boolean; path?: string; copied?: number; error?: string }> =>
     ipcRenderer.invoke('export-backup') as Promise<{ ok: boolean; canceled?: boolean; path?: string; copied?: number; error?: string }>,
+  // v0.9.2（O4）：每日自动备份信息（设置页展示最近备份时间/份数）
+  getAutoBackupInfo: (): Promise<{ lastAt: string | null; count: number; keep: number }> =>
+    ipcRenderer.invoke('get-auto-backup-info') as Promise<{ lastAt: string | null; count: number; keep: number }>,
   restoreBackup: (): Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; warning?: string; error?: string }> =>
     ipcRenderer.invoke('restore-backup') as Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; warning?: string; error?: string }>,
   onDataRestored: (callback: () => void): (() => void) => {

@@ -1,12 +1,40 @@
-// v0.7.2 打包态等价验收：模拟 file:// 页面（Origin: null + X-App-Token）调用打包版核心链路
+// v0.9.2（O1）：打包态等价验收（原 v0.7.2）——模拟 file:// 页面（Origin: null + X-App-Token）调用打包版核心链路
 // 验证：① 无 token 403；② 带 token 正常；③ SSE 章节生成真实跑通；④ 章节导出（TXT）可用
-const BASE = process.env.BASE
-const TOKEN = process.env.TOKEN
-const UDATA = process.env.UDATA
-if (!BASE || !TOKEN || !UDATA) {
-  console.error('usage: BASE=... TOKEN=... UDATA=... node scripts/v072-pack-verify.mjs')
+// 自包含：自动启动 out/main/server.js（发布后自动验收用）；亦可 BASE/TOKEN/UDATA 外部注入
+import { spawn } from 'node:child_process'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { mkdirSync, rmSync } from 'node:fs'
+
+const ROOT = dirname(fileURLToPath(import.meta.url)) + '/..'
+const PORT = process.env.VERIFY_PORT ?? '39999'
+const BASE = process.env.BASE ?? `http://127.0.0.1:${PORT}/api`
+const TOKEN = process.env.TOKEN ?? `pack-verify-${Date.now()}`
+const UDATA = process.env.UDATA ?? join(ROOT, 'release', '.verify-tmp')
+
+rmSync(UDATA, { recursive: true, force: true })
+mkdirSync(UDATA, { recursive: true })
+const server = spawn(process.execPath, [join(ROOT, 'out', 'main', 'server.js')], {
+  env: { ...process.env, AI_NOVEL_USER_DATA: UDATA, AI_NOVEL_PORT: PORT, SERVER_TOKEN: TOKEN },
+  stdio: 'ignore'
+})
+let ready = false
+for (let i = 0; i < 30; i++) {
+  try {
+    const r = await fetch(`${BASE}/health`)
+    if (r.ok) { ready = true; break }
+  } catch { /* not ready yet */ }
+  await new Promise((r) => setTimeout(r, 500))
+}
+if (!ready) {
+  console.error('server 未就绪')
+  server.kill()
   process.exit(1)
 }
+const shutdown = () => {
+  server.kill()
+}
+process.on('exit', shutdown)
 
 async function req(path, { method = 'GET', token = true, body, stream = false } = {}) {
   const headers = { Origin: 'null' }
@@ -95,3 +123,6 @@ const exportBody = exportRes.status === 200 ? await exportRes.text() : ''
 ok('章节导出 TXT', exportRes.status === 200 && exportBody.includes('守夜人'), `bytes=${exportBody.length}`)
 
 console.log(process.exitCode ? '\n[FAIL] 存在失败项' : '\n[PASS] 打包态等价验收全部通过')
+
+// 强制退出（exit handler 会 kill server 子进程）——undici keep-alive 连接池句柄会让进程挂起
+process.exit(process.exitCode ?? 0)

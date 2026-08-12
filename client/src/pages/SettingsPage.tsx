@@ -6,6 +6,29 @@ import { taskTypeLabels, taskTypes } from '@shared/types'
 import { apiFetch } from '../api'
 import { useToast } from '../components/Toast'
 import { THEMES, applyTheme, getStoredTheme, type ThemeKey } from '../utils/theme'
+
+// v0.9.2（O4）：每日自动备份状态展示（启动后首备 + 每 24h，保留最近 7 份）
+function BackupInfo(): React.JSX.Element | null {
+  const [info, setInfo] = useState<{ lastAt: string | null; count: number; keep: number } | null>(null)
+  useEffect(() => {
+    let alive = true
+    void window.novelStudio
+      ?.getAutoBackupInfo()
+      .then((r) => {
+        if (alive) setInfo(r)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
+  if (!info || info.count === 0) return null
+  return (
+    <div className="muted t-small" style={{ marginBottom: 8 }}>
+      💾 每日自动备份已启用：最近 {info.lastAt ?? '未知'}（保留最近 {info.keep} 份，位于数据目录 backups/）
+    </div>
+  )
+}
 import { SERIF_FONTS, UI_FONTS, applyFonts, getStoredFonts, DEFAULTS, type FontSettings } from '../utils/fonts'
 import {
   SHORTCUT_ACTIONS,
@@ -826,6 +849,8 @@ function AppearancePanel(): React.JSX.Element {
 
       {/* P16 P0：数据管理 */}
       <h2 className="mt-2">数据与卸载</h2>
+      {/* v0.9.2（O4）：每日自动备份信息（启动后首备 + 每 24h，保留最近 7 份） */}
+      <BackupInfo />
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <button onClick={() => void window.novelStudio?.openDataDir()}>📂 打开数据目录</button>
         {/* P18 B：备份导出/恢复 */}

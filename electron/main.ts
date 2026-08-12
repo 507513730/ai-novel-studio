@@ -1,6 +1,6 @@
 import { app, BrowserWindow, utilityProcess, shell, safeStorage, Menu, ipcMain, nativeTheme, dialog } from 'electron'
 import { join } from 'node:path'
-import { mkdirSync, rmSync, copyFileSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
+import { mkdirSync, rmSync, copyFileSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 
 let mainWindow: BrowserWindow | null = null
@@ -66,9 +66,81 @@ ipcMain.handle('wipe-data', () => {
   return true
 })
 
-// P18 B + P20（S2）：导出备份（先 checkpoint 保证原子，只导出主库文件）
-ipcMain.handle('export-backup', async () => {
+// v0.9.2（O4）：自动备份——每日 checkpoint 后复制主库到 backups/auto-*（轮转保留 N 份）
+// 复用 export-backup 的原子语义；启动后延迟首备（等 server ready），之后每 24h
+const AUTO_BACKUP_KEEP = 7
+function runAutoBackup(): void {
   try {
+    const dataDir = getDataDir()
+    const dbFile = join(dataDir, 'ai-novel-studio.db')
+    if (!existsSync(dbFile)) return
+    const now = new Date()
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+    const outDir = join(dataDir, 'backups', `auto-${stamp}`)
+    if (existsSync(outDir)) return
+    const sp = serverProcess
+    if (sp) {
+      const id = `cp-auto-${Date.now()}`
+      const onMsg = (msg: unknown): void => {
+        const m = msg as { type?: string; id?: string }
+        if (m?.id === id && (m.type === 'checkpoint-done' || m.type === 'checkpoint-error')) {
+          sp.off('message', onMsg)
+        }
+      }
+      sp.on('message', onMsg)
+      sp.postMessage({ type: 'checkpoint', id })
+    }
+    mkdirSync(outDir, { recursive: true })
+    copyFileSync(dbFile, join(outDir, 'ai-novel-studio.db'))
+    writeFileSync(
+      join(outDir, 'backup-info.json'),
+      JSON.stringify(
+        {
+          app: 'AI-Novel-Studio',
+          version: app.getVersion(),
+          createdAt: new Date().toISOString(),
+          auto: true,
+          files: ['ai-novel-studio.db']
+        },
+        null,
+        2
+      ),
+      'utf8'
+    )
+    // 轮转：保留最近 AUTO_BACKUP_KEEP 份，其余删除
+    const backupsDir = join(dataDir, 'backups')
+    const dirs = readdirSync(backupsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith('auto-'))
+      .map((d) => d.name)
+      .sort()
+    while (dirs.length > AUTO_BACKUP_KEEP) {
+      const oldest = dirs.shift()!
+      rmSync(join(backupsDir, oldest), { recursive: true, force: true })
+    }
+    console.log('[main] 自动备份完成:', outDir)
+  } catch (e) {
+    console.error('[main] auto-backup error:', e)
+  }
+}
+
+// 设置页展示：最近自动备份时间 + 份数
+ipcMain.handle('get-auto-backup-info', () => {
+  try {
+    const backupsDir = join(getDataDir(), 'backups')
+    if (!existsSync(backupsDir)) return { lastAt: null, count: 0, keep: AUTO_BACKUP_KEEP }
+    const dirs = readdirSync(backupsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith('auto-'))
+      .map((d) => d.name)
+      .sort()
+    const last = dirs.length > 0 ? dirs[dirs.length - 1] : null
+    return { lastAt: last ? last.replace('auto-', '').replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/, '$1-$2-$3 $4:$5') : null, count: dirs.length, keep: AUTO_BACKUP_KEEP }
+  } catch {
+    return { lastAt: null, count: 0, keep: AUTO_BACKUP_KEEP }
+  }
+})
+
+// P18 B + P20（S2）：导出备份（先 checkpoint 保证原子，只导出主库文件）
+ipcMain.handle('export-backup', async () => {  try {
     const dataDir = getDataDir()
     const now = new Date()
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
@@ -366,6 +438,10 @@ app.whenReady().then(() => {
   createMenu()
   startServer()
   createWindow()
+
+  // v0.9.2（O4）：每日自动备份——启动 5 分钟后首备（等 server 就绪），之后每 24h
+  setTimeout(() => runAutoBackup(), 5 * 60 * 1000)
+  setInterval(() => runAutoBackup(), 24 * 60 * 60 * 1000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

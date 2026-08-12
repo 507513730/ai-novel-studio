@@ -1,7 +1,5 @@
-import OpenAI from 'openai'
 import { DatabaseSync } from 'node:sqlite'
-import { getRouteConfig, buildBody } from './llm'
-import { decryptSecret } from './keyCrypto'
+import { getRouteConfig, callLlm } from './llm'
 import { buildChapterWriteContext, estimateTokens } from './context'
 import { recordUsage } from './usage'
 import { runTripleReview } from './tripleReview'
@@ -53,13 +51,9 @@ export async function generateChapter(
 
   const route = getRouteConfig(db, 'prose')
   if (!route || !route.apiKeyEncrypted) throw new Error('prose 路由未配置 API Key')
-  const apiKey = await decryptSecret(route.apiKeyEncrypted)
 
-  const client = new OpenAI({
-    baseURL: route.baseUrl || undefined,
-    apiKey,
-    timeout: 300_000
-  })
+  // v0.9.2（审查 #25）：独立 OpenAI client 删除——统一走 callLlm 流式
+  // （此前 generate 不参与候选链降级/错误分类/重试；body 构造已出现漂移）
 
   // P2.3 三方会审：主编/世界观/角色各产出一条约束注入生成上下文（默认开）
   let tripleConstraints: string[] = []
@@ -94,69 +88,29 @@ export async function generateChapter(
     perCallGuidance: opts.guidance
   })
 
-  // v0.9.0（审查 #25）：复用 llm.ts 的 buildBody（此前双 LLM 路径各自构造 body，
-  // thinking/temperature/jsonMode 逻辑已出现漂移——如 llm.ts 有 jsonMode 处理而此处没有）
-  const body = buildBody(
-    route,
-    {
-      messages: ctx.messages.map((m) => ({ role: m.role, content: m.content ?? '' })),
-      maxTokens: route.maxTokens,
-      temperature: route.temperature
-    },
-    route.model
-  )
+  // v0.9.2（审查 #25）：统一走 callLlm 流式——候选链降级/错误分类/记账/signal 全部一致；
+  // abort 时 callLlm 返回部分内容（不抛错），此处按 signal.aborted 感知
+  const llmResult = await callLlm(db, 'prose', {
+    novelId,
+    messages: ctx.messages.map((m) => ({ role: m.role, content: m.content ?? '' })),
+    maxTokens: route.maxTokens,
+    temperature: route.temperature,
+    stream: true,
+    onDelta: (text) => opts.onDelta?.(text),
+    onThinking: (text) => opts.onThinking?.(text),
+    signal: opts.signal
+  })
 
-  const stream = await client.chat.completions.create(
-    {
-      ...(body as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming),
-      stream: true
-    },
-    { signal: opts.signal }
-  )
-
-  let content = ''
-  let aborted = false
-  let usageInput = 0
-  let usageOutput = 0
-  let cacheHit = 0
-  let cacheMiss = 0
-
-  try {
-    for await (const chunk of stream) {
-      if (opts.signal?.aborted) {
-        aborted = true
-        break
-      }
-      const delta = chunk.choices[0]?.delta
-      if (!delta) continue
-      const r = delta as unknown as { reasoning_content?: string }
-      if (r.reasoning_content) {
-        opts.onThinking?.(r.reasoning_content)
-      }
-      if (delta.content) {
-        content += delta.content
-        opts.onDelta?.(delta.content)
-      }
-      const u = chunk.usage as unknown as {
-        prompt_tokens?: number
-        completion_tokens?: number
-        prompt_cache_hit_tokens?: number
-        prompt_cache_miss_tokens?: number
-      }
-      if (u?.prompt_tokens !== undefined) {
-        usageInput = u.prompt_tokens
-        usageOutput = u.completion_tokens ?? usageOutput
-        cacheHit = u.prompt_cache_hit_tokens ?? 0
-        cacheMiss = u.prompt_cache_miss_tokens ?? usageInput
-      }
-    }
-  } catch (err) {
-    if (!opts.signal?.aborted) throw err
-    aborted = true
-  }
+  const llmContent = llmResult.content
+  // 反 AI 重写可能替换内容，故用 let
+  let content = llmContent
+  const aborted = opts.signal?.aborted ?? false
+  let usageInput = llmResult.usage.input
+  let usageOutput = llmResult.usage.output
+  let cacheHit = llmResult.usage.cacheHit
+  let cacheMiss = llmResult.usage.cacheMiss
 
   let wordCount = (content.match(/[\u4e00-\u9fff]/g) ?? []).length
-
   if (content) {
     db.prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)').run(
       chapterId,
@@ -214,29 +168,29 @@ export async function generateChapter(
     }
   }
 
-  // P20（C4）：abort/流中断时供应商可能不发最终 usage chunk——用上下文预算+已产出字数量估算补账，
-  // 否则最贵的调用（长流中止）从成本统计消失
-  if (usageInput === 0 && (aborted || content.length > 0)) {
-    usageInput = ctx.budgetUsed
-    usageOutput = estimateTokens(content)
-    cacheHit = 0
-    cacheMiss = usageInput
-  }
-
-  if (usageInput > 0) {
-    // P2.2 🟡11：统一走 recordUsage（含成本估算）
-    recordUsage(db, {
-      novelId,
-      taskType: 'prose',
-      provider: route.providerName,
-      model: route.model,
-      inputTokens: usageInput,
-      outputTokens: usageOutput,
-      cacheHit,
-      cacheMiss,
-      costEstimate: 0,
-      degraded: false
-    })
+  // P20（C4）+ v0.9.2（#25）：abort 时 callLlm 不记账（正常完成已由 callLlm 统一记账，防双记）——
+  // 此处对中止的调用补账：供应商可能不发最终 usage chunk，用上下文预算+已产出字数量估算
+  if (aborted) {
+    if (usageInput === 0 && content.length > 0) {
+      usageInput = ctx.budgetUsed
+      usageOutput = estimateTokens(content)
+      cacheHit = 0
+      cacheMiss = usageInput
+    }
+    if (usageInput > 0) {
+      recordUsage(db, {
+        novelId,
+        taskType: 'prose',
+        provider: route.providerName,
+        model: route.model,
+        inputTokens: usageInput,
+        outputTokens: usageOutput,
+        cacheHit,
+        cacheMiss,
+        costEstimate: 0,
+        degraded: false
+      })
+    }
   }
 
   return { content, wordCount, aborted, usage: { input: usageInput, output: usageOutput, cacheHit, cacheMiss } }

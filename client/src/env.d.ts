@@ -8,6 +8,8 @@ interface NovelStudioApi {
   wipeData: () => Promise<boolean>
   exportBackup: () => Promise<{ ok: boolean; canceled?: boolean; path?: string; copied?: number; error?: string }>
   restoreBackup: () => Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; error?: string }>
+  // v0.9.2（O4）：每日自动备份信息
+  getAutoBackupInfo: () => Promise<{ lastAt: string | null; count: number; keep: number }>
   platform: string
 }
 
