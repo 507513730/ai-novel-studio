@@ -1,0 +1,18 @@
+[
+  {
+    "id": "mc-good2-0",
+    "name": "mc-good2.0",
+    "description": "mc-good2.0升级版，集成十位大师，创作项目流程化，完美的将你的创意变为现实！！！已测试！！！",
+    "version": "1.0.0",
+    "tags": [],
+    "file": "mc-good2-0/solution-pack.json",
+    "updatedAt": "2026-08-12T08:13:34.531Z",
+    "metrics": {
+      "stepCount": 10,
+      "agentCount": 10,
+      "wholeBook": true
+    },
+    "hasSample": true,
+    "hasWholeBook": true
+  }
+]

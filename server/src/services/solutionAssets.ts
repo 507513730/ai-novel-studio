@@ -272,8 +272,91 @@ export interface SolutionBundle {
   skills: Array<{ name: string; description: string; body_md: string }>
 }
 
-/** 方案 + 依赖资产导出为自包含 bundle（JSON 字符串） */
-export function exportSolutionBundle(db: DatabaseSync, id: number): string {
+// v0.11.0（批C/I3）：方案包（可移植创作资产 + 市场基础）——solution-pack 格式
+// manifest 惯例（D83，对照 npm package.json）：name+version 唯一标识、变更必 bump version、
+// 小写 kebab-case id、description/tags 为发现性字段
+export interface SolutionPack {
+  app: 'AI-Novel-Studio'
+  kind: 'solution-pack'
+  id: string
+  name: string
+  description: string
+  version: string
+  tags: string[]
+  exportedAt: string
+  schemaVersion: 1
+  metrics: {
+    stepCount: number
+    agentCount: number
+    wholeBook: boolean
+  }
+  solution: SolutionBundle['solution']
+  agents: SolutionBundle['agents']
+  skills: SolutionBundle['skills']
+  sampleBook?: {
+    title: string
+    worldSummary: string
+    characterSummary: string
+    chapters: Array<{ title: string; excerpt: string }>
+  }
+}
+
+function kebabId(name: string): string {
+  const hash = (s: string): string => {
+    let h = 0
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+    return h.toString(36).slice(0, 6)
+  }
+  const kebab = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50)
+  // 中文等非拉丁名 → 退化占位 + hash 保证唯一（D83：id 小写 kebab-case、URL 安全）
+  return (kebab || 'sol') + '-' + hash(name)
+}
+
+/** 样例快照：所选书 1-2 章正文片段 + 世界观/角色摘要 */
+function buildSampleBook(db: DatabaseSync, novelId: number): SolutionPack['sampleBook'] {
+  const novel = db.prepare('SELECT title, framing_json FROM novel WHERE id = ?').get(novelId) as
+    | { title: string; framing_json: string }
+    | undefined
+  if (!novel) return undefined
+  const chapters = db
+    .prepare(
+      "SELECT title, content FROM chapter WHERE novel_id = ? AND content != '' AND status IN ('written','reviewed','done') ORDER BY id LIMIT 2"
+    )
+    .all(novelId) as Array<{ title: string; content: string }>
+  if (chapters.length === 0) return undefined
+  const world = db
+    .prepare('SELECT manual_json, factions_json FROM world WHERE novel_id = ?')
+    .get(novelId) as { manual_json: string; factions_json: string } | undefined
+  const chars = db
+    .prepare("SELECT name, profile_json FROM character WHERE novel_id = ? AND status = 'roster' LIMIT 5")
+    .all(novelId) as Array<{ name: string; profile_json: string }>
+  return {
+    title: novel.title || '未命名',
+    worldSummary: [
+      ...Object.entries(JSON.parse(world?.manual_json ?? '{}') as Record<string, unknown>).map(
+        ([k, v]) => `${k}：${typeof v === 'string' ? v : JSON.stringify(v)}`
+      ),
+      ...((JSON.parse(world?.factions_json ?? '[]') as Array<{ name: string; desc: string }>).map(
+        (f) => `势力 ${f.name}：${f.desc}`
+      ))
+    ]
+      .slice(0, 6)
+      .join('\n'),
+    characterSummary: chars.map((c) => `${c.name}：${String(JSON.parse(c.profile_json || '{}').desc ?? '').slice(0, 60)}`).join('\n'),
+    chapters: chapters.map((c) => ({ title: c.title || '未命名章节', excerpt: c.content.slice(0, 800) }))
+  }
+}
+
+/** 方案 + 依赖资产导出为自包含方案包（solution-pack，市场格式；向后兼容旧 bundle 导入） */
+export function exportSolutionBundle(
+  db: DatabaseSync,
+  id: number,
+  opts: { sample?: { novelId: number } } = {}
+): string {
   const sol = loadSolution(db, id)
   if (!sol) throw new Error('solution not found')
   const agentIds = new Set(sol.steps.map((s) => s.agentId))
@@ -342,13 +425,39 @@ export function exportSolutionBundle(db: DatabaseSync, id: number): string {
     void agentId
     return { ...rest, agentName: nameById.get(s.agentId) ?? `agent-${s.agentId}` }
   })
-  return JSON.stringify(bundle, null, 2)
+
+  // v0.11.0（批C/I3）：包装为 solution-pack（市场格式）——旧 kind:'solution' 导入仍兼容
+  const pack: SolutionPack = {
+    app: 'AI-Novel-Studio',
+    kind: 'solution-pack',
+    id: kebabId(sol.name),
+    name: sol.name,
+    description: sol.description,
+    version: `1.0.0`,
+    tags: [],
+    exportedAt: new Date().toISOString(),
+    schemaVersion: 1,
+    metrics: {
+      stepCount: sol.steps.length,
+      agentCount: agents.length,
+      wholeBook: sol.steps.some((s) => s.stage === 'whole_book')
+    },
+    solution: bundle.solution,
+    agents: bundle.agents,
+    skills: bundle.skills,
+    ...(opts.sample?.novelId ? { sampleBook: buildSampleBook(db, opts.sample.novelId) } : {})
+  }
+  return JSON.stringify(pack, null, 2)
 }
 
-/** 导入 bundle（agent/skill 按名去重，创建新方案；返回方案 id） */
-export function importSolutionBundle(db: DatabaseSync, json: string): { solutionId: number; name: string } {
-  const bundle = JSON.parse(json) as SolutionBundle
-  if (bundle.app !== 'AI-Novel-Studio' || bundle.kind !== 'solution') {
+/** 导入 bundle / solution-pack（agent/skill 按名去重，创建新方案；返回方案 id + 样例摘要） */
+export function importSolutionBundle(
+  db: DatabaseSync,
+  json: string
+): { solutionId: number; name: string; version?: string; sampleBook?: SolutionPack['sampleBook'] } {
+  const bundle = JSON.parse(json) as SolutionBundle | SolutionPack
+  // v0.11.0（批C/I3）：兼容旧 kind:'solution' 与新 kind:'solution-pack'
+  if (bundle.app !== 'AI-Novel-Studio' || (bundle.kind !== 'solution' && bundle.kind !== 'solution-pack')) {
     throw new Error('不是有效的方案导出文件')
   }
   // 1) skills
@@ -413,5 +522,12 @@ export function importSolutionBundle(db: DatabaseSync, json: string): { solution
     primaryAgentId,
     steps
   })
-  return { solutionId, name: bundle.solution.name }
+  return {
+    solutionId,
+    name: bundle.solution.name,
+    // v0.11.0（批C/I3）：solution-pack 元数据透传（前端展示；样例不进库）
+    ...(bundle.kind === 'solution-pack'
+      ? { version: bundle.version, sampleBook: (bundle as SolutionPack).sampleBook }
+      : {})
+  }
 }

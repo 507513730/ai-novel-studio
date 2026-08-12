@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { WandSparkles, Play, Save, Download, Upload, Pencil, Trash2, Layers } from 'lucide-react'
 import { novelApi, studioApi, agentsApi, apiFetch } from '../api'
+import { MarketPanel } from '../components/MarketPanel'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
 import { usePrompt } from '../components/PromptDialog'
@@ -64,6 +65,8 @@ export function StudioPage(): React.JSX.Element {
   // P21-5h：AI 生成方案
   const [genPrompt, setGenPrompt] = useState('')
   const [genBusy, setGenBusy] = useState(false)
+  // v0.11.0（批C）：方案市场面板开关
+  const [showMarket, setShowMarket] = useState(false)
   const generateSolution = async (): Promise<void> => {
     if (!genPrompt.trim()) return
     setGenBusy(true)
@@ -296,7 +299,13 @@ export function StudioPage(): React.JSX.Element {
         <button className="sm primary" disabled={genBusy || !genPrompt.trim()} onClick={() => void generateSolution()}>
           {genBusy ? '生成中…' : 'AI 生成方案'}
         </button>
+        <button className="sm" onClick={() => setShowMarket((v) => !v)} style={showMarket ? { borderColor: 'var(--accent)' } : undefined}>
+          🛒 方案市场{showMarket ? '（收起）' : ''}
+        </button>
       </div>
+
+      {/* v0.11.0（批C）：方案市场（GitHub 仓库 solutions/ 目录） */}
+      {showMarket && <MarketPanel />}
 
       {error && <ErrorMsg error={error} />}
 

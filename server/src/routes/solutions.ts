@@ -245,15 +245,19 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
     }
   })
 
-  // ---------- 导出/导入（P21-4） ----------
+  // ---------- 导出/导入（P21-4）+ v0.11.0 方案包（solution-pack） ----------
   router.get('/solutions/:id/export', (req, res, next) => {
     try {
-      const bundle = exportSolutionBundle(db, Number(req.params.id))
+      // ?sampleNovelId= 附带所选书样例快照（市场包用）
+      const sampleNovelId = req.query.sampleNovelId ? Number(req.query.sampleNovelId) : undefined
+      const bundle = exportSolutionBundle(db, Number(req.params.id), {
+        ...(sampleNovelId && Number.isInteger(sampleNovelId) && sampleNovelId > 0 ? { sample: { novelId: sampleNovelId } } : {})
+      })
       const sol = loadSolution(db, Number(req.params.id))
       res.setHeader('Content-Type', 'application/json; charset=utf-8')
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename*=UTF-8''${encodeURIComponent((sol?.name ?? 'solution').replace(/[\\/:*?"<>|]/g, '_'))}.solution.json`
+        `attachment; filename*=UTF-8''${encodeURIComponent((sol?.name ?? 'solution').replace(/[\\/:*?"<>|]/g, '_'))}.solution-pack.json`
       )
       res.send(bundle)
     } catch (err) {
