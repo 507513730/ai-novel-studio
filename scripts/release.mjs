@@ -271,7 +271,7 @@ if (SKIP_DIST) {
     // v0.10.0：被占用（如用户正在运行旧版 portable）时跳过并警告——发布不中断
     const stale = readdirSync(releaseDir).filter((f) => /Setup|portable|blockmap|latest\.yml|builder-debug/.test(f))
     let cleaned = 0
-    const skipped: string[] = []
+    const skipped = []
     for (const f of stale) {
       try {
         rmSync(join(releaseDir, f), { force: true })
