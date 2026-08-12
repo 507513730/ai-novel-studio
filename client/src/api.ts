@@ -294,7 +294,10 @@ export const styleApi = {
   trial: (id: number, task: string): Promise<{ output: string; usedRules: string[] }> =>
     j(`/novels/${id}/style/trial`, { method: 'POST', body: JSON.stringify({ task }) }),
   external: (id: number, title: string, content: string): Promise<{ kbDocId: number }> =>
-    j(`/novels/${id}/style/external`, { method: 'POST', body: JSON.stringify({ title, content }) })
+    j(`/novels/${id}/style/external`, { method: 'POST', body: JSON.stringify({ title, content }) }),
+  // v0.14.0（批F/I5）：风格指纹（结构统计提取，无 LLM）
+  fingerprint: (id: number, body: { name: string; text?: string; useNovel?: boolean }): Promise<{ id: number; description: string }> =>
+    js(`/novels/${id}/style/fingerprint`, { method: 'POST', body: JSON.stringify(body) })
 }
 
 // P16 P1：反 AI 词库管理

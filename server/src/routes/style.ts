@@ -9,9 +9,61 @@ import {
   trialWrite,
   type StyleFeature
 } from '../services/styleEngine'
+import { computeStyleFingerprint, fingerprintDescription } from '../services/styleFingerprint'
 
 export function createStyleRouter(db: DatabaseSync): Router {
   const router = Router()
+
+  // v0.14.0（批F/I5）：风格指纹——结构统计提取（Stylometry，无 LLM 零成本）
+  // 支持两种输入：① text 直接提供参考文本；② novelId 选书自动取已写章节拼接
+  router.post('/:novelId/style/fingerprint', (req, res, next) => {
+    try {
+      const novelId = Number(req.params.novelId)
+      const input = z
+        .object({
+          name: z.string().min(1).max(50),
+          text: z.string().min(100).optional(),
+          useNovel: z.boolean().optional().default(false)
+        })
+        .parse(req.body)
+      let source = input.text ?? ''
+      if (input.useNovel || !source) {
+        const rows = db
+          .prepare(
+            "SELECT content FROM chapter WHERE novel_id = ? AND content != '' AND status IN ('written','reviewed','done') ORDER BY id DESC LIMIT 5"
+          )
+          .all(novelId) as Array<{ content: string }>
+        source = rows.map((r) => r.content).join('\n\n')
+      }
+      if (source.length < 500) {
+        res.status(400).json({ error: `参考文本过短（${source.length} 字，需 ≥500 字）——粘贴文本或先写几章` })
+        return
+      }
+      const fp = computeStyleFingerprint(source)
+      if (!fp) {
+        res.status(400).json({ error: '样本统计不可靠（句子不足 10 句或文本过短）' })
+        return
+      }
+      const description = fingerprintDescription(fp)
+      // 复用写法引擎落库（features_json 格式一致 → 现有绑定/注入链路自动生效）
+      db.prepare(
+        'INSERT INTO style_asset (novel_id, name, features_json, samples_json, anti_ai_rules_json) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        novelId,
+        input.name,
+        JSON.stringify([{ id: 'fp1', name: '风格指纹', description, enabled: true, category: 'rhythm' } as StyleFeature]),
+        JSON.stringify([source.slice(0, 3000)]),
+        '[]'
+      )
+      res.status(201).json({
+        id: (db.prepare('SELECT last_insert_rowid() AS id').get() as { id: number }).id,
+        fingerprint: fp,
+        description
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
 
   // 提取特征（示例文本 → 特征池）
   router.post('/:novelId/style/extract', async (req, res, next) => {

@@ -391,6 +391,20 @@ if (PUSH) {
   } catch {
     console.error(`  ✗ Release v${version} 未找到——见 versioning.md §8 回滚/排查`)
   }
+  // v0.14.0：发布成功 → versioning §7 当前版本行 🔄→✅（防下一版 docs replace 静默失败——D89 教训）
+  try {
+    const vp = join(ROOT, 'docs', 'versioning.md')
+    let vc = readFileSync(vp, 'utf8')
+    const lines = vc.split('\n')
+    const idx = lines.findIndex((l) => l.startsWith(`| ${version} |`))
+    if (idx !== -1 && lines[idx].includes('🔄')) {
+      lines[idx] = lines[idx].replace('🔄 发布中', '✅ 已发布')
+      writeFileSync(vp, lines.join('\n'), 'utf8')
+      console.log('  ✓ versioning §7 已标记 ✅ 已发布')
+    }
+  } catch (e) {
+    console.log('  ⚠ versioning 状态更新失败（不影响发布结果）:', String(e))
+  }
   // v0.9.2（O1）：发布后自动跑打包态等价验收——SSE 生成/导出/鉴权 403 全链路
   // 防"打包态坏了发布照样出"（Node24 SSE 回归教训）
   try {

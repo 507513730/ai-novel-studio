@@ -1,11 +1,77 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { WandSparkles } from 'lucide-react'
-import { globalStyleApi, novelApi, assetsApi } from '../api'
+import { WandSparkles, Fingerprint } from 'lucide-react'
+import { globalStyleApi, novelApi, assetsApi, styleApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
 import { AssetCreator } from '../components/AssetCreator'
+
+// v0.14.0（批F/I5）：风格指纹面板——结构统计提取（Stylometry：句长均值/方差/短句占比/段落/标点/对话）
+function FingerprintPanel({ novels, onSaved }: { novels: Array<{ id: number; title: string }>; onSaved: () => void }): React.JSX.Element {
+  const { toast } = useToast()
+  const [targetNovel, setTargetNovel] = useState(0)
+  const [fpName, setFpName] = useState('我的风格指纹')
+  const [fpText, setFpText] = useState('')
+  const [useNovelText, setUseNovelText] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ description: string } | null>(null)
+
+  const run = async (): Promise<void> => {
+    setBusy(true)
+    setResult(null)
+    try {
+      const r = await styleApi.fingerprint(targetNovel, {
+        name: fpName.trim() || '我的风格指纹',
+        text: fpText.trim() || undefined,
+        useNovel: useNovelText || !fpText.trim()
+      })
+      setResult({ description: r.description })
+      toast('ok', '风格指纹已保存为写法资产')
+      onSaved()
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="panel mb-4">
+      <h2 className="mb-2 row gap-2"><Fingerprint size={16} />风格指纹（统计提取）</h2>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        从参考文本计算句长/段落/标点/对话分布（文体计量学），无需 AI 调用；保存后与普通写法资产一样可绑定注入。
+      </p>
+      <div className="row mb-2" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <select style={{ fontSize: 13 }} value={targetNovel} onChange={(e) => setTargetNovel(Number(e.target.value))}>
+          <option value={0}>全局（所有书可用）</option>
+          {novels.map((n) => (
+            <option key={n.id} value={n.id}>{n.title}</option>
+          ))}
+        </select>
+        <input style={{ flex: '1 1 180px', fontSize: 13 }} placeholder="资产名" value={fpName} onChange={(e) => setFpName(e.target.value)} />
+        <label className="muted t-small row gap-1" style={{ alignItems: 'center' }}>
+          <input type="checkbox" checked={useNovelText} onChange={(e) => setUseNovelText(e.target.checked)} />
+          用该书已写章节
+        </label>
+        <button className="primary sm" disabled={busy} onClick={() => void run()}>{busy ? '提取中…' : '提取指纹'}</button>
+      </div>
+      {!useNovelText && (
+        <textarea
+          style={{ width: '100%', minHeight: 70, background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, fontFamily: 'inherit', fontSize: 13 }}
+          placeholder="粘贴 ≥500 字参考文本（模仿它的风格写作）…"
+          value={fpText}
+          onChange={(e) => setFpText(e.target.value)}
+        />
+      )}
+      {result && (
+        <div style={{ marginTop: 8, padding: 8, border: '1px solid var(--accent)', borderRadius: 8, fontSize: 12, background: 'var(--bg-card)' }}>
+          <b>生成约束：</b>{result.description}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // P17-1：写法引擎全局页（跨书资产总览 + 全局写法创建 + 导入到书）
 export function StyleEnginePage(): React.JSX.Element {
@@ -106,9 +172,11 @@ export function StyleEnginePage(): React.JSX.Element {
         </div>
       </div>
 
+      {/* v0.14.0（批F/I5）：风格指纹——结构统计提取（句长/段落/标点/对话，零 LLM 成本） */}
+      <FingerprintPanel novels={novels.data?.novels ?? []} onSaved={() => void queryClient.invalidateQueries({ queryKey: ['style-global'] })} />
+
       <div className="panel">
-        <h2 className="mb-3">全部写法资产</h2>
-        {assets.isLoading && <p className="muted">加载中…</p>}
+        <h2 className="mb-3">全部写法资产</h2>        {assets.isLoading && <p className="muted">加载中…</p>}
         <div className="col gap-2">
           {assets.data?.assets.map((a) => (
             <div key={a.id} className="panel" style={{ background: 'var(--bg-card)', padding: 12 }}>
