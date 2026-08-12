@@ -5,7 +5,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { novelEditorTheme } from '../editor/theme'
-import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi } from '../api'
+import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
 import type { ChapterSummary } from '../types'
@@ -50,6 +50,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
   // P20（U6）：流式 rAF 合并缓冲
   const pendingDeltaRef = useRef('')
   const rAFRef = useRef<number | null>(null)
+  // 批1-#3（v0.7.2）：内容已由 onDone/onAborted/onError 落定的标记——落定后不再 flush rAF 缓冲（防尾段重复追加）
+  const contentSettledRef = useRef(false)
   // P19 ④：单次生成引导输入（生成后保留，供参考）
   const [guidanceDraft, setGuidanceDraft] = useState('')
   // P12 A3：章节进度矩阵信号（跨渲染记录，不新增请求）
@@ -325,6 +327,13 @@ export function ChapterExecutionPage(): React.JSX.Element {
             })
           },
           onDone: async (payload) => {
+            // 批1-#3：内容已全量落定——清缓冲防重复追加
+            if (rAFRef.current !== null) {
+              cancelAnimationFrame(rAFRef.current)
+              rAFRef.current = null
+            }
+            pendingDeltaRef.current = ''
+            contentSettledRef.current = true
             setContent(payload.content)
             savedContentRef.current = payload.content
             dirtyRef.current = false
@@ -335,6 +344,12 @@ export function ChapterExecutionPage(): React.JSX.Element {
             abortRef.current = null
           },
           onAborted: async (payload) => {
+            if (rAFRef.current !== null) {
+              cancelAnimationFrame(rAFRef.current)
+              rAFRef.current = null
+            }
+            pendingDeltaRef.current = ''
+            contentSettledRef.current = true
             setContent(payload.content)
             savedContentRef.current = payload.content
             dirtyRef.current = false
@@ -345,7 +360,13 @@ export function ChapterExecutionPage(): React.JSX.Element {
             abortRef.current = null
           },
           onError: (message) => {
-            // P9 A3：失败恢复生成前的内容
+            // P9 A3：失败恢复生成前的内容（残留增量一并丢弃）
+            if (rAFRef.current !== null) {
+              cancelAnimationFrame(rAFRef.current)
+              rAFRef.current = null
+            }
+            pendingDeltaRef.current = ''
+            contentSettledRef.current = true
             if (prevContent) setContent(prevContent)
             setStreamStat(null)
             setActionError(message)
@@ -371,16 +392,13 @@ export function ChapterExecutionPage(): React.JSX.Element {
       streamingRef.current = false
       setStreaming(false)
       abortRef.current = null
-      // P20（U6）：清理 rAF 缓冲（未刷入的 delta 直接落到 state，保证内容不丢）
-      if (rAFRef.current !== null) {
-        cancelAnimationFrame(rAFRef.current)
-        rAFRef.current = null
-      }
-      if (pendingDeltaRef.current) {
+      // 批1-#3（v0.7.2）：仅当无终端 handler 落定内容时才 flush rAF 缓冲（防尾段重复追加）
+      if (!contentSettledRef.current && pendingDeltaRef.current) {
         const tail = pendingDeltaRef.current
         pendingDeltaRef.current = ''
         setContent((prev) => prev + tail)
       }
+      contentSettledRef.current = false
     }
   }
 
@@ -627,7 +645,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
     if (exportBusy) return
     setExportBusy(format)
     try {
-      const res = await fetch(exportLink(format))
+      const res = await fetch(exportLink(format), { headers: authHeaders() })
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null
         throw new Error(body?.error ?? `HTTP ${res.status}`)

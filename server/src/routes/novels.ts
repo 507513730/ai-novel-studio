@@ -205,7 +205,12 @@ export function createNovelsRouter(db: DatabaseSync): Router {
       return
     }
     // 外键 CASCADE 会处理 character/chapter/volume/world/foreshadow/fact；job 是独立表需手动清
-    db.prepare('DELETE FROM job WHERE json_extract(payload_json, \'$.novelId\') = ?').run(id)
+    // 批1-#6（v0.7.2）：先置 cancelled 不删行——调度器/流水线依赖 job 行感知取消（isJobCancelled），
+    // 直接 DELETE 会让运行中的导演/整本生产失去取消感知，继续对已删书逐章烧 LLM 并 FK 失败
+    db.prepare(
+      `UPDATE job SET status = 'cancelled', updated_at = datetime('now')
+       WHERE json_extract(payload_json, '$.novelId') = ? AND status IN ('queued', 'running')`
+    ).run(id)
     db.prepare('DELETE FROM novel WHERE id = ?').run(id)
     res.json({ ok: true })
   })

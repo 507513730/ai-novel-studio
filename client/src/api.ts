@@ -20,10 +20,12 @@ export function setApiBaseUrl(url: string): void {
 }
 
 // P20（S1）：本地 API 鉴权 token（Electron renderer 经 preload 注入；浏览器调试为空则跳过）
-function authHeaders(): Record<string, string> {
+export function authHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = (window as unknown as { novelStudio?: { serverToken?: string } })?.novelStudio?.serverToken
-  if (token) h['X-App-Token'] = token
+  if (typeof window !== 'undefined') {
+    const token = (window as unknown as { novelStudio?: { serverToken?: string } })?.novelStudio?.serverToken
+    if (token) h['X-App-Token'] = token
+  }
   return h
 }
 
@@ -375,6 +377,7 @@ export async function generateChapterSse(
   try {
     res = await fetch(`${base()}/novels/${novelId}/chapters/${chapterId}/generate${params}`, {
       method: 'POST',
+      headers: authHeaders(),
       signal,
       body: guidance ? JSON.stringify({ guidance }) : undefined
     })
