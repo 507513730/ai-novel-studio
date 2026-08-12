@@ -28,6 +28,14 @@ const stepSchema = z.object({
   if: z
     .object({ field: z.string(), op: z.enum(['<', '>', '==']), value: z.number() })
     .nullable()
+    .optional(),
+  // v0.8.0（审查 #2）：production 字段纳入校验——此前 zod 剥离未知键导致
+  // UI 创建/编辑 whole_book 方案时 production 静默丢失，流水线退化为 draft 拼接
+  production: z
+    .object({
+      output: z.enum(['outline', 'draft', 'dialogue', 'scene', 'review', 'final']),
+      reviewRounds: z.number().int().min(1).max(3).optional()
+    })
     .optional()
 })
 
@@ -206,6 +214,11 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
       const result = await runProductionChapter(db, id, input.novelId, input.chapterId)
       res.json(result)
     } catch (err) {
+      // v0.8.0（审查 #5）：抢占冲突 → 409（并发生成中），与 chapter 状态门禁语义一致
+      if (err instanceof Error && err.message.includes('正在生成中')) {
+        res.status(409).json({ error: err.message })
+        return
+      }
       next(err)
     }
   })

@@ -49,11 +49,16 @@ function claimNextJob(db: DatabaseSync): JobRecord | null {
   return row ?? null
 }
 
-// P20（M1）：看门狗——运行中且超时的 job 强制 failed（scheduler 恢复依赖其 finally 复位）
+// P20（M1）：看门狗——运行中且无进展超时的 job 强制 failed。
+// v0.8.0（审查 #8）：以 updated_at 活跃度判定（每章 progress 回调会刷新 updated_at）——
+// 活跃任务不会被误回收；只有真挂死（30 分钟无任何进展）才回收，且 processJob
+// 通过 isJobAborted 在章节边界自检后停止继续写库
 function watchdog(db: DatabaseSync): void {
   db.prepare(
-    `UPDATE job SET status = 'failed', error = 'watchdog: job exceeded 30min', updated_at = datetime('now')
-     WHERE status = 'running' AND started_at IS NOT NULL AND started_at < datetime('now', '-30 minutes')`
+    `UPDATE job SET status = 'failed', error = 'watchdog: job stuck without progress for 30min', updated_at = datetime('now')
+     WHERE status = 'running' AND started_at IS NOT NULL
+       AND started_at < datetime('now', '-30 minutes')
+       AND updated_at < datetime('now', '-30 minutes')`
   ).run()
 }
 

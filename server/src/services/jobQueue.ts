@@ -44,3 +44,14 @@ export function isJobCancelled(db: DatabaseSync, jobId: number): boolean {
   const row = db.prepare("SELECT status FROM job WHERE id = ?").get(jobId) as { status: string } | undefined
   return row?.status === 'cancelled'
 }
+
+// v0.8.0（审查 #8）：执行中止感知——取消（cancelled）或 watchdog 超时回收（failed + watchdog: 前缀）都中止
+// watchdog 只改状态不中止执行 → 此前"假 failed"后流水线继续写库；现在每章/阶段边界自检后退出
+export function isJobAborted(db: DatabaseSync, jobId: number): boolean {
+  const row = db
+    .prepare("SELECT status, error FROM job WHERE id = ?")
+    .get(jobId) as { status: string; error: string } | undefined
+  if (!row) return true // 行不存在（被清理）＝视为中止
+  if (row.status === 'cancelled') return true
+  return row.status === 'failed' && String(row.error).startsWith('watchdog:')
+}

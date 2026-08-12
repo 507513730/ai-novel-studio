@@ -400,7 +400,9 @@ export function importSolutionBundle(db: DatabaseSync, json: string): { solution
       stage: s.stage,
       include: s.include,
       maxTokens: s.maxTokens,
-      if: s.if ?? null
+      if: s.if ?? null,
+      // v0.8.0（审查 #2）：导入保留 production——此前丢弃导致导出→导入往返丢配置
+      production: s.production
     }
   })
   const primaryAgentId =

@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { callLlmJson } from './jsonSafe'
-import { isJobCancelled } from './jobQueue'
+import { isJobCancelled, isJobAborted } from './jobQueue'
 import {
   generateDirectionsPrompt,
   parseDirections,
@@ -734,10 +734,11 @@ export async function runDirectorPipeline(
   saveDirectorTask(db, task)
 
   for (const stage of STAGE_ORDER) {
-    // P20（M2）：取消感知（用户取消 → 中止并标记 task）
-    if (ctx.jobId && isJobCancelled(db, ctx.jobId)) {
+    // P20（M2）：取消感知（用户取消 → 中止并标记 task）；v0.8.0（审查 #8）：watchdog 超时同样中止
+    if (ctx.jobId && isJobAborted(db, ctx.jobId)) {
+      const watchdogStuck = isJobCancelled(db, ctx.jobId) === false
       task.status = 'cancelled'
-      task.checkpoint.displayStatus = '导演已取消（用户中止）'
+      task.checkpoint.displayStatus = watchdogStuck ? '导演已中止（任务超时回收）' : '导演已取消（用户中止）'
       task.checkpoint.resumeAction = '重新运行导演以继续'
       saveDirectorTask(db, task)
       return

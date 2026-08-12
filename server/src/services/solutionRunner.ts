@@ -269,11 +269,24 @@ export async function runProductionChapter(
   if (!chapter) throw new Error('chapter not found')
   if (chapter.content.trim()) throw new Error('章节已有正文（生产模式只用于空章节）')
 
+  // v0.8.0（审查 #5）：原子抢占——复用 generateChapter 的 claim 语义（status 门禁），
+  // 防 produce-chapter 与整本生产/SSE 生成并发写同一章（双倍费用 + 后写覆盖先写）
+  const claimed = db
+    .prepare(
+      "UPDATE chapter SET status = 'generating', updated_at = datetime('now') WHERE id = ? AND novel_id = ? AND status NOT IN ('generating')"
+    )
+    .run(chapterId, novelId)
+  if (Number(claimed.changes) === 0) {
+    throw new Error('章节正在生成中（或状态不允许），请等待完成')
+  }
+
   const outputs: StepOutput[] = []
   const degradedReasons: string[] = []
   const draftParts: string[] = [] // 片段合并（draft/scene/dialogue）
   let outline: { title?: string; scenes?: Array<{ purpose?: string; summary?: string }> } | null = null
   let finalContent = ''
+
+  try {
 
   for (let i = 0; i < solution.steps.length; i++) {
     if (opts.signal?.aborted) break
@@ -295,13 +308,18 @@ export async function runProductionChapter(
           ? `\n\n【已完成步骤输出】\n${outputs.map((o, idx) => `步骤${idx + 1}·${o.role}：\n${o.output.slice(0, 2000)}`).join('\n---\n')}`
           : ''
 
+      // v0.8.0（审查 #7）：纯文本类步骤（draft/scene/dialogue/final）不注入 JSON_FORMAT——
+      // 此前"只输出 JSON"指令与纯文本解析互相矛盾，模型按 JSON 包装时包装符会作为正文落库
+      const jsonOutput = prod.output === 'outline' || prod.output === 'review'
+      const formatRule = jsonOutput ? `\n${JSON_FORMAT}\n\n` : '\n请只输出正文文本，不要 JSON、不要代码块标记、不要解释。\n\n'
+
       const prompt = [
         agent.system_prompt || agent.body_md || `你是${agent.name}。`,
         agent.description ? `\n职责：${agent.description}` : '',
         agent.body_md ? `\n\n${agent.body_md}` : '',
         '\n\n章节目标：',
         chapter.title ? `《${chapter.title}》` : '（未命名章节）',
-        `\n${JSON_FORMAT}\n\n${instruction}`,
+        `${formatRule}${instruction}`,
         prevBlock,
         `\n\n（步骤 ${i + 1}/${solution.steps.length}，请只完成本步骤职责）`
       ].join('\n')
@@ -436,5 +454,11 @@ export async function runProductionChapter(
     outputs,
     degraded: degradedReasons.length > 0,
     degradedReasons
+  }
+  } catch (err) {
+    // 抢占复位：失败时释放 claim（status='generating' → 'failed'），
+    // 使调用方（整本生产回退 generateChapter）可用，且不残留"永久生成中"
+    db.prepare("UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'generating'").run(chapterId)
+    throw err
   }
 }

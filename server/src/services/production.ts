@@ -3,8 +3,9 @@ import { generateChapter } from './generate'
 import { callLlmJson } from './jsonSafe'
 import { buildChapterReviewContext, buildBackfillContext, buildFixContext, buildPatchContext, applyPatches } from './context'
 import { writeCharacterStates } from './ledger'
-import { isJobCancelled } from './jobQueue'
+import { isJobAborted } from './jobQueue'
 import { runProductionChapter } from './solutionRunner'
+import { parseSolutionSteps } from './solutionAssets'
 
 // ============================================================
 // 整本批量生产 pipeline（PLAN §7.2 / P2）
@@ -59,11 +60,11 @@ export async function runProductionPipeline(
   onProgress(progress)
 
   for (let i = 0; i < chapters.length; i++) {
-    // P20（M2）：取消感知（每章边界检查）
-    if (opts.jobId && isJobCancelled(db, opts.jobId)) {
-      progress.currentAction = '已取消（用户中止）'
+    // P20（M2）：取消感知（每章边界检查）；v0.8.0（审查 #8）：watchdog 超时回收同样中止
+    if (opts.jobId && isJobAborted(db, opts.jobId)) {
+      progress.currentAction = '已取消（用户中止或 watchdog 超时）'
       onProgress(progress)
-      throw new Error('job cancelled')
+      throw new Error('job aborted')
     }
     const ch = chapters[i]
     progress.currentChapter = ch.title || `第 ${ch.id} 章`
@@ -77,14 +78,20 @@ export async function runProductionPipeline(
       const bound = db
         .prepare("SELECT s.id, s.steps_json FROM novel n JOIN solution s ON s.id = n.current_solution_id WHERE n.id = ? AND s.enabled = 1")
         .get(novelId) as { id: number; steps_json: string } | undefined
-      if (bound && /whole_book/.test(bound.steps_json)) {
+      // v0.8.0（审查 #14）：whole_book 判定改解析步骤 stage——正则子串匹配会把
+      // role 文本中出现的 "whole_book"（如「检查 whole_book 流程」）误判为流水线方案
+      const isWholeBook = bound
+        ? parseSolutionSteps(bound.steps_json).some((s) => s.stage === 'whole_book')
+        : false
+      if (bound && isWholeBook) {
         progress.currentAction = '方案流水线生产'
         onProgress(progress)
         try {
           const prod = await runProductionChapter(db, bound.id, novelId, ch.id)
           gen = { content: prod.content, wordCount: prod.wordCount, aborted: false, usage: { input: 0, output: 0, cacheHit: 0, cacheMiss: 0 } }
-        } catch {
-          // 流水线失败 → 回退默认生成
+        } catch (err) {
+          // 流水线失败 → 回退默认生成（v0.8.0：不再静默——用户以为流水线生效实际走了默认生成）
+          console.warn(`[production] 方案流水线回退默认生成（第 ${i + 1} 章）: ${err instanceof Error ? err.message : String(err)}`)
           gen = await generateChapter(db, novelId, ch.id)
         }
       } else {
@@ -298,8 +305,9 @@ export async function runProductionPipeline(
           db.exec('ROLLBACK')
           throw err
         }
-      } catch {
-        /* 回灌失败不影响主流程 */
+      } catch (err) {
+        // v0.8.0（审查 #14）：回灌失败不再静默——不影响主流程但必须可见
+        console.warn(`[production] 回灌失败（第 ${i + 1} 章，评分 ${score}）: ${err instanceof Error ? err.message : String(err)}`)
       }
 
       progress.done = i + 1
