@@ -6,7 +6,7 @@
 //   node scripts/release.mjs --e2e    # 额外跑真机全功能 e2e（round.mjs R1，需真实 API key，消耗少量额度）
 //   node scripts/release.mjs --bump=patch|minor|major  # 自动 bump 版本 + 生成 CHANGELOG 草稿（P26）
 import { execSync } from 'node:child_process'
-import { readFileSync, existsSync, readdirSync, rmSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
