@@ -391,6 +391,26 @@ if (PUSH) {
   } catch {
     console.error(`  ✗ Release v${version} 未找到——见 versioning.md §8 回滚/排查`)
   }
+  // 仓库整理（2026-08-12）：Release body 自动写入 CHANGELOG 当前版本段落（v0.14.1 起生效，历史不回溯）
+  try {
+    const changelog = readFileSync(join(ROOT, 'docs', 'CHANGELOG.md'), 'utf8')
+    const start = changelog.indexOf(`## v${version}`)
+    if (start === -1) throw new Error('CHANGELOG 无当前版本段落')
+    const end = changelog.indexOf('\n## ', start + 1)
+    const section = (end === -1 ? changelog.slice(start) : changelog.slice(start, end)).trim()
+    const notesFile = join(ROOT, 'release', `.release-notes-${version}.md`)
+    writeFileSync(notesFile, section, 'utf8')
+    execSync(`gh release edit v${version} --notes-file "${notesFile}"`, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      cwd: ROOT,
+      shell: 'cmd'
+    })
+    rmSync(notesFile, { force: true })
+    console.log(`  ✓ Release body 已写入 CHANGELOG 段落（v${version}）`)
+  } catch (e) {
+    console.log(`  ⚠ Release body 更新失败（不影响发布结果）: ${String(e).slice(0, 150)}`)
+  }
   // v0.14.0：发布成功 → versioning §7 当前版本行 🔄→✅（防下一版 docs replace 静默失败——D89 教训）
   try {
     const vp = join(ROOT, 'docs', 'versioning.md')

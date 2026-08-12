@@ -1,5 +1,11 @@
 # AI-Novel-Studio · AI 小说创作工作台
 
+<!-- 仓库整理（2026-08-12）：shields badge——版本/测试/License/平台 -->
+![Release](https://img.shields.io/github/v/release/507513730/ai-novel-studio?label=Release)
+![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Platform](https://img.shields.io/badge/platform-Windows-8A2BE2)
+
 面向长篇小说创作的 **AI 导演式生产系统**（Electron 桌面应用）：从一句灵感推进到完整小说——规划、生成、审核、修复、状态回灌全链路。
 
 ## 为什么用它？
