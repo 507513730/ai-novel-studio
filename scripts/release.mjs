@@ -268,9 +268,22 @@ if (SKIP_DIST) {
   const releaseDir = join(ROOT, 'release')
   if (existsSync(releaseDir)) {
     // 清理旧版本产物（按 artifactName 前缀匹配，保留 win-unpacked 调试目录）
+    // v0.10.0：被占用（如用户正在运行旧版 portable）时跳过并警告——发布不中断
     const stale = readdirSync(releaseDir).filter((f) => /Setup|portable|blockmap|latest\.yml|builder-debug/.test(f))
-    for (const f of stale) rmSync(join(releaseDir, f), { force: true })
-    ok(`清理旧产物 ${stale.length} 个`)
+    let cleaned = 0
+    const skipped: string[] = []
+    for (const f of stale) {
+      try {
+        rmSync(join(releaseDir, f), { force: true })
+        cleaned += 1
+      } catch {
+        skipped.push(f)
+      }
+    }
+    ok(`清理旧产物 ${cleaned}/${stale.length} 个`)
+    if (skipped.length > 0) {
+      console.warn(`  ⚠ ${skipped.length} 个文件被占用跳过（可能是正在运行的旧版应用）: ${skipped.join(', ')}`)
+    }
   }
   try {
     run('pnpm dist', { stdio: 'pipe' })
