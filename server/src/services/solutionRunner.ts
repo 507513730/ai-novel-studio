@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { callLlmJson } from './jsonSafe'
 import { loadSolution, type SolutionStep } from './solutionAssets'
 import { buildChapterWriteContext } from './context'
+import { chapterPositionBlock } from './chapterRole'
 import { JSON_FORMAT } from '../prompts'
 
 // ============================================================
@@ -351,6 +352,8 @@ export async function runProductionChapter(
         agent.body_md ? `\n\n${agent.body_md}` : '',
         '\n\n章节目标：',
         chapter.title ? `《${chapter.title}》` : '（未命名章节）',
+        // v0.12.0（批D/P31）：卷章定位注入——方案步骤感知章在卷中的角色（开篇/推进/收尾）
+        chapterPositionBlock(db, novelId, chapterId),
         `${formatRule}${instruction}`,
         prevBlock,
         `\n\n（步骤 ${i + 1}/${solution.steps.length}，请只完成本步骤职责）`
