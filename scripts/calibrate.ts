@@ -2,7 +2,7 @@
  * DeepSeek 参数校准实验（P0 必做项，产出 docs/calibration-report.md）
  *
  * 用法（需先在本机任意位置配置好 DeepSeek API Key）：
- *   $env:DEEPSEEK_API_KEY="sk-..."  # PowerShell
+ *   $env:DEEPSEEK_API_KEY="sk-your-key-here"  # PowerShell（替换为真实 key）
  *   pnpm calibrate
  *
  * 原理：

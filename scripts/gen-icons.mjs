@@ -1,11 +1,13 @@
 // P28：kimi-k3 生成 8 稿图标（SVG，透明背景）——并发 3 + 长超时
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
+const ROOT = dirname(fileURLToPath(import.meta.url)) + '/..'
 const key = JSON.parse(readFileSync(join(homedir(), '.local', 'share', 'opencode', 'auth.json'), 'utf8'))['opencode-go'].key
 const base = 'https://opencode.ai/zen/go/v1'
-const DIR = 'D:/OpenCode/projects/ai-novel-studio/resources/icon-sources/k3'
+const DIR = join(ROOT, 'resources', 'icon-sources', 'k3')
 
 const SPEC =
   'Design an application icon as standalone SVG code. Requirements: viewBox="0 0 1024 1024"; ONLY the icon glyph on a TRANSPARENT background (no rect covering the full canvas, no white box); the glyph is a dark rounded-square badge with a single central symbol; flat modern minimal style; palette deep navy #0e0f13-#1a1f2b with one accent (#4F7CFF blue or gold); small margins; readable at 256px. Output ONLY the raw SVG code starting with <svg and ending with </svg>, no explanations, no markdown fences.'

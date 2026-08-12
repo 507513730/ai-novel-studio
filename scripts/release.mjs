@@ -4,7 +4,7 @@
 //   node scripts/release.mjs --push   # 额外执行 git commit + tag + push（需先文档就绪）
 //   node scripts/release.mjs --skip-dist  # 跳过本地构建（仅校验+验证，用于纯文档发布）
 //   node scripts/release.mjs --e2e    # 额外跑真机全功能 e2e（round.mjs R1，需真实 API key，消耗少量额度）
-//   node scripts/release.mjs --bump=patch|minor|major  # 自动 bump 版本 + 生成 release-notes 草稿（P26）
+//   node scripts/release.mjs --bump=patch|minor|major  # 自动 bump 版本 + 生成 CHANGELOG 草稿（P26）
 import { execSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
@@ -27,7 +27,7 @@ const run = (cmd, opts = {}) =>
 
 console.log('=== AI-Novel-Studio 发布流程 ===\n')
 
-// ---------- 0) --bump：自动 bump 版本 + 生成 release-notes 草稿（P26） ----------
+// ---------- 0) --bump：自动 bump 版本 + 生成 CHANGELOG 草稿（P26） ----------
 if (BUMP) {
   console.log('[0/7] 自动 bump 版本（--bump=' + BUMP + '）')
   if (!['patch', 'minor', 'major'].includes(BUMP)) {
@@ -42,7 +42,7 @@ if (BUMP) {
   pkgNow.version = next
   writeFileSync(pkgPath, JSON.stringify(pkgNow, null, 2) + '\n')
   ok(`版本 ${pkgNow.version} → ${next}`)
-  // release-notes 草稿段落（git log 上次 tag 起）
+  // CHANGELOG 草稿段落（git log 上次 tag 起）
   try {
     const lastTag = execSync('git describe --tags --abbrev=0', { encoding: 'utf8', cwd: ROOT }).trim()
     const log = execSync(`git log --oneline ${lastTag}..HEAD`, { encoding: 'utf8', cwd: ROOT })
@@ -50,7 +50,7 @@ if (BUMP) {
       .filter(Boolean)
       .slice(0, 20)
       .join('\n')
-    const rnPath = join(ROOT, 'docs', 'release-notes.md')
+    const rnPath = join(ROOT, 'docs', 'CHANGELOG.md')
     const rn = readFileSync(rnPath, 'utf8')
     const draft = `# AI-Novel-Studio 发布说明
 
@@ -74,7 +74,7 @@ ${log.split('\n').map((l) => '- ' + l.trim()).join('\n')}
     } else {
       writeFileSync(rnPath, draft + '\n' + rn.slice(headerEnd), 'utf8')
     }
-    console.log('  release-notes 草稿已生成（请润色后发布）')
+    console.log('  CHANGELOG 草稿已生成（请润色后发布）')
   } catch (err) {
     console.log('  ⚠ 无法生成草稿（无历史 tag？）:', err instanceof Error ? err.message : String(err))
   }
@@ -106,11 +106,11 @@ ok(`当前版本: v${version}`)
 
 // ---------- 3) 文档强制检查（缺 → 终止） ----------
 console.log('\n[3/7] 文档检查（发布前必须更新）')
-const rn = readFileSync(join(ROOT, 'docs', 'release-notes.md'), 'utf8')
+const rn = readFileSync(join(ROOT, 'docs', 'CHANGELOG.md'), 'utf8')
 if (rn.includes(`## v${version}`)) {
-  ok(`release-notes.md 含 v${version} 段落`)
+  ok(`CHANGELOG.md 含 v${version} 段落`)
 } else {
-  fail(`release-notes.md 缺少 "## v${version}" 段落（先补发布说明再发布）`)
+  fail(`CHANGELOG.md 缺少 "## v${version}" 段落（先补发布说明再发布）`)
 }
 const plan = readFileSync(join(ROOT, 'PLAN.md'), 'utf8')
 if (plan.includes(`v${version}`)) {

@@ -1,7 +1,7 @@
 name: Release Readiness
 
 # P26 项1：合入门禁技术强制（versioning.md §3.1）
-# src/** 变更时必须已 bump 版本 + 已写 release-notes；否则 fail——"合入未发版"从自觉变编译错误。
+# src/** 变更时必须已 bump 版本 + 已写 CHANGELOG；否则 fail——"合入未发版"从自觉变编译错误。
 # 纯文档/配置变更（docs/site/.github/scripts/根配置）不触发。
 
 on:
@@ -39,7 +39,7 @@ jobs:
             echo "src_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Verify version bumped + release-notes updated
+      - name: Verify version bumped + CHANGELOG updated
         if: steps.src.outputs.src_changed == 'true'
         run: |
           node -e "
@@ -55,10 +55,10 @@ jobs:
               console.error('FAIL: src changed but package.json version not bumped (' + version + ' == ' + lastVersion + '). Rule: versioning.md 3.1');
               process.exit(1);
             }
-            const rn = fs.readFileSync('docs/release-notes.md', 'utf8');
+            const rn = fs.readFileSync('docs/CHANGELOG.md', 'utf8');
             if (!rn.includes('## v' + version)) {
-              console.error('FAIL: release-notes.md missing ## v' + version + ' section');
+              console.error('FAIL: docs/CHANGELOG.md missing ## v' + version + ' section');
               process.exit(1);
             }
-            console.log('OK: version bumped and release-notes updated');
+            console.log('OK: version bumped and CHANGELOG updated');
           "

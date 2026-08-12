@@ -1,13 +1,15 @@
 // P30 验收：Feelfish mc-good2.0 真机试跑（导入 → 映射生产类型 → 流水线生成一章）
-import { readFileSync, readdirSync } from 'node:fs'
+// 用法：FF_DIR=<feelfish 项目目录> node scripts/p30-mcgood2-e2e.mjs
+//   FF_DIR 需包含 agents/*.md 与 solutions/mc-good-two.json；不传则跳过真机段
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { mkdirSync, rmSync } from 'node:fs'
 
-const ROOT = 'D:/OpenCode/projects/ai-novel-studio'
+const ROOT = dirname(fileURLToPath(import.meta.url)) + '/..'
 const BASE = 'http://127.0.0.1:3000/api'
-const FF_DIR = 'D:/FeelFish/\u8272/.feelfish'
+const FF_DIR = process.env.FF_DIR ?? ''
 
 // 产出类型映射（对齐 Feelfish AGENTS.md 的 10 步顺序）
 const OUTPUT_MAP = [
@@ -65,6 +67,11 @@ try {
   console.log('✓ 全部任务路由 → OpenCode Go (deepseek-v4-flash)')
 
   const agentsDir = join(FF_DIR, 'agents')
+  if (!existsSync(agentsDir)) {
+    console.log('⏭ 跳过真机段（FF_DIR 未配置或无 agents 目录）')
+    server.kill()
+    process.exit(0)
+  }
   const agentFiles = readdirSync(agentsDir).filter((f) => f.endsWith('.md'))
   const agentsText = agentFiles.map((f) => ({ filename: f, content: readFileSync(join(agentsDir, f), 'utf8') }))
   const sol = JSON.parse(readFileSync(join(FF_DIR, 'solutions', 'mc-good-two.json'), 'utf8'))

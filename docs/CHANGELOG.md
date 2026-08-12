@@ -1,4 +1,19 @@
-# AI-Novel-Studio 发布说明
+# AI-Novel-Studio 变更日志（CHANGELOG）
+
+> 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## [Unreleased]
+
+## v0.9.1（2026-08-12）
+
+### Added
+- 开源准备：LICENSE（MIT）、CONTRIBUTING、CODE_OF_CONDUCT、SECURITY、Issue 模板
+- 入门教程（docs/getting-started.md）
+
+### Changed
+- release-notes.md 更名为 CHANGELOG.md（Keep a Changelog 格式）
+- 敏感路径参数化（e2e 脚本 FF_DIR 环境变量、脚本 ROOT 自动推导）
+- README 开源化（badge/Why/FAQ/测试数校准）
 
 ## v0.9.0（2026-08-12）
 
