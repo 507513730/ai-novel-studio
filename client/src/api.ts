@@ -212,7 +212,7 @@ export const studioApi = {
   solutionExport: (id: number): Promise<string> => j(`/solutions/${id}/export`),
   solutionImport: (bundle: string): Promise<{ solutionId: number; name: string }> =>
     js('/solutions/import', { method: 'POST', body: JSON.stringify({ bundle }) }),
-  feelfishImport: (body: { agents: string[]; solution?: { name: string; description?: string; agents: Array<{ id: string }>; primaryAgentId?: string | null }; primaryAgentId?: string | null }): Promise<{ id: number; name: string; agentCount: number }> =>
+  feelfishImport: (body: { agents: Array<string | { filename: string; content: string }>; solution?: { name: string; description?: string; agents: Array<{ id: string }>; primaryAgentId?: string | null }; primaryAgentId?: string | null }): Promise<{ id: number; name: string; agentCount: number }> =>
     js('/solutions/import-feelfish', { method: 'POST', body: JSON.stringify(body) }),
   skills: (): Promise<{ skills: Array<Record<string, unknown>> }> => j('/skills'),
   skillCreate: (body: { name: string; description?: string; body_md?: string }): Promise<{ id: number }> =>

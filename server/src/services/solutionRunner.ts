@@ -370,47 +370,34 @@ export async function runProductionChapter(
         result = JSON.stringify(r)
         void rounds
       } else if (prod.output === 'final') {
+        // P30 修复：正文类产出走 callLlm（纯文本，不做 JSON 解析）——flash 输出纯文本被 JSON 校验误杀
+        const llm = await import('./llm')
         const r = await withTimeout(
-          callLlmJson<{ content: string }>(
-            db,
-            'extraction',
-            {
-              novelId,
-              messages: [{ role: 'user', content: prompt }],
-              maxTokens: step.maxTokens ?? 8192
-            },
-            (obj) => {
-              const o = obj as Record<string, unknown>
-              if (typeof o.content === 'string' && o.content.trim().length > 100) return { content: o.content }
-              return null
-            },
-            `production-final-${i}`
-          ),
+          llm.callLlm(db, 'extraction', {
+            novelId,
+            messages: [{ role: 'user', content: prompt }],
+            maxTokens: step.maxTokens ?? 8192
+          }),
           STEP_TIMEOUT_MS
         )
-        finalContent = r.content
+        const text = r.content.trim()
+        if (text.length < 100) throw new Error('final 产出过短')
+        finalContent = text
         result = finalContent.slice(0, 500) + '…'
       } else {
-        // draft / scene / dialogue：正文片段（收集合并）
+        // draft / scene / dialogue：正文片段（收集合并）——P30 修复：纯文本输出不解析 JSON
+        const llm = await import('./llm')
         const r = await withTimeout(
-          callLlmJson<{ content: string }>(
-            db,
-            'extraction',
-            {
-              novelId,
-              messages: [{ role: 'user', content: prompt }],
-              maxTokens: step.maxTokens ?? 4096
-            },
-            (obj) => {
-              const o = obj as Record<string, unknown>
-              if (typeof o.content === 'string' && o.content.trim().length > 50) return { content: o.content }
-              return null
-            },
-            `production-part-${i}`
-          ),
+          llm.callLlm(db, 'extraction', {
+            novelId,
+            messages: [{ role: 'user', content: prompt }],
+            maxTokens: step.maxTokens ?? 4096
+          }),
           STEP_TIMEOUT_MS
         )
-        draftParts.push(r.content.trim())
+        const text = r.content.trim()
+        if (text.length < 50) throw new Error('片段产出过短')
+        draftParts.push(text)
         result = r.content.slice(0, 300) + '…'
       }
 
@@ -428,7 +415,10 @@ export async function runProductionChapter(
     content = draftParts.join('\n\n')
   }
   if (!content.trim()) {
-    throw new Error('生产流水线未产出正文（所有产出步骤失败）')
+    const reasons = degradedReasons.length > 0
+      ? degradedReasons.join('; ').slice(0, 500)
+      : outputs.map((o) => `${o.role}:${o.error ?? '?'}`).join('; ').slice(0, 500)
+    throw new Error(`生产流水线未产出正文（所有产出步骤失败）：${reasons || '未知原因'}`)
   }
   const title = outline?.title?.trim() || chapter.title || ''
 

@@ -233,12 +233,12 @@ export function StudioPage(): React.JSX.Element {
         setBusy('ffimport')
         setError(null)
         try {
-          const agentsText: string[] = []
+          const agentsText: Array<string | { filename: string; content: string }> = []
           let solutionMeta: { name: string; description?: string; agents: Array<{ id: string }>; primaryAgentId?: string | null } | undefined
           for (const f of files) {
             const text = await f.text()
             if (f.name.endsWith('.md')) {
-              agentsText.push(text)
+              agentsText.push({ filename: f.name, content: text })
             } else if (f.name.toLowerCase().includes('solution')) {
               try {
                 const j = JSON.parse(text) as { primaryAgentId?: string | null; agents?: Array<{ id: string }>; description?: string }

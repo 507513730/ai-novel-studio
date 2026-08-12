@@ -263,7 +263,10 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
     try {
       const input = z
         .object({
-          agents: z.array(z.string()).default([]), // 每个元素为 agent md 文本
+          // P30 修正：agents 支持 {filename, content}（Feelfish 引用 key = 文件名 id，如 mc-xxx）
+          agents: z
+            .array(z.union([z.string(), z.object({ filename: z.string(), content: z.string() })]))
+            .default([]),
           solution: z
             .object({
               name: z.string(),
@@ -275,36 +278,45 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
           primaryAgentId: z.string().nullable().optional()
         })
         .parse(req.body ?? {})
-      const agentIdByName = new Map<string, number>()
-      for (const md of input.agents) {
+      const agentIdByKey = new Map<string, number>()
+      for (const entry of input.agents) {
+        const md = typeof entry === 'string' ? entry : entry.content
+        const key =
+          typeof entry === 'string'
+            ? (parseAgentMd(md).frontmatter.name ?? `agent-${Date.now()}-${agentIdByKey.size}`)
+            : entry.filename.replace(/\.md$/i, '')
         const parsed = parseAgentMd(md)
-        const name = parsed.frontmatter.name ?? `agent-${Date.now()}-${agentIdByName.size}`
+        const name = parsed.frontmatter.name ?? key
         const existing = db.prepare('SELECT id FROM agent WHERE name = ? LIMIT 1').get(name) as
           | { id: number }
           | undefined
+        let id: number
         if (existing) {
-          agentIdByName.set(name, existing.id)
-          continue
+          id = existing.id
+        } else {
+          const rid = db
+            .prepare(
+              "INSERT INTO agent (name, role, system_prompt, description, body_md, skills_json, tools_json, enabled, is_custom) VALUES (?, ?, ?, ?, ?, ?, '[]', 1, 1)"
+            )
+            .run(
+              name,
+              'custom',
+              parsed.body.slice(0, 4000),
+              parsed.frontmatter.description ?? '',
+              parsed.body,
+              JSON.stringify(parsed.frontmatter.skills ?? [])
+            )
+          id = Number(rid.lastInsertRowid)
         }
-        const rid = db
-          .prepare(
-            "INSERT INTO agent (name, role, system_prompt, description, body_md, skills_json, tools_json, enabled, is_custom) VALUES (?, ?, ?, ?, ?, ?, '[]', 1, 1)"
-          )
-          .run(
-            name,
-            'custom',
-            parsed.body.slice(0, 4000),
-            parsed.frontmatter.description ?? '',
-            parsed.body,
-            JSON.stringify(parsed.frontmatter.skills ?? [])
-          )
-        agentIdByName.set(name, Number(rid.lastInsertRowid))
+        // 文件名 key 与中文名都映射（方案可能用任一引用）
+        agentIdByKey.set(key, id)
+        agentIdByKey.set(name, id)
       }
       // 方案（若提供）：按 agents 顺序生成步骤
       const sol = input.solution
       const primary = sol?.primaryAgentId ?? input.primaryAgentId
       const steps: SolutionStep[] = (sol?.agents ?? []).map((a, i) => {
-        const agentId = agentIdByName.get(a.id)
+        const agentId = agentIdByKey.get(a.id)
         if (!agentId) throw new Error(`方案引用未知智能体：${a.id}`)
         return { agentId, role: `步骤 ${i + 1}`, stage: 'post_generate', if: null }
       })
@@ -312,14 +324,14 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
         res.status(400).json({ error: '方案为空（无步骤或智能体未匹配）' })
         return
       }
-      const primaryId = primary && agentIdByName.get(primary) ? agentIdByName.get(primary)! : null
+      const primaryId = primary && agentIdByKey.get(primary) ? agentIdByKey.get(primary)! : null
       const id = createSolution(db, {
         name: sol?.name ?? '导入方案',
         description: sol?.description ?? '从外部导入',
         primaryAgentId: primaryId,
         steps
       })
-      res.status(201).json({ id, name: sol?.name ?? '导入方案', agentCount: agentIdByName.size })
+      res.status(201).json({ id, name: sol?.name ?? '导入方案', agentCount: agentIdByKey.size })
     } catch (err) {
       next(err)
     }
