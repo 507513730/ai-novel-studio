@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ScanSearch, Upload } from 'lucide-react'
 import { novelApi, analysisApi, assetsApi } from '../api'
 import { useToast } from '../components/Toast'
+import { EmptyState } from '../components/EmptyState'
 
 // P23：外部书导入卡片（上传 → 解析分章 → 建外部书 → 拆书）
 function ImportBookCard({ onImported }: { onImported: (id: number) => void }): React.JSX.Element {
@@ -107,7 +108,16 @@ export function BookAnalysisPage(): React.JSX.Element {
         {novels.data?.novels.map((n) => (
           <NovelAnalyses key={n.id} novelId={n.id} title={n.title} onOpen={() => navigate(`/novels/${n.id}/?tab=analysis`)} />
         ))}
-        {novels.data?.novels.length === 0 && <p className="muted">还没有小说。</p>}
+        {novels.data?.novels.length === 0 && (
+          <div className="panel">
+            <EmptyState
+              icon={ScanSearch}
+              title="还没有小说"
+              desc="创建或导入一本小说后，可以进行拆书分析、角色档案与形象演变。"
+              action={<button className="primary" onClick={() => navigate('/novels')}>去创建小说</button>}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

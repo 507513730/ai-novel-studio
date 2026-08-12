@@ -95,7 +95,13 @@ export function StoryModesPage(): React.JSX.Element {
             </div>
           </div>
         ))}
-        {!modes.isLoading && modes.data?.modes.length === 0 && <EmptyState icon={Gauge} title="??????" desc="???????????????????????" />}
+        {!modes.isLoading && modes.data?.modes.length === 0 && (
+          <EmptyState
+            icon={Gauge}
+            title="还没有推进模式"
+            desc="创建你的第一个节奏模板（升级流 / 日常流 / 群像流…），章节生成时参考节奏与爽点密度。"
+          />
+        )}
       </div>
     </div>
   )

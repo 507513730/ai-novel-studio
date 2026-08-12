@@ -107,6 +107,44 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
     }
   })
 
+  // ---------- v0.11.1：删除自定义智能体（内置保护 + 方案引用拦截） ----------
+  router.delete('/:id', (req, res, next) => {
+    try {
+      const id = Number(req.params.id)
+      const agent = db
+        .prepare('SELECT id, name, is_custom FROM agent WHERE id = ?')
+        .get(id) as { id: number; name: string; is_custom: number } | undefined
+      if (!agent) {
+        res.status(404).json({ error: 'agent not found' })
+        return
+      }
+      if (!agent.is_custom) {
+        res.status(409).json({ error: '内置智能体不可删除（可停用）' })
+        return
+      }
+      // 方案引用检查：被引用则 409（避免悬空引用导致方案运行时坏掉）
+      // json_each 迭代步骤数组，按 agentId 精确匹配（instr 文本匹配对参数拼接有怪癖，弃用）
+      const refs = db
+        .prepare(
+          `SELECT DISTINCT s.id, s.name FROM solution s
+           JOIN json_each(s.steps_json) AS step
+           WHERE json_extract(step.value, '$.agentId') = ?`
+        )
+        .all(id) as Array<{ id: number; name: string }>
+      if (refs.length > 0) {
+        res.status(409).json({
+          error: `智能体「${agent.name}」被 ${refs.length} 个方案引用（${refs.map((r) => r.name).slice(0, 3).join('、')}${refs.length > 3 ? '…' : ''}），请先在这些方案中移除对应步骤或停用方案`
+        })
+        return
+      }
+      db.prepare('DELETE FROM agent_skill WHERE agent_id = ?').run(id)
+      db.prepare('DELETE FROM agent WHERE id = ?').run(id)
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // ---------- P29：技能挂载/卸载（agent_skill 表） ----------
   router.post('/:id/skills', (req, res, next) => {
     try {

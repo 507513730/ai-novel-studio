@@ -73,7 +73,7 @@ export interface LlmCallOptions {
   temperature?: number | null
   signal?: AbortSignal
   novelId?: number | null
-  guidance?: string // P19 ??????????????
+  guidance?: string // P19 ①：本次单次引导
   // v0.9.2（审查 #25）：流式模式——章节 SSE 生成并入统一路径（此前 generate.ts 独立 OpenAI client，
   // 不参与候选链降级/错误分类/记账，且 body 构造已出现漂移）
   stream?: boolean

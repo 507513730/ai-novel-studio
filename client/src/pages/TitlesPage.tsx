@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { WandSparkles } from 'lucide-react'
+import { WandSparkles, BookOpenText } from 'lucide-react'
 import { novelApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
 import { AssetCreator } from '../components/AssetCreator'
+import { EmptyState } from '../components/EmptyState'
 import type { NovelSummary } from '../types'
 
 // P12 A5：标题工坊（跨书管理书名：查看/批量生成/编辑/选用）
@@ -75,7 +76,16 @@ export function TitlesPage(): React.JSX.Element {
       />
       {error && <ErrorMsg error={error} />}
       {novels.isLoading && <p className="muted">加载中…</p>}
-      {novels.data?.novels.length === 0 && <p className="muted">还没有小说，先去创建一本吧。</p>}
+      {novels.data?.novels.length === 0 && (
+        <div className="panel">
+          <EmptyState
+            icon={BookOpenText}
+            title="还没有小说"
+            desc="创建一本小说后，可以在这里为它批量生成书名候选、编辑与选用。"
+            action={<button className="primary" onClick={() => navigate('/novels')}>去创建小说</button>}
+          />
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {novels.data?.novels.map((n) => (
           <div key={n.id} className="panel">

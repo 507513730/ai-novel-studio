@@ -10,7 +10,7 @@ import {
 } from '../services/analysis'
 
 export function createAnalysisRouter(db: DatabaseSync): Router {
-  // P18 D2???????????? summary????????
+  // P18 D2：角色演变分析——每章后自动更新 summary
   const dimText = (d: unknown): string => (typeof d === 'string' ? d : ((d as { summary?: unknown })?.summary as string) ?? '')
   const router = Router()
 

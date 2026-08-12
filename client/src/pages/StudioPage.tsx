@@ -544,12 +544,12 @@ export function StudioPage(): React.JSX.Element {
                             patchDraft({ steps: next })
                           }}
                         >
-                          <option value="outline">???????</option>
-                          <option value="draft">???????</option>
-                          <option value="dialogue">?????</option>
-                          <option value="scene">?????</option>
-                          <option value="review">???????</option>
-                          <option value="final">???????</option>
+                          <option value="outline">本章大纲</option>
+                          <option value="draft">正文片段</option>
+                          <option value="dialogue">对话</option>
+                          <option value="scene">场景描写</option>
+                          <option value="review">审校意见</option>
+                          <option value="final">最终合并</option>
                         </select>
                       )}
                       <button

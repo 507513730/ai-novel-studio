@@ -201,7 +201,7 @@ export const automationApi = {
 }
 
 
-// P21???????? / ?? / ????? / ??? / ?????
+// P21：创造工坊 API（方案 / 技能 / 智能体 / 试运行 / 导入导出）
 export const studioApi = {
   solutions: (): Promise<{ solutions: Array<Record<string, unknown>> }> => j('/solutions'),
   solutionDetail: (id: number): Promise<{ solution: Record<string, unknown> }> => j(`/solutions/${id}`),
@@ -233,7 +233,7 @@ export const studioApi = {
 }
 
 
-// P23 ?1???????????? / AI ?? / ?????
+// P23 批1：资产库统一（上传/粘贴/手动 → AI 提取 → 保存）
 export const assetsApi = {
   importFile: (filename: string, base64: string, asChapters = false): Promise<{ title: string; text: string; chapters?: Array<{ title: string; content: string }>; chapterCount?: number }> =>
     js('/import/file', { method: 'POST', body: JSON.stringify({ filename, base64, asChapters }) }),

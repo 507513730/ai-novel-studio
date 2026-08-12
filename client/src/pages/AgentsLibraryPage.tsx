@@ -146,7 +146,7 @@ export function AgentsLibraryPage(): React.JSX.Element {
                       style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                       disabled={busy}
                       onClick={() => {
-                        if (!window.confirm(`删除智能体「${a.name}」？方案中引用它的步骤将失效。`)) return
+                        if (!window.confirm(`删除智能体「${a.name}」？（被方案引用时会被拒绝，需先移除引用步骤）`)) return
                         // v0.9.0（审查 #12）：走 agentsApi.remove——此前裸 fetch('/api/...') 在 dev 下
                         // 拿到 Vite 的 index.html（200）→ "假成功"提示但服务端从未删除
                         void agentsApi

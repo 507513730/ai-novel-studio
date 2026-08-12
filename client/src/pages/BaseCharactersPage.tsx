@@ -112,7 +112,11 @@ export function BaseCharactersPage(): React.JSX.Element {
             </div>
           ))}
           {!templates.isLoading && templates.data?.templates.length === 0 && (
-            <EmptyState icon={Star} title="????????" desc="???????????????????????????" />
+            <EmptyState
+              icon={Star}
+              title="还没有基础角色"
+              desc="把常见角色类型存为模板（从书中角色「存为模板」或直接创建），新书一键复用。"
+            />
           )}
         </div>
       </div>
@@ -131,7 +135,16 @@ export function BaseCharactersPage(): React.JSX.Element {
             onSaveTemplate={(cid, name) => void saveTemplate(n.id, cid, name)}
           />
         ))}
-        {novels.data?.novels.length === 0 && <p className="muted">还没有小说。</p>}
+        {novels.data?.novels.length === 0 && (
+          <div className="panel">
+            <EmptyState
+              icon={UsersRound}
+              title="还没有小说"
+              desc="创建一本小说后，可以在各书角色页维护角色并「存为模板」复用。"
+              action={<button className="primary" onClick={() => navigate('/novels')}>去创建小说</button>}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

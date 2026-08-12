@@ -359,7 +359,7 @@ export function createSettingsRouter(db: DatabaseSync): Router {
   })
 
 
-  // ---------- P19 ?????????? / ?? / ????? ----------
+  // ---------- P19：写作偏好（语言 / 格式 / 写作模式） ----------
   router.get('/writing', (_req, res) => {
     const rows = db.prepare('SELECT key, value FROM app_settings').all() as Array<{ key: string; value: string }>
     const map = new Map(rows.map((r) => [r.key, r.value]))

@@ -108,7 +108,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const snapshotDoneRef = useRef(false)
   // P20（U5）：字数统计 memo（避免每次击键重渲染时 O(n) 扫描）
   const hanCount = useMemo(() => (content.match(/[\u4e00-\u9fff]/g) ?? []).length, [content])
-  // P27 1-6???????????
+  // P27 1-6：正文自动保存节流
   const [focusMode, setFocusMode] = useState(false)
   // A1：选区/光标状态（ref 缓存防 onUpdate 无限重渲染）
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; cursor: number }>({ text: '', cursor: -1 })
@@ -717,7 +717,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
       {chapterPromptElement}
       {focusMode && (
         <div style={{ position: 'fixed', top: 8, right: 12, zIndex: 999, fontSize: 11 }} className="muted">
-          ???? ? Ctrl+Shift+F ? Esc ??
+          🖊 专注模式 · Ctrl+Shift+F 退出 · Esc 退出
         </div>
       )}
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -1404,7 +1404,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
   )
 }
 
-// P22-C1???????memo ??100+ ??????
+// P22-C1：章节页 memo 隔离（100+ 章节时性能）
 const ChapterListItem = memo(function ChapterListItem({
   c,
   selected,

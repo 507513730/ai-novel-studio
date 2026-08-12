@@ -91,7 +91,7 @@ export function GenresPage(): React.JSX.Element {
 
       <div className="panel">
         <h2 className="mb-3">书内自定义流派</h2>
-        {customGenres.length === 0 && <EmptyState icon={Tags} title="?????????" desc="??????????????????" />}
+        {customGenres.length === 0 && <EmptyState icon={Tags} title="还没有自定义流派" desc="为某本书添加专属流派（爽点兑现/节奏偏好），或使用下方全局流派。" />}
         <div className="col gap-2">
           {novels.data?.novels.map((n) => {
             const cg = customGenres.filter((g) => g.novelId === n.id)

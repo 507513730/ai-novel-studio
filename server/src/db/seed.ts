@@ -20,7 +20,7 @@ export const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash'
 export const DEEPSEEK_PRO_MODEL = 'deepseek-v4-pro'
 
 export function seedIfEmpty(db: DatabaseSync): void {
-  seedSystemPrompts(db) // P17-5A?????????????
+  seedSystemPrompts(db) // P17-5A：提示词资产化（入库管理）
   const providerCount = (
     db.prepare('SELECT COUNT(*) AS c FROM provider').get() as { c: number }
   ).c
