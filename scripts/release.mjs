@@ -161,6 +161,20 @@ for (const [name, cmd] of checks) {
       ok(`${name} 通过（0 errors）`)
       continue
     }
+    // v0.12.0：vitest 在 release 顺序执行环境偶发资源竞争失败（单独跑必过，已遇 3 次）——
+    // 失败重试一次，仍失败才终止发布
+    if (name === 'test') {
+      console.log(`  ⚠ ${name} 首次失败，重试一次…`)
+      try {
+        run(cmd, { stdio: ['ignore', 'pipe', 'pipe'] })
+        ok(`${name} 通过（重试后）`)
+        continue
+      } catch (err2) {
+        fail(`${name} 失败（重试后仍失败）`)
+        console.error(String(err2.stdout ?? '').slice(-800))
+        process.exit(1)
+      }
+    }
     fail(`${name} 失败`)
     console.error(out.slice(-800))
   }
