@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import { DatabaseSync } from 'node:sqlite'
-import { getRouteConfig } from './llm'
+import { getRouteConfig, buildBody } from './llm'
 import { decryptSecret } from './keyCrypto'
 import { buildChapterWriteContext, estimateTokens } from './context'
 import { recordUsage } from './usage'
@@ -94,21 +94,17 @@ export async function generateChapter(
     perCallGuidance: opts.guidance
   })
 
-  const body: Record<string, unknown> = {
-    model: route.model,
-    messages: ctx.messages.map((m) => ({ role: m.role, content: m.content ?? '' })),
-    max_tokens: route.maxTokens
-  }
-  if (route.thinkingEnabled) {
-    body.thinking = { type: 'enabled' }
-    body.reasoning_effort = route.reasoningEffort
-  } else {
-    // V4 默认 thinking 开，必须显式 disabled（D12）
-    body.thinking = { type: 'disabled' }
-    if (route.temperature !== null && route.temperature !== undefined) {
-      body.temperature = route.temperature
-    }
-  }
+  // v0.9.0（审查 #25）：复用 llm.ts 的 buildBody（此前双 LLM 路径各自构造 body，
+  // thinking/temperature/jsonMode 逻辑已出现漂移——如 llm.ts 有 jsonMode 处理而此处没有）
+  const body = buildBody(
+    route,
+    {
+      messages: ctx.messages.map((m) => ({ role: m.role, content: m.content ?? '' })),
+      maxTokens: route.maxTokens,
+      temperature: route.temperature
+    },
+    route.model
+  )
 
   const stream = await client.chat.completions.create(
     {

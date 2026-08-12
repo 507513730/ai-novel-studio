@@ -31,6 +31,7 @@ export async function callLlmJson<T>(
   label = 'structured-output'
 ): Promise<T> {
   let lastError: unknown = null
+  let retryHint = '' // v0.9.0：重试反馈（上一次失败原因注入 prompt，帮助模型自愈——截断/结构问题）
   // P19 ①：书级引导 + 单次引导（注入 user 消息首条，保持模型关注）
   let guidedOpts = opts
   if (opts.novelId && opts.messages[0]?.content) {
@@ -54,16 +55,24 @@ export async function callLlmJson<T>(
     }
   }
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const result = await callLlm(db, taskType, { ...guidedOpts, jsonMode: true })
+    const messages = retryHint
+      ? [{ ...guidedOpts.messages[0], content: `${guidedOpts.messages[0].content ?? ''}\n\n【上次输出问题】${retryHint}` }, ...guidedOpts.messages.slice(1)]
+      : guidedOpts.messages
+    const result = await callLlm(db, taskType, { ...guidedOpts, messages, jsonMode: true })
     const raw = extractJson(result.content)
     try {
       const parsed = JSON.parse(raw)
       const value = parse(parsed)
       if (value !== null) return value
-      lastError = new Error(`schema validation failed for ${label}`)
+      retryHint = `JSON 结构不符合要求（${label}），请严格按要求的字段输出，不要多余字段`
+      lastError = new Error(`schema validation failed for ${label}；原文片段: ${raw.slice(0, 150)}`)
     } catch (err) {
+      // v0.9.0：截断/解析失败时反馈给模型（重试提示精简输出）——此前重试发完全相同的 prompt，
+      // 模型持续输出坏 JSON（纯烧 3 次 token）
+      const parseMsg = err instanceof Error ? err.message : String(err)
+      retryHint = `上次输出解析失败（${parseMsg.slice(0, 80)}）——请输出更紧凑的 JSON，确保完整闭合`
       lastError = new Error(
-        `${label} JSON 解析失败（第 ${attempt} 次）: ${err instanceof Error ? err.message : String(err)}；原文片段: ${raw.slice(0, 150)}`
+        `${label} JSON 解析失败（第 ${attempt} 次）: ${parseMsg}；原文片段: ${raw.slice(0, 150)}`
       )
     }
     if (attempt < MAX_RETRIES) {

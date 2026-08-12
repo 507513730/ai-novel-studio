@@ -83,9 +83,11 @@ export function App(): React.JSX.Element {
     return undefined
   }, [])
 
-  // P11-1.2：兜底——Electron 下仍无 URL 时轮询健康检查探测 server
+  // P11-1.2：兜底——Electron 下仍无 URL 时轮询探测 server（server-ready 消息丢失的兜底）
+  // v0.9.0（审查 C）：改走 preload 的 getServerUrl（不猜端口——生产端口随机，硬编码 3000 无意义）
   useEffect(() => {
     if (baseUrl || !window.novelStudio) return
+    const api = window.novelStudio
     let attempts = 0
     const timer = setInterval(() => {
       attempts += 1
@@ -93,13 +95,15 @@ export function App(): React.JSX.Element {
         clearInterval(timer)
         return
       }
-      void fetch('http://127.0.0.1:3000/api/health', { signal: AbortSignal.timeout(2000) })
-        .then((r) => {
-          if (r.ok) {
-            setApiBaseUrl('http://127.0.0.1:3000/api')
-            setBaseUrl('http://127.0.0.1:3000/api')
+      void api
+        .getServerUrl()
+        .then((url) => {
+          if (url) {
+            setApiBaseUrl(url)
+            setBaseUrl(url)
             clearInterval(timer)
-          }        })
+          }
+        })
         .catch(() => undefined)
     }, 2000)
     return () => clearInterval(timer)

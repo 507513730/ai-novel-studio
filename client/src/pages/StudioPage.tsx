@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { WandSparkles, Play, Save, Download, Upload, Pencil, Trash2, Layers } from 'lucide-react'
-import { novelApi, studioApi, agentsApi } from '../api'
+import { novelApi, studioApi, agentsApi, apiFetch } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
 import { usePrompt } from '../components/PromptDialog'
@@ -180,14 +180,15 @@ export function StudioPage(): React.JSX.Element {
     if (!draft || isNew) return
     setBusy('export')
     try {
-      const link = `${window.location.origin.replace(/\/$/, '')}#/studio` // 占位
-      void link
-      // 直接触发下载
-      const url = `${window.location.origin}/api/solutions/${draft.id}/export`
+      // v0.9.0（审查 #12）：走统一 apiFetch（自动带 baseUrl + token）——此前裸 `${origin}/api/...`
+      // 在打包态 origin="null" 无效、dev 下下载到 Vite 的 index.html，且无条件 toast 成功（假成功）
+      const res = await apiFetch(`/solutions/${draft.id}/export`)
+      const text = typeof res === 'string' ? res : JSON.stringify(res, null, 2)
       const a = document.createElement('a')
-      a.href = url
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
       a.download = `${draft.name.replace(/[\\/:*?"<>|]/g, '_')}.solution.json`
       a.click()
+      URL.revokeObjectURL(a.href)
       toast('ok', '已导出方案文件')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

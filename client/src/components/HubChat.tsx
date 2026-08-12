@@ -17,6 +17,20 @@ export function HubChat({ novelId, height = '100%' }: HubChatProps): React.JSX.E
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  // v0.9.0（审查 #15）：切换书时重置对话 + 中止在途请求（此前组件复用，上一本书的对话
+  // 与在途回复会泄漏到下一本书）
+  useEffect(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setMessages([])
+    setBusy(false)
+    return () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+    }
+  }, [novelId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -28,12 +42,16 @@ export function HubChat({ novelId, height = '100%' }: HubChatProps): React.JSX.E
     setInput('')
     setMessages((m) => [...m, { role: 'user', content: text }])
     setBusy(true)
+    const controller = new AbortController()
+    abortRef.current = controller
     try {
-      const r = await hub.chat(novelId, text)
+      const r = await hub.chat(novelId, text, controller.signal)
       setMessages((m) => [...m, { role: 'assistant', content: r.reply, toolCalls: r.toolCalls }])
     } catch (err) {
+      if (controller.signal.aborted) return
       setMessages((m) => [...m, { role: 'assistant', content: `⚠️ ${err instanceof Error ? err.message : String(err)}` }])
     } finally {
+      if (abortRef.current === controller) abortRef.current = null
       setBusy(false)
     }
   }

@@ -535,23 +535,30 @@ function WritingPanel(): React.JSX.Element {
   const patchType = (patch: Partial<FontSettings>): void => {
     applyFonts({ ...getStoredFonts(), ...patch })
   }
+  // v0.9.0（审查 #12）：走统一 apiFetch——此前裸 fetch('/api/...') 无 baseUrl/token
+  // 且失败被静默吞掉，页面永远停留在"加载中…"
   useEffect(() => {
     let alive = true
-    void fetch('/api/settings/writing')
-      .then((r) => r.json())
+    void apiFetch('/settings/writing')
       .then((d) => {
-        if (alive) setSettings(d)
+        if (alive) {
+          const v = d as { lang?: string; format?: string; writingMode?: string }
+          setSettings((prev) => ({
+            lang: String(v.lang ?? prev?.lang ?? ''),
+            format: String(v.format ?? prev?.format ?? ''),
+            writingMode: String(v.writingMode ?? prev?.writingMode ?? '')
+          }))
+        }
       })
-      .catch(() => undefined)
+      .catch(() => toast('error', '写作偏好加载失败'))
     return () => {
       alive = false
     }
   }, [])
   const patch = async (patch: Record<string, string>): Promise<void> => {
     try {
-      await fetch('/api/settings/writing', {
+      await apiFetch('/settings/writing', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch)
       })
       setSettings((prev) => (prev ? { ...prev, ...patch } : prev))

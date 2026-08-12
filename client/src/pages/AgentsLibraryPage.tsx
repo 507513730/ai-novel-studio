@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, Plus, Pencil, Trash2, Sparkles, Power } from 'lucide-react'
-import { agentsApi, studioApi } from '../api'
+import { agentsApi, studioApi, apiFetch } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
 import { usePrompt } from '../components/PromptDialog'
@@ -83,25 +83,17 @@ export function AgentsLibraryPage(): React.JSX.Element {
     setBusy(true)
     setError(null)
     try {
-      // 用 flash 生成结构化 body_md（模型成本纪律：仅 deepseek-v4-flash）
-      const r = await fetch('/api/assets/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'base-character', text: '', title: '' })
-      }).catch(() => null)
-      void r
+      // v0.9.0（审查 #12）：走统一 apiFetch（此前裸 fetch('/api/...') 拿不到 baseUrl/token，功能名存实亡）
       const target = agents.data?.agents.find((a: AgentRow) => a.id === id)
       const name = target?.name ?? '该智能体'
-      const res = await fetch('/api/assets/extract', {
+      await apiFetch('/assets/extract', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'knowledge',
           text: `${name}：请根据其角色定位起草结构化定义（核心职责/质量标准/创作原则）。`,
           title: name
         })
       }).catch(() => null)
-      void res
       toast('info', 'AI 起草需要更精确的输入——请手动编辑 body_md（参考内置智能体格式）')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -155,9 +147,11 @@ export function AgentsLibraryPage(): React.JSX.Element {
                       disabled={busy}
                       onClick={() => {
                         if (!window.confirm(`删除智能体「${a.name}」？方案中引用它的步骤将失效。`)) return
-                        void fetch(`/api/agents/${a.id}`, { method: 'DELETE' })
-                          .then(async (r) => {
-                            if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? '删除失败')
+                        // v0.9.0（审查 #12）：走 agentsApi.remove——此前裸 fetch('/api/...') 在 dev 下
+                        // 拿到 Vite 的 index.html（200）→ "假成功"提示但服务端从未删除
+                        void agentsApi
+                          .remove(a.id)
+                          .then(() => {
                             toast('ok', '已删除')
                             inval()
                           })

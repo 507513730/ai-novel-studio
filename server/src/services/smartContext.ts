@@ -13,7 +13,14 @@ export interface SmartContext {
   world: string
   plot: string
   version: number
+  // v0.9.0（审查 D/A）：增量更新门槛字段——updatedAt（最近更新时间）/ chapterCount（更新时的已写章数）
+  updatedAt?: string
+  chapterCount?: number
 }
+
+// v0.9.0（审查 D）：增量更新门槛——距上次 ≥1 小时 或 新写 ≥5 章 才重新生成（先到先触发）
+const MIN_INTERVAL_MS = 60 * 60 * 1000
+const MIN_NEW_CHAPTERS = 5
 
 const PROMPT = `你是小说的智能上下文维护员。基于全书已写章节与既有摘要，生成或更新书级摘要，输出 JSON：
 {"style": "核心风格与基调（叙事风格/语言特点/情感基调，80-150字）", "characters": "人物信息（主角识别+各人物性格动机/关键背景/人物弧光变化，100-200字）", "world": "核心世界观与设定（故事类型/关键规则/时代地点，60-120字）", "plot": "当前故事脉络（主线+分支简述/关键事件/未回收伏笔，100-200字）"}
@@ -32,8 +39,16 @@ export async function updateSmartContext(
   const framing = JSON.parse(novel.framing_json || '{}') as Record<string, unknown>
   const existing = (framing.smartContext ?? null) as SmartContext | null
   if (existing && !opts.force) {
-    // 增量：已有摘要且非强制 → 只更新一次（按 version 防重复）
-    return existing
+    // v0.9.0（审查 D/A）：增量更新门槛——此前"已有摘要即永久冻结"（增量分支是死代码，
+    // 调用方从不传 force）；改为按时间/新章数门槛周期性增量更新，保持书级摘要随剧情推进新鲜
+    const elapsed = Date.now() - new Date(existing.updatedAt ?? 0).getTime()
+    const written = db
+      .prepare("SELECT COUNT(*) AS c FROM chapter WHERE novel_id = ? AND content != ''")
+      .get(novelId) as { c: number }
+    const newChapters = written.c - (existing.chapterCount ?? written.c)
+    if (elapsed < MIN_INTERVAL_MS && newChapters < MIN_NEW_CHAPTERS) {
+      return existing
+    }
   }
 
   // 取已写章节（最多 15 章，控制 token）
@@ -64,12 +79,18 @@ export async function updateSmartContext(
     (obj) => {
       const r = obj as Record<string, unknown>
       if (typeof r.style !== 'string' || typeof r.plot !== 'string') return null
+      const written = (
+        db.prepare("SELECT COUNT(*) AS c FROM chapter WHERE novel_id = ? AND content != ''").get(novelId) as { c: number }
+      ).c
       return {
         style: String(r.style),
         characters: String(r.characters ?? ''),
         world: String(r.world ?? ''),
         plot: String(r.plot),
-        version: (existing?.version ?? 0) + 1
+        version: (existing?.version ?? 0) + 1,
+        // v0.9.0（审查 D/A）：落库时间戳 + 章数（增量门槛判定依据）
+        updatedAt: new Date().toISOString(),
+        chapterCount: written
       }
     },
     'smart-context'

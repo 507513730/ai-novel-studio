@@ -19,7 +19,8 @@ window.addEventListener('unhandledrejection', (e) => {
   const msg =
     reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : '未知错误'
   console.error('[unhandledrejection]', reason)
-  if (!/AbortError|aborted/i.test(msg)) {
+  // v0.9.0（审查 C）：AbortSignal.timeout 抛 TimeoutError——与用户取消语义一致，不弹误报提示
+  if (!/AbortError|aborted|TimeoutError|timed out/i.test(msg)) {
     toastGlobal('error', `操作失败：${msg}`)
   }
 })

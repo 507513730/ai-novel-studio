@@ -409,9 +409,10 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
   },
   {
     // P30：书级生产方案绑定（production pipeline 逐章走流水线）
+    // v0.9.0（审查 #13）：列定义加 REFERENCES（新库生效）；已有库由路由层绑定校验兜底（404/409）
     version: 13,
     statements: [
-      `ALTER TABLE novel ADD COLUMN current_solution_id INTEGER`
+      `ALTER TABLE novel ADD COLUMN current_solution_id INTEGER REFERENCES solution(id) ON DELETE SET NULL`
     ]
   }
 ]

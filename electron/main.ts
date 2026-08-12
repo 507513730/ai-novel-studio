@@ -255,7 +255,8 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      // v0.9.0（审查 #16）：sandbox 开启——preload 仅用 ipcRenderer/contextBridge/process.platform，兼容
+      sandbox: true
     }
   })
 
@@ -266,9 +267,18 @@ function createWindow(): void {
       mainWindow?.webContents.send('server-ready', lastServerUrl)
     }
   })
+  // v0.9.0（审查 #16）：只放行 http/https 外链（file:/smb:/自定义协议一律拒绝）
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    void shell.openExternal(details.url)
+    if (/^https?:\/\//i.test(details.url)) {
+      void shell.openExternal(details.url)
+    }
     return { action: 'deny' }
+  })
+  // v0.9.0（审查 #16）：阻止渲染进程将应用窗口导航到外部站点
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const devUrl = process.env.ELECTRON_RENDERER_URL
+    const allowed = devUrl ? url.startsWith(devUrl) : url.startsWith('file://')
+    if (!allowed) event.preventDefault()
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -285,13 +295,21 @@ function handleCrypto(m: { type: 'encrypt' | 'decrypt'; id: string; value?: stri
   try {
     if (m.type === 'encrypt' && m.value !== undefined) {
       if (!safeStorage.isEncryptionAvailable()) {
-        reply({ value: m.value })
+        // v0.9.0（审查 #24）：降级标记——API key 明文落库必须有告警（此前静默降级）
+        console.warn('[crypto] safeStorage 不可用——API Key 将以明文存储（degraded）')
+        reply({ value: m.value, degraded: true })
         return
       }
       reply({ value: safeStorage.encryptString(m.value).toString('base64') })
     } else if (m.type === 'decrypt' && m.value !== undefined) {
-      if (!safeStorage.isEncryptionAvailable() || !m.value) {
+      if (!m.value) {
         reply({ value: m.value })
+        return
+      }
+      if (!safeStorage.isEncryptionAvailable()) {
+        // v0.9.0（审查 #24）：解密侧不可用——密文不可解密，显式报错而非把密文当 key 直传
+        console.error('[crypto] safeStorage 不可用——无法解密已加密的密钥（可能系统 keyring 被锁/环境变化）')
+        reply({ error: 'safeStorage unavailable: cannot decrypt key' })
         return
       }
       reply({ value: safeStorage.decryptString(Buffer.from(m.value, 'base64')) })

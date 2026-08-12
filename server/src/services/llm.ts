@@ -91,7 +91,8 @@ export interface LlmResult {
   toolCalls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]
 }
 
-function buildBody(
+// v0.9.0（审查 #25）：导出供 generate.ts 复用（消除双 LLM 路径的 body 构造漂移）
+export function buildBody(
   route: RouteConfig,
   opts: LlmCallOptions,
   model: string
@@ -195,7 +196,7 @@ export async function callLlm(
   db: DatabaseSync,
   taskType: TaskType,
   opts: LlmCallOptions,
-  attempt = 1
+  _attempt = 1
 ): Promise<LlmResult> {
   const route = getRouteConfig(db, taskType)
   if (!route) throw new Error(`no model route for task: ${taskType}`)
@@ -219,52 +220,71 @@ export async function callLlm(
       timeout: 120_000
     })
 
-    try {
-      const body = buildBody(
-        { ...route, providerId: candidate.providerId, model: candidate.model },
-        opts,
-        candidate.model
-      )
-      const response = await client.chat.completions.create(
-        body as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming
-      )
-      const message = response.choices[0]?.message
-      const m = message as unknown as { reasoning_content?: string }
-      const result: LlmResult = {
-        content: message?.content ?? '',
-        reasoningContent: m.reasoning_content,
-        usage: extractUsage(response.usage),
-        model: response.model ?? candidate.model,
-        provider: providerRow.name,
-        degraded: candidate.degraded,
-        toolCalls: message?.tool_calls
+    // v0.9.0（审查 #11/#23）：重试绑定"当前失败候选"（不再从头候选链重跑——必败候选被重复调用浪费 token）
+    for (let tryCount = 1; tryCount <= 3; tryCount++) {
+      try {
+        const body = buildBody(
+          { ...route, providerId: candidate.providerId, model: candidate.model },
+          opts,
+          candidate.model
+        )
+        const response = await client.chat.completions.create(
+          body as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+          // v0.9.0（审查 #11）：signal 转发——此前声明但从未传入 SDK，所有经 callLlm 的中止均无效
+          { signal: opts.signal }
+        )
+        const message = response.choices[0]?.message
+        const m = message as unknown as { reasoning_content?: string }
+        const result: LlmResult = {
+          content: message?.content ?? '',
+          reasoningContent: m.reasoning_content,
+          usage: extractUsage(response.usage),
+          model: response.model ?? candidate.model,
+          provider: providerRow.name,
+          degraded: candidate.degraded,
+          toolCalls: message?.tool_calls
+        }
+        // 统一记账（novelId 由调用方经 opts 传入）
+        recordUsage(db, {
+          novelId: opts.novelId ?? null,
+          taskType,
+          provider: result.provider,
+          model: result.model,
+          inputTokens: result.usage.input,
+          outputTokens: result.usage.output,
+          cacheHit: result.usage.cacheHit,
+          cacheMiss: result.usage.cacheMiss,
+          costEstimate: 0,
+          degraded: result.degraded
+        })
+        return result
+      } catch (err) {
+        if (opts.signal?.aborted) {
+          // 外部中止：立即上抛（不再重试/换候选），调用方按中止语义处理
+          throw err
+        }
+        lastError = err
+        const status =
+          typeof err === 'object' && err !== null && 'status' in err
+            ? (err as { status: number }).status
+            : undefined
+        if (status !== undefined && RETRYABLE_STATUS.includes(status) && tryCount < 3) {
+          // v0.9.0（审查 #23）：429 优先读 Retry-After（上限 30s）
+          if (status === 429 && typeof err === 'object' && err !== null) {
+            const h = (err as { headers?: Record<string, string | undefined> }).headers
+            const ra = h?.['retry-after'] ?? h?.['Retry-After']
+            if (ra && /^\d+$/.test(ra)) {
+              await new Promise((resolve) => setTimeout(resolve, Math.min(Number(ra) * 1000, 30_000)))
+              continue
+            }
+          }
+          const delay = 500 * 2 ** (tryCount - 1)
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          continue
+        }
+        // 非可重试错误或次数耗尽：换下一个 fallback 候选
+        break
       }
-      // 统一记账（novelId 由调用方经 opts 传入）
-      recordUsage(db, {
-        novelId: opts.novelId ?? null,
-        taskType,
-        provider: result.provider,
-        model: result.model,
-        inputTokens: result.usage.input,
-        outputTokens: result.usage.output,
-        cacheHit: result.usage.cacheHit,
-        cacheMiss: result.usage.cacheMiss,
-        costEstimate: 0,
-        degraded: result.degraded
-      })
-      return result
-    } catch (err) {
-      lastError = err
-      const status =
-        typeof err === 'object' && err !== null && 'status' in err
-          ? (err as { status: number }).status
-          : undefined
-      if (status !== undefined && RETRYABLE_STATUS.includes(status) && attempt < 3) {
-        const delay = 500 * 2 ** (attempt - 1)
-        await new Promise((resolve) => setTimeout(resolve, delay))
-        return callLlm(db, taskType, opts, attempt + 1)
-      }
-      // 非可重试错误：换下一个 fallback 候选
     }
   }
 

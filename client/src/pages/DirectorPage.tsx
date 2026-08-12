@@ -3,14 +3,10 @@ import { ErrorMsg } from '../components/ErrorMsg'
 import { useConfirm } from '../components/ConfirmDialog'
 import { useNavigate, useParams } from 'react-router-dom'
 import { automationApi } from '../api'
+import type { DirectorStatus } from '../../../shared/src/types'
 
-interface DirectorStatus {
-  status: string
-  displayStatus?: string
-  stage?: string
-  progress?: Record<string, boolean>
-  blockingReason?: string | null
-  resumeAction?: string | null
+// v0.9.0（审查 M4）：DirectorStatus 移到 shared/types（本页扩展字段）
+interface DirectorStatusEx extends DirectorStatus {
   mode?: string
   replanCount?: number
 }
@@ -32,13 +28,17 @@ export function DirectorPage(): React.JSX.Element {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const statusRef = useRef<string>('')
   const pollFailRef = useRef(0)
+  // v0.9.0（审查 M3）：in-flight 保护——请求耗时 >3s 时跳过重叠 tick（此前无进行中标记会堆积并发请求）
+  const pollInFlightRef = useRef(false)
   const [pollFailed, setPollFailed] = useState(false)
 
   const poll = (): void => {
+    if (pollInFlightRef.current) return
+    pollInFlightRef.current = true
     void automationApi.directorStatus(id).then((s) => {
       pollFailRef.current = 0
       setPollFailed(false)
-      const st = s as unknown as DirectorStatus
+      const st = s as unknown as DirectorStatusEx
       setStatus(st)
       // checkpoint 通知（浏览器 Notification）
       if (st.status && ['done', 'failed', 'cancelled', 'paused'].includes(st.status)) {
@@ -64,6 +64,8 @@ export function DirectorPage(): React.JSX.Element {
           pollingRef.current = null
         }
       }
+    }).finally(() => {
+      pollInFlightRef.current = false
     })
     void automationApi.novelStatus(id).then((s) => setProduction(s as Record<string, unknown>)).catch(() => undefined)
   }

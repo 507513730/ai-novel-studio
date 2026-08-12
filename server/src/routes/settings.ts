@@ -44,7 +44,9 @@ export function createSettingsRouter(db: DatabaseSync): Router {
 
       const authPath = join(homedir(), '.local', 'share', 'opencode', 'auth.json')
       if (!existsSync(authPath)) {
-        res.status(404).json({ error: `opencode auth.json not found: ${authPath}` })
+        // v0.9.0（审查 #9）：路径只进日志，不随响应回显
+        console.error('[import-opencode] auth.json not found at:', authPath)
+        res.status(404).json({ error: 'opencode auth.json not found（详见服务端日志）' })
         return
       }
       const auth = JSON.parse(readFileSync(authPath, 'utf-8')) as Record<
@@ -127,7 +129,7 @@ export function createSettingsRouter(db: DatabaseSync): Router {
       const id = Number(req.params.id)
       const input = providerSchema.partial().parse(req.body)
       const current = db.prepare('SELECT * FROM provider WHERE id = ?').get(id) as
-        | { api_key_encrypted: string }
+        | { api_key_encrypted: string; name: string; base_url: string; is_custom: number }
         | undefined
       if (!current) {
         res.status(404).json({ error: 'provider not found' })
@@ -140,10 +142,11 @@ export function createSettingsRouter(db: DatabaseSync): Router {
       db.prepare(
         'UPDATE provider SET name = ?, base_url = ?, api_key_encrypted = ?, is_custom = ? WHERE id = ?'
       ).run(
-        input.name ?? (db.prepare('SELECT name FROM provider WHERE id = ?').get(id) as { name: string }).name,
-        input.baseUrl ?? (db.prepare('SELECT base_url FROM provider WHERE id = ?').get(id) as { base_url: string }).base_url,
+        // v0.9.0（审查 #17）：缺省保留当前值（此前 name/baseUrl 用额外查询取，isCustom 缺省硬编码重置为 1 覆盖内置标记）
+        input.name ?? current.name,
+        input.baseUrl ?? current.base_url,
         encrypted,
-        input.isCustom !== undefined ? (input.isCustom ? 1 : 0) : 1,
+        input.isCustom !== undefined ? (input.isCustom ? 1 : 0) : current.is_custom,
         id
       )
       res.json({ ok: true })

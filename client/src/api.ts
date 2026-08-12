@@ -34,10 +34,12 @@ const DEFAULT_TIMEOUT = 30_000
 const LONG_TIMEOUT = 120_000
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<unknown> {
+  // v0.9.0（审查 M4）：合并 headers 而非覆盖——此前 `...init` 在 init.headers 存在时
+  // 会整体覆盖 authHeaders()（丢 X-App-Token / Content-Type）
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
-    headers: authHeaders(),
-    signal: init?.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT),
-    ...init
+    ...init,
+    headers: { ...authHeaders(), ...(init?.headers ?? {}) },
+    signal: init?.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT)
   })
   const body = (await res.json().catch(() => null)) as { error?: string } | null
   if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`)
@@ -160,7 +162,8 @@ export const novelApi = {
     j(`/novels/${id}/chapters/${chapterId}/versions`),
   createVersion: (id: number, chapterId: number, note?: string): Promise<{ versionId: number }> =>
     j(`/novels/${id}/chapters/${chapterId}/versions`, { method: 'POST', body: JSON.stringify({ note }) }),
-  // P20?U1?????? / ??
+  // v0.9.0：修复乱码注释（此前 P20 U1 注释为编码损坏）
+  // P20（U1）：版本详情 / 恢复
   chapterVersionDetail: (id: number, chapterId: number, versionId: number): Promise<{ version: { id: number; content: string; note: string; created_at: string } }> =>
     j(`/novels/${id}/chapters/${chapterId}/versions/${versionId}`),
   chapterVersionRestore: (id: number, chapterId: number, versionId: number): Promise<{ content: string; wordCount: number }> =>
@@ -257,8 +260,9 @@ export const assetsApi = {
 }
 
 export const hub = {
-  chat: (id: number, message: string): Promise<{ reply: string; toolCalls: string[] }> =>
-    js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) })
+  // v0.9.0（审查 #15）：支持 AbortSignal（HubChat 切换书/卸载时中止在途对话）
+  chat: (id: number, message: string, signal?: AbortSignal): Promise<{ reply: string; toolCalls: string[] }> =>
+    js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }), signal })
 }
 
 export const analysisApi = {
@@ -342,7 +346,9 @@ export const agentsApi = {
     j('/agents', { method: 'POST', body: JSON.stringify(body) }),
   patch: (id: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
     j(`/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  // P29??????????/body_md/?????
+  // v0.9.0（审查 #12）：补 delete——此前缺失迫使页面裸 fetch（dev 下拿到 index.html 假成功"已删除"）
+  remove: (id: number): Promise<{ ok: boolean }> => j(`/agents/${id}`, { method: 'DELETE' }),
+  // P29：技能挂载/卸载（body_md 结构化智能体）
   skillAttach: (agentId: number, skillId: number): Promise<{ ok: boolean }> =>
     j(`/agents/${agentId}/skills`, { method: 'POST', body: JSON.stringify({ skillId }) }),
   skillDetach: (agentId: number, skillId: number): Promise<{ ok: boolean }> =>
@@ -428,9 +434,21 @@ export async function generateChapterSse(
           accumulated += text
           handlers.onDelta?.(text)
         } else if (type === 'context') handlers.onContext?.(payload)
-        else if (type === 'done') handlers.onDone?.(payload as never)
-        else if (type === 'aborted') handlers.onAborted?.(payload as never)
-        else if (type === 'error') handlers.onError?.(String(payload.message ?? '未知错误'))
+        // v0.9.0（审查 M4）：结构校验替代 as never——服务端降级路径省略 usage 时不再 TypeError
+        else if (type === 'done') {
+          handlers.onDone?.({
+            content: String(payload.content ?? ''),
+            wordCount: Number(payload.wordCount ?? 0),
+            usage: {
+              cacheHit: Number((payload.usage as { cacheHit?: unknown } | undefined)?.cacheHit ?? 0)
+            }
+          })
+        } else if (type === 'aborted') {
+          handlers.onAborted?.({
+            content: String(payload.content ?? ''),
+            wordCount: Number(payload.wordCount ?? 0)
+          })
+        } else if (type === 'error') handlers.onError?.(String(payload.message ?? '未知错误'))
       }
     }
   } catch (err) {

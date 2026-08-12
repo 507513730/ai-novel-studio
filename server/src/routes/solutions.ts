@@ -277,14 +277,21 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
       const input = z
         .object({
           // P30 修正：agents 支持 {filename, content}（Feelfish 引用 key = 文件名 id，如 mc-xxx）
+          // v0.9.0（审查 #20）：content 限长 100KB——此前无上限，MB 级内容直塞 DB
           agents: z
-            .array(z.union([z.string(), z.object({ filename: z.string(), content: z.string() })]))
+            .array(
+              z.union([
+                z.string().max(100_000),
+                z.object({ filename: z.string().max(200), content: z.string().max(100_000) })
+              ])
+            )
+            .max(200)
             .default([]),
           solution: z
             .object({
-              name: z.string(),
+              name: z.string().max(100),
               description: z.string().default(''),
-              agents: z.array(z.object({ id: z.string() })).default([]),
+              agents: z.array(z.object({ id: z.string().max(200) })).max(200).default([]),
               primaryAgentId: z.string().nullable().optional()
             })
             .optional(),
@@ -322,8 +329,14 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
           id = Number(rid.lastInsertRowid)
         }
         // 文件名 key 与中文名都映射（方案可能用任一引用）
-        agentIdByKey.set(key, id)
-        agentIdByKey.set(name, id)
+        // v0.9.0（审查 #20）：key 与中文名撞车时——后写覆盖会把方案引用映射到错误 agent，
+        // 改"首次写入优先"（先来者胜），并告警提示冲突
+        const conflict = agentIdByKey.has(key) && agentIdByKey.get(key) !== id
+        if (!agentIdByKey.has(key)) agentIdByKey.set(key, id)
+        if (!agentIdByKey.has(name)) agentIdByKey.set(name, id)
+        if (conflict || (key !== name && agentIdByKey.get(name) !== undefined && agentIdByKey.get(name) !== id)) {
+          console.warn(`[import-feelfish] 引用键冲突（key=${key}, name=${name}）——按先出现者映射`)
+        }
       }
       // 方案（若提供）：按 agents 顺序生成步骤
       const sol = input.solution

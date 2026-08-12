@@ -219,6 +219,11 @@ export function createAutomationRouter(db: DatabaseSync): Router {
       const input = z
         .object({ from: z.number().int().positive().optional(), to: z.number().int().positive().optional() })
         .parse(req.body ?? {})
+      // v0.9.0（审查 D）：from/to 必须成对（此前只传一个会静默退化为全书生产，多烧额度）
+      if ((input.from === undefined) !== (input.to === undefined)) {
+        res.status(400).json({ error: 'from 与 to 必须同时提供（范围授权）' })
+        return
+      }
       let pendingSql = "SELECT COUNT(*) AS c FROM chapter WHERE novel_id = ? AND content = ''"
       const pendingParams: Array<number> = [novelId]
       if (input.from !== undefined && input.to !== undefined) {
@@ -230,25 +235,28 @@ export function createAutomationRouter(db: DatabaseSync): Router {
         res.status(400).json({ error: '所选范围内没有待生成的章节' })
         return
       }
-      const existing = db
-        .prepare(
-          "SELECT id FROM job WHERE type = 'production' AND status IN ('queued','running') AND json_extract(payload_json, '$.novelId') = ?"
-        )
-        .get(novelId) as { id: number } | undefined
-      if (existing) {
-        res.status(409).json({ error: '生产任务已在运行中' })
-        return
-      }
+      // v0.9.0（审查 D）：原子插入防重（INSERT...WHERE NOT EXISTS）——此前 check-then-insert 两步
+      // 并发 POST 可双插入（TOCTOU），调度器串行执行时第二个变成空跑
       const result = db
         .prepare(
-          "INSERT INTO job (type, status, progress, payload_json) VALUES ('production', 'queued', 0, ?)"
+          `INSERT INTO job (type, status, progress, payload_json)
+           SELECT 'production', 'queued', 0, ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM job WHERE type = 'production' AND status IN ('queued','running')
+               AND json_extract(payload_json, '$.novelId') = ?
+           )`
         )
         .run(
           JSON.stringify({
             novelId,
             ...(input.from !== undefined && input.to !== undefined ? { from: input.from, to: input.to } : {})
-          })
+          }),
+          novelId
         )
+      if (Number(result.changes) === 0) {
+        res.status(409).json({ error: '生产任务已在运行中' })
+        return
+      }
       res.status(201).json({ jobId: Number(result.lastInsertRowid), pending: pending.c })
     } catch (err) {
       next(err)

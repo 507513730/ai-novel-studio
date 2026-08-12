@@ -18,6 +18,7 @@ export function usePrompt(): {
   } | null>(null)
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const stateRef = useRef<{ resolve: (v: string | null) => void } | null>(null)
 
   useEffect(() => {
     if (state) {
@@ -26,19 +27,33 @@ export function usePrompt(): {
     }
   }, [state])
 
+  // v0.9.0（审查 C）：prompt 前先 resolve 上一个（防连续调用悬挂 promise）；close 统一经 stateRef
   const prompt = (opts: { title: string; defaultValue?: string; placeholder?: string; confirmLabel?: string }): Promise<string | null> =>
     new Promise((resolve) => {
-      setState({
+      stateRef.current?.resolve(null)
+      const entry: {
+        title: string
+        defaultValue: string
+        placeholder: string
+        confirmLabel: string
+        resolve: (v: string | null) => void
+      } = {
         title: opts.title,
         defaultValue: opts.defaultValue ?? '',
         placeholder: opts.placeholder ?? '',
         confirmLabel: opts.confirmLabel ?? '确定',
-        resolve
-      })
+        resolve: (v) => {
+          stateRef.current = null
+          resolve(v)
+        }
+      }
+      stateRef.current = entry
+      setState(entry)
     })
 
   const close = (result: string | null): void => {
-    state?.resolve(result)
+    stateRef.current?.resolve(result)
+    stateRef.current = null
     setState(null)
   }
 

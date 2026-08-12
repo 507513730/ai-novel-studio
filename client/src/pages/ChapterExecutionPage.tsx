@@ -321,7 +321,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
               pendingDeltaRef.current = ''
               setContent((prev) => prev + batch)
               const total = (editorRef.current?.view?.state.doc.toString() ?? '').length
-              const t = estimateTokens(total.toString())
+              // v0.9.0（审查 C）：token 估算传正文文本本身——此前传"字数"的字符串（如 "12345" 数成 5 tokens）
+              const t = estimateTokens(editorRef.current?.view?.state.doc.toString() ?? '')
               setStreamStat(`已生成 ${total.toLocaleString()} 字 · 约 ${t.toLocaleString()} tokens · ${fmtCost(estimateCost('', t).cost)}`)
               void pending
             })

@@ -399,7 +399,10 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           title: z.string().min(1).optional(),
           summary: z.string().optional(),
           goal: z.unknown().optional(),
-          status: z.string().optional(),
+          // v0.9.0（审查 #19）：章节状态机枚举校验
+          status: z
+            .enum(['planned', 'imported', 'generating', 'written', 'reviewed', 'done', 'failed'])
+            .optional(),
           content: z.string().optional()
         })
         .parse(req.body)

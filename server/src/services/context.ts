@@ -69,6 +69,8 @@ const SEGMENT_STARTS = [
   '【书级合约】',
   '【世界观手册】',
   '【势力】',
+  '【地图】',
+  '【时间线】',
   '【角色账本】',
   '【外部资料】',
   '【创作引导】',
@@ -171,6 +173,21 @@ function getWorld(db: DatabaseSync, novelId: number): string {
     parts.push('【势力】')
     for (const f of factions) parts.push(`- ${f.name}：${f.desc}`)
   }
+  // v0.9.0（审查 D）：map/timeline 此前查了但从不注入（map_json/timeline_json 设定永远不进上下文）
+  const map = JSON.parse(row.map_json || '{}') as Record<string, unknown>
+  if (Object.keys(map).length > 0) {
+    parts.push('【地图】')
+    for (const [k, v] of Object.entries(map)) {
+      parts.push(`- ${k}：${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    }
+  }
+  const timeline = JSON.parse(row.timeline_json || '{}') as Record<string, unknown>
+  if (Object.keys(timeline).length > 0) {
+    parts.push('【时间线】')
+    for (const [k, v] of Object.entries(timeline)) {
+      parts.push(`- ${k}：${typeof v === 'string' ? v : JSON.stringify(v)}`)
+    }
+  }
   return parts.join('\n')
 }
 
@@ -270,7 +287,22 @@ export function getCharactersForChapter(
  */
 // P17-5B：知识库检索（TF-IDF，按相关性 Top-K 注入可变区）
 // P20（D2）：缓存失效键从"文档条数"升级为"数量+内容 hash"——编辑/删一加一即重建索引
+// v0.9.0（审查 #10）：版本键用全量内容 hash——此前只覆盖前 200 字符，改 200 字符之后的内容不失效缓存
+// v0.9.0（审查 D）：LRU 驱逐（上限 50 本书），防 kbCache 无界增长
 const kbCache = new Map<number, { version: string; retriever: TfidfRetriever }>()
+const KB_CACHE_MAX = 50
+function kbCacheGet(novelId: number): { version: string; retriever: TfidfRetriever } | undefined {
+  const cached = kbCache.get(novelId)
+  if (cached) {
+    kbCache.delete(novelId)
+    kbCache.set(novelId, cached) // 触达即刷新（LRU 语义）
+  }
+  if (kbCache.size > KB_CACHE_MAX) {
+    const oldest = kbCache.keys().next().value
+    if (oldest !== undefined) kbCache.delete(oldest)
+  }
+  return cached
+}
 
 export function getKnowledgeRetrieval(db: DatabaseSync, novelId: number, query: string): string | null {
   if (!query.trim()) return null
@@ -282,8 +314,8 @@ export function getKnowledgeRetrieval(db: DatabaseSync, novelId: number, query: 
     .all(novelId) as Array<{ id: number; title: string; content: string }>
   if (docs.length === 0) return null
 
-  const versionKey = `${docs.length}:${hashOf(docs.map((d) => `${d.id}:${d.content.length}:${d.content.slice(0, 200)}`).join('|'))}`
-  let cached = kbCache.get(novelId)
+  const versionKey = `${docs.length}:${hashOf(docs.map((d) => `${d.id}:${hashOf(d.content)}`).join('|'))}`
+  let cached = kbCacheGet(novelId)
   if (!cached) {
     cached = { version: '', retriever: new TfidfRetriever() }
     kbCache.set(novelId, cached)

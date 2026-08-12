@@ -1,5 +1,15 @@
 import { z } from 'zod'
 
+// v0.9.0（审查 M4）：DirectorStatus 统一定义——此前 DirectorPage 与 AiStatusBar 各手写一份，极易漂移
+export interface DirectorStatus {
+  status: string
+  displayStatus?: string
+  stage?: string
+  progress?: Record<string, boolean>
+  blockingReason?: string | null
+  resumeAction?: string | null
+}
+
 export const taskTypes = [
   'prose',
   'planning',

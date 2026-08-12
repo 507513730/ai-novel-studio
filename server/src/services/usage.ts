@@ -38,8 +38,11 @@ function findPricing(provider: string, model: string): { hit: number; miss: numb
   for (const e of PRICING_NORM) {
     if (e.n === key) return e.p
   }
+  // v0.9.0（审查 D）：前缀匹配只允许"配置名是 key 的前缀"（主从关系）——
+  // 此前双向 startsWith 会让 "deepseek:deepseek-v4-flash-latest" 命中 flash 低价、
+  // "deepseek:deepseek-v4"（不存在）也命中 flash（成本估算错配）
   for (const e of PRICING_NORM) {
-    if (key.startsWith(e.n) || e.n.startsWith(key)) return e.p
+    if (key.startsWith(e.n) && key.length > e.n.length) return e.p
   }
   return DEFAULT_PRICING
 }

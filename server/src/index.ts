@@ -23,7 +23,9 @@ import { createAssetsRouter } from './routes/assets'
 import { initPromptDb } from './prompts/promptAsset'
 import { startScheduler } from './services/scheduler'
 import { originGuard } from './services/security'
-import { ZodError } from 'zod'
+
+// v0.9.0（审查 #9）：错误中间件独立模块（createApp 使用 + 测试可挂载；index 模块加载有副作用，不可被测试导入）
+import { apiErrorMiddleware } from './services/apiError'
 
 export function createApp(db: DatabaseSync): express.Express {
   const app = express()
@@ -54,28 +56,7 @@ export function createApp(db: DatabaseSync): express.Express {
   // 任务中心（全局挂载）
   app.use('/api', createJobsRouter(db))
 
-  app.use(
-    (
-      err: unknown,
-      _req: express.Request,
-      res: express.Response,
-      _next: express.NextFunction
-    ) => {
-      // P2.2 🟡9：错误码语义化
-      if (err instanceof ZodError) {
-        res.status(400).json({ error: '参数校验失败', issues: err.issues })
-        return
-      }
-      const message = err instanceof Error ? err.message : String(err)
-      // SQLite 约束/冲突 → 409
-      if (/FOREIGN KEY constraint|UNIQUE constraint|NOT NULL constraint/i.test(message)) {
-        res.status(409).json({ error: message })
-        return
-      }
-      console.error('[api] error:', message)
-      res.status(500).json({ error: message })
-    }
-  )
+  app.use(apiErrorMiddleware)
 
   return app
 }

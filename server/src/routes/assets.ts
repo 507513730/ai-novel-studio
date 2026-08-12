@@ -46,11 +46,17 @@ export function createAssetsRouter(db: DatabaseSync): Router {
         res.status(400).json({ error: '文件内容过少（<50 字符）' })
         return
       }
+      const truncated = text.length > 2_000_000
+      const clipped = text.slice(0, 2_000_000)
+      // v0.9.0（审查 D）：只解析一次（此前 splitChapters 被调用两次：chapters 与 chapterCount 各一次）
+      const parsedChapters = input.asChapters ? splitChapters(clipped) : undefined
       res.json({
         title: input.filename.replace(/\.(txt|md|markdown|epub)$/i, ''),
-        text: text.slice(0, 2_000_000),
-        chapters: input.asChapters ? splitChapters(text) : undefined,
-        chapterCount: input.asChapters ? splitChapters(text).length : undefined
+        text: clipped,
+        // v0.9.0：静默截断改为显式提示（此前 2MB 截断无任何告知）
+        truncated: truncated || undefined,
+        chapters: parsedChapters,
+        chapterCount: parsedChapters?.length
       })
     } catch (err) {
       next(err)

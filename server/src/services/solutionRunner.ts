@@ -39,12 +39,24 @@ export interface RunSolutionOptions {
 // 每步超时（LLM 调用层面用 Promise.race 兜底，防挂死）
 const STEP_TIMEOUT_MS = 90_000
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+// v0.9.0（审查 #11）：withTimeout 支持工厂形式——超时即 abort 底层 LLM 请求，
+// 此前只放弃等待、底层请求继续跑至 120s 客户端超时（zombie 请求 + 重试并发重复调用）
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T>
+function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T>
+function withTimeout<T>(
+  pOrRun: Promise<T> | ((signal: AbortSignal) => Promise<T>),
+  ms: number
+): Promise<T> {
+  const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
+  const p = typeof pOrRun === 'function' ? pOrRun(controller.signal) : pOrRun
   return Promise.race([
     p,
     new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`step timeout after ${ms}ms`)), ms)
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(new Error(`step timeout after ${ms}ms`))
+      }, ms)
     })
   ]).finally(() => {
     if (timer) clearTimeout(timer)
@@ -163,21 +175,23 @@ export async function runSolutionById(
     try {
       const prompt = buildStepPrompt(db, novelId, chapterId, step, prevOutputs)
       const result = await withTimeout(
-        callLlmJson<{ result: string }>(
-          db,
-          'extraction',
-          {
-            novelId,
-            messages: [{ role: 'user', content: prompt }],
-            maxTokens: step.maxTokens ?? 2048
-          },
-          (obj) => {
-            const r = obj as Record<string, unknown>
-            if (typeof r.result === 'string' && r.result.trim().length > 0) return { result: r.result }
-            return null
-          },
-          `solution-${solutionId}-step-${i}`
-        ),
+        (signal) =>
+          callLlmJson<{ result: string }>(
+            db,
+            'extraction',
+            {
+              novelId,
+              signal,
+              messages: [{ role: 'user', content: prompt }],
+              maxTokens: step.maxTokens ?? 2048
+            },
+            (obj) => {
+              const r = obj as Record<string, unknown>
+              if (typeof r.result === 'string' && r.result.trim().length > 0) return { result: r.result }
+              return null
+            },
+            `solution-${solutionId}-step-${i}`
+          ),
         STEP_TIMEOUT_MS
       )
       // 人工改写（单步调试）
@@ -294,6 +308,24 @@ export async function runProductionChapter(
     if (step.stage !== 'whole_book') {
       throw new Error(`生产模式方案包含非生产步骤（${step.role}）——请仅用章节生产步骤`)
     }
+    // v0.9.0（审查 #22）：step.if 条件分支（对齐 runSolutionById——对上一步输出长度判断；首步无条件执行）
+    if (step.if && outputs.length > 0) {
+      const last = outputs[outputs.length - 1]
+      const val = last.output.length
+      const { op, value } = step.if
+      const hit = op === '<' ? val < value : op === '>' ? val > value : val === value
+      if (!hit) {
+        outputs.push({
+          stepIndex: i,
+          role: step.role,
+          stage: step.stage,
+          output: '（条件不满足，跳过）',
+          ok: true,
+          ms: 0
+        })
+        continue
+      }
+    }
     const prod = step.production ?? { output: 'draft' as const, reviewRounds: 1 }
     const t0 = Date.now()
     try {
@@ -327,75 +359,95 @@ export async function runProductionChapter(
       let result: string
       if (prod.output === 'outline') {
         const r = await withTimeout(
-          callLlmJson<{ outline: { title?: string; scenes?: Array<{ purpose?: string; summary?: string }> } }>(
-            db,
-            'extraction',
-            {
-              novelId,
-              messages: [{ role: 'user', content: prompt }],
-              maxTokens: step.maxTokens ?? 2048
-            },
-            (obj) => {
-              const o = (obj as Record<string, unknown>).outline
-              if (o && typeof o === 'object') {
-                const or = o as { title?: unknown; scenes?: unknown }
-                return {
-                  outline: {
-                    title: typeof or.title === 'string' ? or.title : undefined,
-                    scenes: Array.isArray(or.scenes) ? (or.scenes as Array<{ purpose?: string; summary?: string }>) : undefined
+          (signal) =>
+            callLlmJson<{ outline: { title?: string; scenes?: Array<{ purpose?: string; summary?: string }> } }>(
+              db,
+              'extraction',
+              {
+                novelId,
+                signal,
+                messages: [{ role: 'user', content: prompt }],
+                // v0.9.0：JSON 结构输出预算下限 4096——此前默认 2048 且 step.maxTokens 常为 null，
+                // flash 输出稍长即被截断（JSON 解析失败 → 大纲步骤降级，标题/场景丢失）
+                maxTokens: Math.max(step.maxTokens ?? 2048, 4096)
+              },
+              (obj) => {
+                // v0.9.0：兼容两种形态——prompt 指令为顶层 {"title","scenes"}，
+                // 模型有时按字面输出顶层、有时输出 {outline:{...}} 包装（此前只认包装 → 大纲步骤降级）
+                const r = obj as Record<string, unknown>
+                const o = (r.outline as Record<string, unknown> | undefined) ?? r
+                if (o && typeof o === 'object') {
+                  const or = o as { title?: unknown; scenes?: unknown }
+                  return {
+                    outline: {
+                      title: typeof or.title === 'string' ? or.title : undefined,
+                      scenes: Array.isArray(or.scenes) ? (or.scenes as Array<{ purpose?: string; summary?: string }>) : undefined
+                    }
                   }
                 }
-              }
-              return null
-            },
-            `production-outline-${i}`
-          ),
+                return null
+              },
+              `production-outline-${i}`
+            ),
           STEP_TIMEOUT_MS
         )
         outline = r.outline
         result = JSON.stringify(r.outline)
       } else if (prod.output === 'review') {
-        const rounds = prod.reviewRounds ?? 1
-        const r = await withTimeout(
-          callLlmJson<{ issues: Array<{ severity: string; problem: string; suggestion: string }>; verdict: string }>(
-            db,
-            'extraction',
-            {
-              novelId,
-              messages: [{ role: 'user', content: prompt }],
-              maxTokens: step.maxTokens ?? 2048
-            },
-            (obj) => {
-              const o = obj as Record<string, unknown>
-              return {
-                issues: Array.isArray(o.issues)
-                  ? o.issues.map((x) => {
-                      const xi = x as Record<string, unknown>
-                      return {
-                        severity: String(xi.severity ?? 'medium'),
-                        problem: String(xi.problem ?? ''),
-                        suggestion: String(xi.suggestion ?? '')
-                      }
-                    })
-                  : [],
-                verdict: String(o.verdict ?? '通过')
-              }
-            },
-            `production-review-${i}`
-          ),
-          STEP_TIMEOUT_MS
-        )
-        result = JSON.stringify(r)
-        void rounds
+        // v0.9.0（审查 #22）：reviewRounds 多轮审校——按轮数重复审校，产出合并（此前声明字段但只审一轮）
+        const rounds = Math.min(prod.reviewRounds ?? 1, 3)
+        const allIssues: Array<{ severity: string; problem: string; suggestion: string }> = []
+        let verdict = '通过'
+        for (let round = 1; round <= rounds; round++) {
+          const roundPrompt = round > 1 ? `${prompt}\n\n（第 ${round}/${rounds} 轮复审：聚焦上一轮已发现问题的修复效果与遗漏）` : prompt
+          const r = await withTimeout(
+            (signal) =>
+              callLlmJson<{ issues: Array<{ severity: string; problem: string; suggestion: string }>; verdict: string }>(
+                db,
+                'extraction',
+                {
+                  novelId,
+                  signal,
+                  messages: [{ role: 'user', content: roundPrompt }],
+                  maxTokens: step.maxTokens ?? 2048
+                },
+                (obj) => {
+                  const o = obj as Record<string, unknown>
+                  return {
+                    issues: Array.isArray(o.issues)
+                      ? o.issues.map((x) => {
+                          const xi = x as Record<string, unknown>
+                          return {
+                            severity: String(xi.severity ?? 'medium'),
+                            problem: String(xi.problem ?? ''),
+                            suggestion: String(xi.suggestion ?? '')
+                          }
+                        })
+                      : [],
+                    verdict: String(o.verdict ?? '通过')
+                  }
+                },
+                `production-review-${i}-r${round}`
+              ),
+            STEP_TIMEOUT_MS
+          )
+          for (const issue of r.issues) {
+            if (!allIssues.some((e) => e.problem === issue.problem)) allIssues.push(issue)
+          }
+          if (r.verdict !== '通过') verdict = r.verdict
+        }
+        result = JSON.stringify({ issues: allIssues, verdict })
       } else if (prod.output === 'final') {
         // P30 修复：正文类产出走 callLlm（纯文本，不做 JSON 解析）——flash 输出纯文本被 JSON 校验误杀
         const llm = await import('./llm')
         const r = await withTimeout(
-          llm.callLlm(db, 'extraction', {
-            novelId,
-            messages: [{ role: 'user', content: prompt }],
-            maxTokens: step.maxTokens ?? 8192
-          }),
+          (signal) =>
+            llm.callLlm(db, 'extraction', {
+              novelId,
+              signal,
+              messages: [{ role: 'user', content: prompt }],
+              maxTokens: step.maxTokens ?? 8192
+            }),
           STEP_TIMEOUT_MS
         )
         const text = r.content.trim()
@@ -406,11 +458,13 @@ export async function runProductionChapter(
         // draft / scene / dialogue：正文片段（收集合并）——P30 修复：纯文本输出不解析 JSON
         const llm = await import('./llm')
         const r = await withTimeout(
-          llm.callLlm(db, 'extraction', {
-            novelId,
-            messages: [{ role: 'user', content: prompt }],
-            maxTokens: step.maxTokens ?? 4096
-          }),
+          (signal) =>
+            llm.callLlm(db, 'extraction', {
+              novelId,
+              signal,
+              messages: [{ role: 'user', content: prompt }],
+              maxTokens: step.maxTokens ?? 4096
+            }),
           STEP_TIMEOUT_MS
         )
         const text = r.content.trim()

@@ -190,8 +190,10 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       res.end()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
+      console.error('[generate] SSE error:', message)
       db.prepare("UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ?").run(chapterId.data)
-      send('error', { message })
+      // v0.9.0（审查 #9）：SSE 事件只发固定文案（详细日志留服务端）
+      send('error', { message: '生成失败，详情见服务端日志' })
       res.end()
     }
   })
@@ -511,7 +513,9 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       }
       res.json({ sections, totalTokens: ctx.budgetUsed, budgetLimit: ctx.budgetLimit })
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+      // v0.9.0（审查 #9）：固定文案，详情进日志（此前透传 buildChapterWriteContext 内部消息）
+      console.error('[context-preview] error:', err instanceof Error ? err.message : String(err))
+      res.status(500).json({ error: 'internal error' })
     }
   })
 
@@ -625,7 +629,8 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
           ]),
           selection: z.string().optional().default(''),
           instruction: z.string().optional().default(''),
-          cursorPosition: z.number().int().optional()
+          // v0.9.0（审查 D）：cursor 禁止负值（此前负值时 content.slice(0, -5) 产生错误上下文）
+          cursorPosition: z.number().int().nonnegative().optional()
         })
         .parse(req.body)
 

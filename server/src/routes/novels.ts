@@ -123,6 +123,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         titleGroup: JSON.parse(String(row.title_group_json ?? '[]')),
         framing: JSON.parse(String(row.framing_json ?? '{}')),
         guidance: String(row.guidance ?? ''),
+        // v0.9.0（审查 #13）：绑定值回传（此前 GET 不回传，UI 无法回显绑定状态）
+        currentSolutionId: row.current_solution_id ?? null,
         charactersCount: counts.characters,
         volumesCount: counts.volumes,
         chaptersCount: counts.chapters,
@@ -140,7 +142,10 @@ export function createNovelsRouter(db: DatabaseSync): Router {
       const input = z
         .object({
           title: z.string().min(1).optional(),
-          status: z.string().optional(),
+          // v0.9.0（审查 #19）：状态机枚举校验（此前任意字符串可写坏状态机，章节永不计数/不导出）
+          status: z
+            .enum(['draft', 'directions', 'framed', 'macro', 'planned', 'producing', 'done'])
+            .optional(),
           direction: z.unknown().optional(),
           titleGroup: z.unknown().optional(),
           framing: z.unknown().optional(),
@@ -181,6 +186,20 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         params.push(input.guidance)
       }
       if (input.currentSolutionId !== undefined) {
+        // v0.9.0（审查 #13）：绑定校验——不存在/已停用的方案静默绑定会让整本生产无提示走默认生成
+        if (input.currentSolutionId !== null) {
+          const sol = db
+            .prepare('SELECT id, enabled FROM solution WHERE id = ?')
+            .get(input.currentSolutionId) as { id: number; enabled: number } | undefined
+          if (!sol) {
+            res.status(404).json({ error: `production solution #${input.currentSolutionId} not found` })
+            return
+          }
+          if (!sol.enabled) {
+            res.status(409).json({ error: 'production solution is disabled' })
+            return
+          }
+        }
         sets.push('current_solution_id = ?')
         params.push(input.currentSolutionId)
       }
@@ -314,6 +333,11 @@ export function createNovelsRouter(db: DatabaseSync): Router {
       const novel = db.prepare('SELECT inspiration FROM novel WHERE id = ?').get(id) as
         | { inspiration: string }
         | undefined
+      // v0.9.0（审查 #18）：不存在的小说直接 404（此前解引用空对象抛 TypeError → 500）
+      if (!novel) {
+        res.status(404).json({ error: 'novel not found' })
+        return
+      }
       const row = db.prepare('SELECT direction_json FROM novel WHERE id = ?').get(id) as {
         direction_json: string
       }
