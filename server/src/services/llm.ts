@@ -222,7 +222,10 @@ export async function callLlm(
     const client = new OpenAI({
       baseURL: providerRow.base_url || undefined,
       apiKey,
-      timeout: 120_000
+      timeout: 120_000,
+      // v0.9.3（D80）：SDK 默认自动重试 2 次（429/408/409/>=500），与下方候选链 tryCount 3 叠加
+      // 最多 9 次请求（过度重试）——设 1 次仅兜底瞬时抖动，主重试由候选链负责
+      maxRetries: 1
     })
 
     // v0.9.0（审查 #11/#23）：重试绑定"当前失败候选"（不再从头候选链重跑——必败候选被重复调用浪费 token）
