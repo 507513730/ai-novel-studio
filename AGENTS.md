@@ -107,3 +107,5 @@ docs/          校准报告 + P9 体验修复明细
 60. **提交规范（开放仓库）**：commit 遵循 Conventional Commits——feat/fix/docs/refactor/test/chore/ci 等类型 + scope 可选（如 feat(p30)）；破坏性变更必须标注 BREAKING CHANGE 页脚；PR 由 CI 检查（.github/workflows/commitlint.yml），本地不装钩子；commit 是公开历史，禁止空描述、禁止裸 commit 内容。
 
 61. **每批开工前查证纪律**：每个批次开工前，对涉及的外部依赖/API/框架行为先上网查证（官方文档优先），查证结论与来源记入 decision-log；无外部依据的本地设计决策也要显式标注「本地设计」。禁止凭印象实现关键机制（历史教训：Node close 语义、SDK 重试叠加均为查证发现的认知修正）。
+
+61b. **文档断言纪律**（D87 教训）：docs 更新必须断言验证——脚本化 replace 后 grep 命中目标串，失败即报错；版本台账（versioning §7）每次发布必须同步且与 CHANGELOG 逐条核对；发布前跑 node scripts/verify-docs.mjs（release.mjs [3/7] 已内置）。

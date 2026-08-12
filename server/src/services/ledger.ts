@@ -7,6 +7,35 @@ import { DatabaseSync } from 'node:sqlite'
 // 保证两种路径下跨章状态一致性
 // ============================================================
 
+// v0.13.0（批E/I4）：势力状态更新——匹配 world.factions_json 中的 name，更新 currentState
+export function writeFactionStates(
+  db: DatabaseSync,
+  novelId: number,
+  states: Array<{ name: string; state: string }>
+): number {
+  let written = 0
+  const world = db
+    .prepare('SELECT factions_json FROM world WHERE novel_id = ?')
+    .get(novelId) as { factions_json: string } | undefined
+  if (!world) return 0
+  const factions = JSON.parse(world.factions_json || '[]') as Array<Record<string, unknown>>
+  for (const fs of states) {
+    if (!fs.name || !fs.state) continue
+    const target = factions.find((f) => f.name === fs.name)
+    if (target) {
+      target.currentState = fs.state.slice(0, 120)
+      written++
+    }
+  }
+  if (written > 0) {
+    db.prepare("UPDATE world SET factions_json = ?, updated_at = datetime('now') WHERE novel_id = ?").run(
+      JSON.stringify(factions),
+      novelId
+    )
+  }
+  return written
+}
+
 export function writeCharacterStates(
   db: DatabaseSync,
   novelId: number,

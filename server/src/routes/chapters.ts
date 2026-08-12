@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { buildChapterWriteContext, buildChapterReviewContext, buildBackfillContext } from '../services/context'
 import { generateChapter } from '../services/generate'
 import { callLlmJson } from '../services/jsonSafe'
-import { writeCharacterStates } from '../services/ledger'
+import { writeCharacterStates, writeFactionStates } from '../services/ledger'
 import { AI_ACTIONS, AI_INSERT_ACTIONS } from '../prompts'
 import { getBoundStyleRules } from '../services/styleEngine'
 import { updateSmartContext } from '../services/smartContext'
@@ -277,6 +277,7 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
         newFacts: Array<{ content: string }>
         foreshadows: Array<{ content: string; hint: string }>
         paidForeshadows: Array<{ content: string }>
+        factionStates: Array<{ name: string; state: string }>
       }>(
         db,
         'extraction',
@@ -306,6 +307,13 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
               : [],
             paidForeshadows: Array.isArray(r.paidForeshadows)
               ? r.paidForeshadows.map((x) => ({ content: String((x as Record<string, unknown>).content ?? '') }))
+              : [],
+            // v0.13.0（批E/I4）：势力状态（缺失时容错为空数组）
+            factionStates: Array.isArray(r.factionStates)
+              ? r.factionStates.map((x) => {
+                  const f = x as Record<string, unknown>
+                  return { name: String(f.name ?? ''), state: String(f.state ?? '') }
+                })
               : []
           }
         },
@@ -341,6 +349,8 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
             }
           }
         }
+        // v0.13.0（批E/I4）：势力状态更新（匹配 world.factions_json 中的 name，更新 currentState）
+        writeFactionStates(db, novelId, result.factionStates ?? [])
         db.exec('COMMIT')
       } catch (err) {
         db.exec('ROLLBACK')

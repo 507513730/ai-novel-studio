@@ -85,6 +85,7 @@ const SEGMENT_STARTS = [
   '【本章角色特写',
   '【知识库检索',
   '【当前定位】',
+  '【时间线（最近事件）】',
   '【本章任务单】',
   '【前文回顾】'
 ]
@@ -168,10 +169,13 @@ function getWorld(db: DatabaseSync, novelId: number): string {
       parts.push(`- ${k}：${typeof v === 'string' ? v : JSON.stringify(v)}`)
     }
   }
-  const factions = JSON.parse(row.factions_json || '[]') as Array<{ name: string; desc: string }>
+  const factions = JSON.parse(row.factions_json || '[]') as Array<{ name: string; desc: string; currentState?: string }>
   if (factions.length > 0) {
     parts.push('【势力】')
-    for (const f of factions) parts.push(`- ${f.name}：${f.desc}`)
+    for (const f of factions) {
+      // v0.13.0（批E/I4）：势力状态行（回灌更新，世界状态机势力维度）
+      parts.push(`- ${f.name}：${f.desc}${f.currentState ? `（当前：${f.currentState}）` : ''}`)
+    }
   }
   // v0.9.0（审查 D）：map/timeline 此前查了但从不注入（map_json/timeline_json 设定永远不进上下文）
   const map = JSON.parse(row.map_json || '{}') as Record<string, unknown>
@@ -409,6 +413,22 @@ function getGenreConstraints(db: DatabaseSync, novelId: number): string {
 }
 
 // P19 ⑥：当前定位（卷战略 → 节拍 → 本章目标），限量 600 字；查不到任何信息返回空串
+// v0.13.0（批E/I4）：时间线消费——最近 N 条全书事件（timeline_event 表此前只写不读，
+// 现作为世界状态机的"事件记忆"层注入可变区；按章过滤 chapter_id <= 当前章）
+function getTimelineEvents(db: DatabaseSync, novelId: number, chapterId: number, limit = 5): string {
+  const rows = db
+    .prepare(
+      `SELECT content, time_ref FROM timeline_event
+       WHERE novel_id = ? AND chapter_id <= ? ORDER BY id DESC LIMIT ?`
+    )
+    .all(novelId, chapterId, limit) as Array<{ content: string; time_ref: string }>
+  if (rows.length === 0) return ''
+  const lines = rows
+    .reverse()
+    .map((r) => `- ${r.content}${r.time_ref ? `（${r.time_ref}）` : ''}`)
+  return `【时间线（最近事件）】\n${lines.join('\n')}`
+}
+
 export function getChapterLocation(db: DatabaseSync, chapterId: number): string {
   const chapter = db
     .prepare('SELECT volume_id, beat_id, goal_json FROM chapter WHERE id = ?')
@@ -573,6 +593,11 @@ export function buildChapterWriteContext(
     const location = getChapterLocation(db, chapterId)
     if (location) variableText += location + '\n\n'
   }
+  // v0.13.0（批E/I4）：时间线消费——全书已发生事件的结构化记忆（timeline_event 表此前只写不读）
+  if (has('summary')) {
+    const timeline = getTimelineEvents(db, novelId, chapterId, 5)
+    if (timeline) variableText += timeline + '\n\n'
+  }
   variableText += taskSheet
   if (summaryText && has('summary')) variableText += '\n\n' + summaryText
 
@@ -586,6 +611,7 @@ export function buildChapterWriteContext(
   // 任务单永不整段裁，极端超限只截 head 保 tail）
   const VARIABLE_TRIM_ORDER = [
     '【前文回顾】',
+    '【时间线（最近事件）】',
     '【知识库检索（按相关性）】',
     '【当前定位】',
     '【绑定写法要求（必须遵守）】',
@@ -668,7 +694,8 @@ export function buildBackfillContext(
     frozen.characters ? `\n【角色账本】\n${frozen.characters}` : '',
     `\n【本章】${chapter?.title ?? ''}：${chapter?.summary ?? ''}`,
     `\n【章节正文】\n${content}`,
-    '\n请输出 JSON：{"characterStates":[{"name":"..","state":"位置/情绪/实力/关系变化"}],"newFacts":[{"content":".."}],"foreshadows":[{"content":"..","hint":"回收线索"}],"paidForeshadows":[{"content":".."}]}'
+    // v0.13.0（批E/I4）：势力状态提取——世界状态机的势力维度（factions 当前动态）
+    '\n请输出 JSON：{"characterStates":[{"name":"..","state":"位置/情绪/实力/关系变化"}],"newFacts":[{"content":".."}],"foreshadows":[{"content":"..","hint":"回收线索"}],"paidForeshadows":[{"content":".."}],"factionStates":[{"name":"势力名","state":"当前状态/实力/立场变化"}]}'
   ].join('\n')
   return [{ role: 'user', content: text }]
 }

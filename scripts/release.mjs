@@ -106,6 +106,15 @@ ok(`当前版本: v${version}`)
 
 // ---------- 3) 文档强制检查（缺 → 终止） ----------
 console.log('\n[3/7] 文档检查（发布前必须更新）')
+// v0.13.0（批E/文档补救）：verify-docs 全量一致性检查（CHANGELOG/versioning/PLAN + Unreleased 段）
+try {
+  run('node scripts/verify-docs.mjs', { stdio: ['ignore', 'pipe', 'pipe'] })
+  ok('文档台账一致性（verify-docs：CHANGELOG/versioning/PLAN）')
+} catch (err) {
+  fail('verify-docs 文档一致性检查失败')
+  console.error(String(err.stdout ?? '').slice(-600))
+  process.exit(1)
+}
 const rn = readFileSync(join(ROOT, 'docs', 'CHANGELOG.md'), 'utf8')
 if (rn.includes(`## v${version}`)) {
   ok(`CHANGELOG.md 含 v${version} 段落`)
