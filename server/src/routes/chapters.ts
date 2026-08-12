@@ -135,9 +135,14 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
 
     const abort = new AbortController()
     let aborted = false
-    req.on('close', () => {
-      aborted = true
-      abort.abort()
+    // v0.7.2+（Node24 语义修复）：Node 24 的 IncomingMessage 'close' 在请求体读完即触发，
+    // 用 req.on('close') 会让 SSE 生成被自己立即 abort（所有事件被吞、0 字产出）。
+    // 改监听 res 流：仅当响应未正常结束时触发 abort（= 客户端真正断连/取消）。
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        aborted = true
+        abort.abort()
+      }
     })
 
     res.setHeader('Content-Type', 'text/event-stream')
