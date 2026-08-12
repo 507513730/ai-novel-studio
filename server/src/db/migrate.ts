@@ -414,6 +414,15 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     statements: [
       `ALTER TABLE novel ADD COLUMN current_solution_id INTEGER REFERENCES solution(id) ON DELETE SET NULL`
     ]
+  },
+  {
+    // v0.10.0（批B）：成本预警月度阈值 / 质量债自动修复开关（默认值；复用 v7 的 app_settings 表）
+    version: 14,
+    statements: [
+      `INSERT OR IGNORE INTO app_settings (key, value) VALUES
+        ('cost_monthly_budget', '0'),
+        ('auto_fix_debts', '1')`
+    ]
   }
 ]
 

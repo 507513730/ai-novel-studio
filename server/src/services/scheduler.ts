@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { runDirectorPipeline } from './director'
 import { runProductionPipeline, type ProductionProgress } from './production'
+import { fixAllDebts } from './debtFix'
 import { setActiveModelOverride } from './llm'
 import { isJobCancelled } from './jobQueue'
 
@@ -132,6 +133,20 @@ async function processJob(db: DatabaseSync, job: JobRecord): Promise<void> {
           })
         },
         { from: payload.from, to: payload.to, jobId: job.id }
+      )
+      finishJob(db, job.id, { progress: 100, status: 'done' })
+    } else if (job.type === 'debt-fix') {
+      // v0.10.0（批B/I2）：质量债自动修复（每章内部自限轮次，串行执行）
+      await fixAllDebts(
+        db,
+        payload.novelId,
+        (done, total, current, action) => {
+          const ratio = total > 0 ? Math.round((done / total) * 100) : 100
+          updateJob(db, job.id, {
+            progress: ratio,
+            resultJson: JSON.stringify({ current, action, done, total })
+          })
+        }
       )
       finishJob(db, job.id, { progress: 100, status: 'done' })
     } else {

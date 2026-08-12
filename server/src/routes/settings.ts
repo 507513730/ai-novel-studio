@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
+import { getAppSetting, setAppSetting, getMonthlyCost } from '../services/appSettings'
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -325,6 +326,36 @@ export function createSettingsRouter(db: DatabaseSync): Router {
       )
       .get() as Record<string, number>
     res.json({ total, groups })
+  })
+
+  // ---------- v0.10.0（批B）：成本预警 + 质量债自动修复开关 ----------
+  router.get('/app', (_req, res) => {
+    const budget = Number(getAppSetting(db, 'cost_monthly_budget')) || 0
+    res.json({
+      costMonthlyBudget: budget,
+      autoFixDebts: getAppSetting(db, 'auto_fix_debts') === '1',
+      monthlyCost: Number(getMonthlyCost(db).toFixed(2))
+    })
+  })
+
+  router.patch('/app', (req, res, next) => {
+    try {
+      const input = z
+        .object({
+          costMonthlyBudget: z.number().min(0).max(100000).optional(),
+          autoFixDebts: z.boolean().optional()
+        })
+        .parse(req.body)
+      if (input.costMonthlyBudget !== undefined) {
+        setAppSetting(db, 'cost_monthly_budget', String(Math.round(input.costMonthlyBudget * 100) / 100))
+      }
+      if (input.autoFixDebts !== undefined) {
+        setAppSetting(db, 'auto_fix_debts', input.autoFixDebts ? '1' : '0')
+      }
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
   })
 
 

@@ -6,6 +6,7 @@ import { writeCharacterStates } from './ledger'
 import { isJobAborted } from './jobQueue'
 import { runProductionChapter } from './solutionRunner'
 import { parseSolutionSteps } from './solutionAssets'
+import { getAutoFixEnabled } from './appSettings'
 
 // ============================================================
 // 整本批量生产 pipeline（PLAN §7.2 / P2）
@@ -319,6 +320,37 @@ export async function runProductionPipeline(
       db.prepare("UPDATE chapter SET status = 'failed' WHERE id = ?").run(ch.id)
       onProgress(progress)
     }
+  }
+
+  // v0.10.0（批B/I2）：生产完成后自动入队质量债修复（开关开 + 存在待修复债务时）
+  // 业界约束（D81）：evaluator-optimizer 模式需停止条件与成本护栏——修复任务入 job 队列串行执行、
+  // 每章内部自限轮次（fixChapterOnce），用户可随时在任务中心取消/设置页关闭
+  try {
+    if (getAutoFixEnabled(db) && opts.jobId) {
+      const pending = db
+        .prepare(
+          `SELECT COUNT(DISTINCT chapter_id) AS c FROM quality_debt q
+           JOIN chapter c ON c.id = q.chapter_id WHERE q.resolved = 0 AND c.novel_id = ?`
+        )
+        .get(novelId) as { c: number }
+      if (Number(pending.c) > 0) {
+        const queued = db
+          .prepare(
+            `INSERT INTO job (type, status, progress, payload_json)
+             SELECT 'debt-fix', 'queued', 0, ?
+             WHERE NOT EXISTS (
+               SELECT 1 FROM job WHERE type = 'debt-fix' AND status IN ('queued','running')
+                 AND json_extract(payload_json, '$.novelId') = ?
+             )`
+          )
+          .run(JSON.stringify({ novelId }), novelId)
+        if (Number(queued.changes) > 0) {
+          console.log(`[production] 自动入队质量债修复（${pending.c} 章）`)
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[production] 自动修复入队失败: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   return progress

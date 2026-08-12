@@ -194,7 +194,10 @@ export const automationApi = {
   // P19 ③：清理已完成任务（保留 running）
   jobsClearDone: (): Promise<{ deleted: number }> => j('/jobs/done', { method: 'DELETE' }),
   hubChat: (id: number, message: string): Promise<{ reply: string; toolCalls: string[] }> =>
-    js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) })
+    js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) }),
+  // v0.10.0（批B/I2）：质量债自动修复
+  debts: (id: number): Promise<{ pendingDebts: number }> => j(`/novels/${id}/debts`),
+  debtsFix: (id: number): Promise<{ jobId: number }> => js(`/novels/${id}/debts/fix`, { method: 'POST' })
 }
 
 

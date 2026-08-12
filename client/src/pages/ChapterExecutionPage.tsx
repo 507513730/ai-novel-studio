@@ -5,7 +5,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { novelEditorTheme } from '../editor/theme'
-import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders } from '../api'
+import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, automationApi } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
 import type { ChapterSummary } from '../types'
@@ -14,6 +14,53 @@ import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
 import { BookOpenText, Users, Map, Scale } from 'lucide-react'
 import { estimateCost, estimateTokens, fmtCost } from '../utils/costEstimate'
+
+// v0.10.0（批B/I2）：质量债待修复徽标——整本生产后自动修复队列的显性入口
+// 用户必须"看得明白"：徽标显示待修复章节数，点击后任务入队（任务中心可见），修复上限由服务端保证
+function DebtFixBadge({ novelId }: { novelId: number }): React.JSX.Element | null {
+  const { toast } = useToast()
+  const [fixing, setFixing] = useState(false)
+  const debts = useQuery<{ pendingDebts: number }>({
+    queryKey: ['debts', novelId],
+    queryFn: () => automationApi.debts(novelId),
+    refetchInterval: 30_000
+  })
+  const pending = debts.data?.pendingDebts ?? 0
+  if (pending === 0) return null
+  return (
+    <div
+      className="row"
+      style={{
+        gap: 8,
+        alignItems: 'center',
+        padding: '4px 10px',
+        borderRadius: 'var(--radius)',
+        background: 'rgba(255,193,7,.08)',
+        border: '1px solid rgba(255,193,7,.3)',
+        fontSize: 12
+      }}
+    >
+      <span style={{ color: 'var(--warn)' }}>⚙ 待自动修复 {pending} 章（评分低于 75 的章节）</span>
+      <button
+        className="sm"
+        disabled={fixing}
+        onClick={() => {
+          setFixing(true)
+          void automationApi
+            .debtsFix(novelId)
+            .then(() => {
+              toast('ok', '自动修复任务已入队（任务中心可查看进度）')
+              void debts.refetch()
+            })
+            .catch((err) => toast('error', err instanceof Error ? err.message : String(err)))
+            .finally(() => setFixing(false))
+        }}
+      >
+        {fixing ? '排队中…' : '立即修复'}
+      </button>
+    </div>
+  )
+}
 
 export function ChapterExecutionPage(): React.JSX.Element {
   const { novelId } = useParams()
@@ -1073,6 +1120,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
                 {actionBusy === 'solution-produce' ? '流水线生产中…' : '以方案生产正文'}
               </button>
             </div>
+            {/* v0.10.0（批B/I2）：质量债自动修复徽标——整本生产后待修复章节 + 一键触发 */}
+            <DebtFixBadge novelId={id} />
             {solutionRunSummary && (
               <div className="muted" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto', background: 'var(--bg-panel)', borderRadius: 6, padding: 6 }}>
                 {solutionRunSummary}

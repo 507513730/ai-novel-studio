@@ -263,9 +263,45 @@ export function createAutomationRouter(db: DatabaseSync): Router {
     }
   })
 
-  // ---------- 状态 projection（前端轮询） ----------
-  router.get('/:novelId/status', (req, res) => {
+  // ---------- v0.10.0（批B/I2）：质量债自动修复 ----------
+  // 待修复数量（章节页徽标 + 设置页展示）
+  router.get('/:novelId/debts', (req, res) => {
     const novelId = Number(req.params.novelId)
+    const pending = db
+      .prepare(
+        `SELECT COUNT(DISTINCT chapter_id) AS c FROM quality_debt q
+         JOIN chapter c ON c.id = q.chapter_id WHERE q.resolved = 0 AND c.novel_id = ?`
+      )
+      .get(novelId) as { c: number }
+    res.json({ pendingDebts: Number(pending.c) || 0 })
+  })
+
+  // 手动触发自动修复（原子防重，复用 job 队列）
+  router.post('/:novelId/debts/fix', (req, res, next) => {
+    try {
+      const novelId = Number(req.params.novelId)
+      const result = db
+        .prepare(
+          `INSERT INTO job (type, status, progress, payload_json)
+           SELECT 'debt-fix', 'queued', 0, ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM job WHERE type = 'debt-fix' AND status IN ('queued','running')
+               AND json_extract(payload_json, '$.novelId') = ?
+           )`
+        )
+        .run(JSON.stringify({ novelId }), novelId)
+      if (Number(result.changes) === 0) {
+        res.status(409).json({ error: '自动修复任务已在运行中' })
+        return
+      }
+      res.status(201).json({ jobId: Number(result.lastInsertRowid) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- 状态 projection（前端轮询） ----------
+  router.get('/:novelId/status', (req, res) => {    const novelId = Number(req.params.novelId)
     const chapters = db
       .prepare(
         "SELECT COUNT(*) AS c, SUM(CASE WHEN content != '' THEN 1 ELSE 0 END) AS written, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed FROM chapter WHERE novel_id = ?"

@@ -1,13 +1,14 @@
 import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { buildChapterWriteContext, buildChapterReviewContext, buildBackfillContext, buildFixContext } from '../services/context'
+import { buildChapterWriteContext, buildChapterReviewContext, buildBackfillContext } from '../services/context'
 import { generateChapter } from '../services/generate'
 import { callLlmJson } from '../services/jsonSafe'
 import { writeCharacterStates } from '../services/ledger'
 import { AI_ACTIONS, AI_INSERT_ACTIONS } from '../prompts'
 import { getBoundStyleRules } from '../services/styleEngine'
 import { updateSmartContext } from '../services/smartContext'
+import { fixChapterOnce } from '../services/debtFix'
 
 export function createChapterExecutionRouter(db: DatabaseSync): Router {
   const router = Router()
@@ -237,79 +238,21 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
     }
   })
 
-  // ---------- 修复（patch_first，限 2 轮） ----------
+  // ---------- 修复（patch_first，限 2 轮）——v0.10.0（批B/I2）：核心抽到 services/debtFix 供 job 复用
   router.post('/:novelId/chapters/:chapterId/fix', async (req, res, next) => {
     try {
       const novelId = Number(req.params.novelId)
       const chapterId = Number(req.params.chapterId)
-      const chapter = db
-        .prepare('SELECT content, review_json, fix_history_json FROM chapter WHERE id = ? AND novel_id = ?')
-        .get(chapterId, novelId) as
-        | { content: string; review_json: string; fix_history_json: string }
-        | undefined
-      if (!chapter) {
-        res.status(404).json({ error: 'chapter not found' })
+      const r = await fixChapterOnce(db, novelId, chapterId)
+      if (r.reason) {
+        res.status(400).json({ error: r.reason })
         return
-      }
-      const review = JSON.parse(chapter.review_json || '{}') as {
-        issues?: Array<{ severity: string; problem: string; suggestion: string }>
-      }
-      const fixHistory = JSON.parse(chapter.fix_history_json || '[]') as Array<{ round: number; issues: number; signature?: string }>
-      if (fixHistory.length >= 2) {
-        // P12 C1：轮数上限 → 登记质量债（不再自动重写）
-        const issues = review.issues ?? []
-        const sig = issues.slice(0, 3).map((i) => String(i.problem ?? '').slice(0, 30)).join('|')
-        db.prepare(
-          "INSERT INTO quality_debt (chapter_id, issue, severity, resolved) VALUES (?, ?, 'high', 0)"
-        ).run(chapterId, `修复 2 轮未达标，建议人工修改或重规划。${sig ? `签名：${sig}` : ''}`)
-        res.status(400).json({ error: '已修复 2 轮，超过上限，已登记质量债，建议人工修改或重规划' })
-        return
-      }
-      const issues = review.issues ?? []
-      // P12 C1：同签名防重复烧 LLM（上一轮同问题 → 直接登记债务）
-      const sig = issues.slice(0, 3).map((i) => String(i.problem ?? '').slice(0, 30)).join('|')
-      if (sig && fixHistory.length > 0 && fixHistory[fixHistory.length - 1]?.signature === sig) {
-        db.prepare(
-          "INSERT INTO quality_debt (chapter_id, issue, severity, resolved) VALUES (?, ?, 'high', 0)"
-        ).run(chapterId, `同类问题修复后仍存在（签名：${sig}），登记质量债，建议人工修改或窗口重规划`)
-        res.status(400).json({ error: '同类问题上一轮已修复但仍存在，已登记质量债，建议人工修改或重规划（避免重复消耗）' })
-        return
-      }
-      const messages = buildFixContext(db, novelId, chapterId, chapter.content, issues)
-      const fixed = await callLlmJson<{ content: string }>(
-        db,
-        'extraction',
-        {
-          novelId,
-          messages,
-          maxTokens: 8192
-        },
-        (obj) => {
-          const r = obj as Record<string, unknown>
-          if (typeof r.content === 'string' && r.content.length > 100) return { content: r.content }
-          return null
-        },
-        'fix'
-      )
-      fixHistory.push({ round: fixHistory.length + 1, issues: issues.length, signature: sig })
-      db.prepare(
-        "UPDATE chapter SET content = ?, fix_history_json = ?, word_count = ?, updated_at = datetime('now') WHERE id = ?"
-      ).run(fixed.content, JSON.stringify(fixHistory), (fixed.content.match(/[\u4e00-\u9fff]/g) ?? []).length, chapterId)
-
-      // 重审闭环（P1.5）：修复后自动重审，score≥75 或达轮数上限停止
-      const rescore = await performReview(novelId, chapterId, fixed.content)
-      const passed = rescore.score >= 75
-      // P20（C7）：达标 → 该章未解决的债务标记 resolved（质量债可消费闭环）
-      if (passed) {
-        db.prepare(
-          "UPDATE quality_debt SET resolved = 1, updated_at = datetime('now') WHERE chapter_id = ? AND resolved = 0"
-        ).run(chapterId)
       }
       res.json({
-        fixed: true,
-        round: fixHistory.length,
-        content: fixed.content,
-        rescore: { score: rescore.score, needsFix: rescore.needsFix, passed }
+        fixed: r.fixed,
+        round: r.round,
+        content: r.content,
+        rescore: { score: r.score, needsFix: !r.passed, passed: r.passed }
       })
     } catch (err) {
       next(err)

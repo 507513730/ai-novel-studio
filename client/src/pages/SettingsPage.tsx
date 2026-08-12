@@ -383,10 +383,33 @@ function ModelRoutesPanel(): React.JSX.Element {
 }
 
 function UsagePanel(): React.JSX.Element {
+  const { toast } = useToast()
   const usage = useQuery<{ total: UsageTotal; groups: UsageGroup[] }>({
     queryKey: ['usage'],
     queryFn: async () => (await apiFetch('/settings/usage/stats')) as { total: UsageTotal; groups: UsageGroup[] }
   })
+  // v0.10.0（批B/O5）：月度预算预警
+  const app = useQuery<{ costMonthlyBudget: number; autoFixDebts: boolean; monthlyCost: number }>({
+    queryKey: ['app-settings'],
+    queryFn: async () =>
+      (await apiFetch('/settings/app')) as { costMonthlyBudget: number; autoFixDebts: boolean; monthlyCost: number }
+  })
+  const [budgetInput, setBudgetInput] = useState('')
+  const saveBudget = async (): Promise<void> => {
+    const v = Number(budgetInput)
+    if (Number.isNaN(v) || v < 0) {
+      toast('error', '请输入合法的预算金额（元）')
+      return
+    }
+    await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ costMonthlyBudget: v }) })
+    toast('ok', v > 0 ? `月度预算已设为 ¥${v}` : '月度预算预警已关闭')
+    void app.refetch()
+  }
+  const toggleAutoFix = async (on: boolean): Promise<void> => {
+    await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ autoFixDebts: on }) })
+    toast('ok', on ? '质量债自动修复已开启' : '质量债自动修复已关闭')
+    void app.refetch()
+  }
 
   const total = usage.data?.total
   const hitRate = total && total.input_tokens > 0 ? ((total.cache_hit / total.input_tokens) * 100).toFixed(1) : '—'
@@ -400,6 +423,9 @@ function UsagePanel(): React.JSX.Element {
   })
   const weekTotal = weekUsage.data?.total
   const weekHitRate = weekTotal && weekTotal.input_tokens > 0 ? ((weekTotal.cache_hit / weekTotal.input_tokens) * 100).toFixed(1) : '—'
+  const budget = app.data?.costMonthlyBudget ?? 0
+  const monthlyCost = app.data?.monthlyCost ?? 0
+  const overBudget = budget > 0 && monthlyCost > budget
 
   return (
     <div className="panel col">
@@ -421,6 +447,45 @@ function UsagePanel(): React.JSX.Element {
           <div className="muted">近 7 日命中率</div>
           <strong style={{ fontSize: 20 }}>{weekHitRate}%</strong>
         </div>
+      </div>
+
+      {/* v0.10.0（批B/O5）：月度预算预警 */}
+      <div className="row flex-wrap" style={{ marginTop: 12, gap: 12, alignItems: 'center' }}>
+        <span className="muted t-small">月度预算（元）：</span>
+        <input
+          type="number"
+          min={0}
+          style={{ width: 110, fontSize: 13, padding: '4px 8px' }}
+          placeholder={String(budget || '0（关闭）')}
+          value={budgetInput}
+          onChange={(e) => setBudgetInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void saveBudget()
+          }}
+        />
+        <button className="sm" onClick={() => void saveBudget()}>保存预算</button>
+        {budget > 0 ? (
+          <span className="t-small" style={{ color: overBudget ? 'var(--danger)' : 'var(--ok)' }}>
+            本月已用 ¥{monthlyCost.toFixed(2)} / ¥{budget}
+            {overBudget ? ' ⚠️ 已超预算' : ''}
+          </span>
+        ) : (
+          <span className="muted t-small">本月已用 ¥{monthlyCost.toFixed(2)}（未设预算）</span>
+        )}
+      </div>
+
+      {/* v0.10.0（批B/I2）：质量债自动修复开关（默认开启——低分章节将自动排队修复） */}
+      <div className="row flex-wrap" style={{ marginTop: 10, gap: 12, alignItems: 'center' }}>
+        <span className="muted t-small">质量债自动修复：</span>
+        <button
+          className="sm"
+          onClick={() => void toggleAutoFix(!(app.data?.autoFixDebts ?? true))}
+        >
+          {app.data?.autoFixDebts === false ? '开启' : '关闭'}
+        </button>
+        <span className="muted t-small" style={{ maxWidth: 420 }}>
+          整本生产后，评分低于 75 的章节将自动排队修复（每章最多 2 轮 + 同问题防重复）。可随时关闭；任务中心可查看/取消修复进度。
+        </span>
       </div>
       {usage.data && usage.data.groups.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
