@@ -992,3 +992,10 @@ pnpm --version   # 应 ≥10
 
 - [x] **修复**：nsis artifactName 固定横线命名——产物文件名与 latest.yml 一致（此前产物含空格、updater 元数据横线名，自更新下载 404）
 - [x] **验收**：本地 dist 核对 latest.yml url == 产物名 + 已发布
+
+### v0.16.2 · 2026-08-13 · 修复：检查更新报错（CJS interop）
+
+- [x] **根因**：动态 `import('electron-updater')` 对 CJS 包命名导出检测失败 → `autoUpdater` 解构 undefined → `checkForUpdates` 读取报错（与网络无关）
+- [x] **修复**：改为静态导入（esbuild 产物验证为 `require("electron-updater")` + 属性访问，interop 正确）
+- [x] **加固**：IPC 模块可用性防御（不可用返回明确文案）+ 启动静默检查同路径修复
+- [x] **验收**：typecheck/120/120/lint/build + 打包产物引用核对 + 待真机确认（用户应用内「检查更新」）
