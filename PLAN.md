@@ -1044,3 +1044,13 @@ pnpm --version   # 应 ≥10
 - [x] **故事板**：卷规划页全书章节卡片网格（按卷分组 + 状态/字数着色 + 视图切换）
 - [x] **全局角色库**：复用已有 base-characters（创建/从角色存库/应用到书）——无需新建
 - [x] **验收**：138/138（+4 记忆面）+ lint 0 error + build + 已发布
+
+
+### v0.21.0 · 2026-08-13 · 第二轮审查修复批
+
+- [x] **查证**：Node 文档确认 Windows 上 SIGTERM 不触发（SIGINT/SIGBREAK 可用）→ M17/M20 信号防御降级低成本
+- [x] **P0**：N1 字数记账改服务端（generate/流水线/fix 落库累加 + 客户端 onDelta 去重 + 累计文案）；N2 续写 AbortController + seq 校验
+- [x] **P1**：N3 Tab 门控 / N4 记忆面 busy / H1 删 ApiError / M11 冲突保护前缀替换 / M8 JSON_FORMAT import
+- [x] **P2**：N5 NovelMemory/RunTrace 入 shared / M10 reserved 回传+UI 禁编辑 / 信号防御 / A32 键盘+ARIA / 5 页 confirm 统一
+- [x] **P3 全量**：shared 实体类型补全（9 接口）/ mojibake 重编码 / carets 锁定 / migrate 排序 / analysis 死 fetch / webSearch catch 细化 / factions 事务 / ledger 上限 / JobTrace 切片 / WebSearchToggle 失败态 / CSP 加固（子代理 17 项）
+- [x] **验收**：143/143（+5）+ lint 0 error + build + 已发布
