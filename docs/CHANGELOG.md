@@ -1,5 +1,17 @@
 # AI-Novel-Studio 发布说明
 
+## v0.16.2（2026-08-13）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.16.2.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.16.2-portable-x64.exe`
+
+### 变更
+- **修复**：检查更新改为静态导入 `electron-updater`——此前动态 `import()` 对 CJS 包的命名导出检测失败（`autoUpdater` 解构为 undefined），点击「检查更新」报 `Cannot read properties of undefined (reading 'checkForUpdates')`（与网络无关）
+- **加固**：updater 各 IPC 增加模块可用性防御（不可用时返回明确错误文案，不再裸抛）；启动静默检查同路径修复
+
+## v0.16.2
+
 ## [Unreleased]
 
 ## v0.16.1（2026-08-13）
