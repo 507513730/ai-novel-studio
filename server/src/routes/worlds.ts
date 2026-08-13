@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
 import { JSON_FORMAT } from '../prompts'
 import { getSystemPrompt } from '../prompts/promptAsset'
+import { buildWebContextBlock } from '../services/webSearch'
 
 export function createWorldsRouter(db: DatabaseSync): Router {
   const router = Router()
@@ -72,6 +73,8 @@ export function createWorldsRouter(db: DatabaseSync): Router {
         return
       }
       const base = `书名设定：${novel.framing_json}\n灵感：${novel.inspiration}`
+      // v0.18.0：联网查找开关开启时——用灵感/设定自动搜索 Wikipedia 注入世界观参考（零 key）
+      const webCtx = await buildWebContextBlock(db, `${novel.inspiration || '小说'}`.slice(0, 60))
 
       const manual = await callLlmJson<Record<string, string>>(
         db,
@@ -82,7 +85,7 @@ export function createWorldsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${getSystemPrompt('world')}\n${JSON_FORMAT}\n\n${base}\n\n第一步请只输出世界观手册（力量体系、核心规则、社会结构、历史脉络），格式 {"category": "描述"}，4-6 个 category，每项 50-120 字。`
+              content: `${getSystemPrompt('world')}\n${JSON_FORMAT}\n\n${base}${webCtx ? `\n\n${webCtx}` : ''}\n\n第一步请只输出世界观手册（力量体系、核心规则、社会结构、历史脉络），格式 {"category": "描述"}，4-6 个 category，每项 50-120 字。`
             }
           ],
           maxTokens: 2048

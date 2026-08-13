@@ -937,7 +937,59 @@ function WritingPanel(): React.JSX.Element {  const { toast } = useToast()
           阅读宽度（720px 居中，长行更易读）
         </label>
       </div>
+
+      {/* v0.18.0：联网查找（零 key——Wikipedia；知识库联网搜索 + 世界观生成可选注入） */}
+      <h3 style={{ fontSize: 13, margin: '12px 0 4px' }}>联网查找</h3>
+      <div className="col gap-2" style={{ fontSize: 12 }}>
+        <WebSearchToggle />
+        <p className="muted" style={{ margin: 0 }}>
+          开启后：知识库页可「联网搜索」导入设定资料（Wikipedia 中文优先，零 key）；生成世界观时自动注入相关联网资料。
+          失败/离线静默降级，不影响正常创作。
+        </p>
+      </div>
     </div>
+  )
+}
+
+// v0.18.0：联网查找开关（全局）
+function WebSearchToggle(): React.JSX.Element {
+  const { toast } = useToast()
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void apiFetch('/settings/web/enabled')
+      .then((d) => {
+        if (alive) setEnabled((d as { enabled?: boolean })?.enabled === true)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
+  const toggle = async (on: boolean): Promise<void> => {
+    setBusy(true)
+    try {
+      await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ webSearchEnabled: on }) })
+      setEnabled(on)
+      toast('ok', on ? '联网查找已开启' : '联网查找已关闭')
+    } catch (e) {
+      toast('error', `保存失败：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <label className="row" style={{ fontSize: 12, gap: 8, alignItems: 'center' }}>
+      <input
+        type="checkbox"
+        checked={enabled === true}
+        disabled={busy || enabled === null}
+        onChange={(e) => void toggle(e.target.checked)}
+      />
+      开启联网查找
+      {enabled === null && <span className="muted">（加载中…）</span>}
+    </label>
   )
 }
 

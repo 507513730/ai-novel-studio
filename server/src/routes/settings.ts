@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { getAppSetting, setAppSetting, getMonthlyCost } from '../services/appSettings'
 import { getExchangeRate, getRateSource, getRateUpdatedAt, setRateManual, clearRateManual, refreshAutoRate } from '../services/currency'
+import { isWebSearchEnabled, searchWeb, setWebSearchEnabled } from '../services/webSearch'
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -336,7 +337,7 @@ export function createSettingsRouter(db: DatabaseSync): Router {
     res.json({ total, groups })
   })
 
-  // ---------- v0.10.0（批B）：成本预警 + 质量债自动修复开关；v0.16.0：汇率 ----------
+  // ---------- v0.10.0（批B）：成本预警 + 质量债自动修复开关；v0.16.0：汇率；v0.18.0：联网查找 ----------
   router.get('/app', (_req, res) => {
     const budget = Number(getAppSetting(db, 'cost_monthly_budget')) || 0
     res.json({
@@ -346,7 +347,9 @@ export function createSettingsRouter(db: DatabaseSync): Router {
       monthlyCost: Number((getMonthlyCost(db) * getExchangeRate(db)).toFixed(2)),
       cnyUsdRate: getExchangeRate(db),
       cnyUsdRateSource: getRateSource(db),
-      cnyUsdRateAt: getRateUpdatedAt(db)
+      cnyUsdRateAt: getRateUpdatedAt(db),
+      // v0.18.0：联网查找开关
+      webSearchEnabled: isWebSearchEnabled(db)
     })
   })
 
@@ -358,7 +361,9 @@ export function createSettingsRouter(db: DatabaseSync): Router {
           autoFixDebts: z.boolean().optional(),
           // v0.16.0：手动设置汇率（>0 生效）或恢复自动获取
           cnyUsdRate: z.number().min(0.5).max(50).optional(),
-          cnyUsdRateReset: z.boolean().optional()
+          cnyUsdRateReset: z.boolean().optional(),
+          // v0.18.0：联网查找开关
+          webSearchEnabled: z.boolean().optional()
         })
         .parse(req.body)
       if (input.costMonthlyBudget !== undefined) {
@@ -374,6 +379,9 @@ export function createSettingsRouter(db: DatabaseSync): Router {
         clearRateManual(db)
         // 恢复自动：立即联网拉取一次（失败静默，下次启动重试）
         void refreshAutoRate(db)
+      }
+      if (input.webSearchEnabled !== undefined) {
+        setWebSearchEnabled(db, input.webSearchEnabled)
       }
       res.json({ ok: true })
     } catch (err) {
@@ -450,6 +458,25 @@ export function createSettingsRouter(db: DatabaseSync): Router {
       )
       .run()
     res.json({ usageDeleted: usage.changes, jobsDeleted: jobs.changes })
+  })
+
+  // ---------- v0.18.0：联网查找（零 key；开关 + 搜索端点） ----------
+  router.get('/web/enabled', (_req, res) => {
+    res.json({ enabled: isWebSearchEnabled(db) })
+  })
+
+  router.post('/web/search', async (req, res, next) => {
+    try {
+      const input = z.object({ query: z.string().min(2).max(120) }).parse(req.body)
+      if (!isWebSearchEnabled(db)) {
+        res.status(403).json({ error: '联网查找未开启（设置 → 写作 → 联网查找）' })
+        return
+      }
+      const { results, excerpt } = await searchWeb(db, input.query)
+      res.json({ results, excerpt })
+    } catch (err) {
+      next(err)
+    }
   })
 
   // ---------- settings bootstrap (first-run detection) ----------

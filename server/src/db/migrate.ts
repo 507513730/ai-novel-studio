@@ -456,6 +456,13 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
       `ALTER TABLE model_route ADD COLUMN reserved INTEGER NOT NULL DEFAULT 0`,
       `UPDATE model_route SET reserved = 1 WHERE task_type IN ('planning', 'review', 'analysis', 'summary', 'director', 'embedding')`
     ]
+  },
+  {
+    // v0.18.0：联网查找开关（默认关闭；启用后知识库联网搜索 + 世界观生成可选注入，零 key Wikipedia）
+    version: 19,
+    statements: [
+      `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('web_search_enabled', '0')`
+    ]
   }
 ]
 
