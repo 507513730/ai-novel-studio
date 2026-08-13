@@ -1017,3 +1017,13 @@ pnpm --version   # 应 ≥10
 - [x] **主进程**：M15 checkpoint await、M16 失联通知、M17/M20 优雅关闭、M18 exit 事件、M21 npmrc.local
 - [x] **前端**：M22-M43 并发纪律（ref/disabled/try-catch 约 15 面板）+ P3 LOW 25 条（子代理 39 项）
 - [x] **验收**：125/125（+5 新测试）+ lint 0 error + build + 已发布
+
+
+### v0.18.0 · 2026-08-13 · 联网查找可开关
+
+- [x] **查证**：零 key 端点验证——Wikipedia action API（zh 中文可用 ✓）/ DDG Instant Answer（空结果 → 弃用）
+- [x] **webSearch 服务**：Wikipedia 搜索（zh 优先 en 兜底）+ top1 引言摘要 + 5s 超时/失败静默/1h 缓存
+- [x] **开关**：v19 迁移 web_search_enabled（默认关）+ 设置页「写作 → 联网查找」+ /settings/web/enabled + PATCH
+- [x] **知识库接入**：知识库页「联网搜索」→ 结果列表（标题/摘要/URL）→ 一键导入（含摘要正文）
+- [x] **生成注入**：world/generate 开关开启时自动搜索灵感注入「联网资料」块
+- [x] **验收**：131/131（+6）+ lint 0 error + build + 已发布
