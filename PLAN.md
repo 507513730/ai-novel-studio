@@ -999,3 +999,9 @@ pnpm --version   # 应 ≥10
 - [x] **修复**：改为静态导入（esbuild 产物验证为 `require("electron-updater")` + 属性访问，interop 正确）
 - [x] **加固**：IPC 模块可用性防御（不可用返回明确文案）+ 启动静默检查同路径修复
 - [x] **验收**：typecheck/120/120/lint/build + 打包产物引用核对 + 待真机确认（用户应用内「检查更新」）
+
+### v0.16.3 · 2026-08-13 · 修复：更新页版本号不显示
+
+- [x] **根因**：updater 状态广播不含 currentVersion（仅 IPC 返回带）——广播晚到时覆盖状态 → 显示 v—
+- [x] **修复**：broadcast 统一带 currentVersion + renderer 用 __APP_VERSION__ 兜底（双保险）
+- [x] **验收**：typecheck/120/120/lint/build + 已发布
