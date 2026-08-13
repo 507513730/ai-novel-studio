@@ -295,6 +295,10 @@ function ModelRoutesPanel(): React.JSX.Element {
         <div key={r.id} className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 160 }}>
             <strong>{taskTypeLabels[r.taskType]}</strong>
+            {/* v0.21.0（审查 M10 残）：预留路由标注（未消费的死配置——禁编辑防误导） */}
+            {r.reserved && (
+              <span className="badge warn" style={{ marginLeft: 6 }} title="预留路由（当前功能未消费，仅供后续扩展）">预留</span>
+            )}
             <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
               {r.taskType}
             </span>
@@ -311,7 +315,7 @@ function ModelRoutesPanel(): React.JSX.Element {
             {/* v0.17.0（审查 A6）：isPending 门控——保存期间禁改，防连发覆盖 */}
             <select
               value={r.providerId}
-              disabled={saveRoute.isPending}
+              disabled={saveRoute.isPending || r.reserved}
               onChange={(e) =>
                 saveRoute.mutate({
                   ...r,
@@ -956,17 +960,23 @@ function WebSearchToggle(): React.JSX.Element {
   const { toast } = useToast()
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
+  // v0.21.0（审查 P3 LOW）：拉取失败态 + 重试——此前失败被吞，页面永卡"（加载中…）"
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [reloadTick, setReloadTick] = useState(0)
   useEffect(() => {
     let alive = true
+    setLoadFailed(false)
     void apiFetch('/settings/web/enabled')
       .then((d) => {
         if (alive) setEnabled((d as { enabled?: boolean })?.enabled === true)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (alive) setLoadFailed(true)
+      })
     return () => {
       alive = false
     }
-  }, [])
+  }, [reloadTick])
   const toggle = async (on: boolean): Promise<void> => {
     setBusy(true)
     try {
@@ -988,7 +998,13 @@ function WebSearchToggle(): React.JSX.Element {
         onChange={(e) => void toggle(e.target.checked)}
       />
       开启联网查找
-      {enabled === null && <span className="muted">（加载中…）</span>}
+      {enabled === null && !loadFailed && <span className="muted">（加载中…）</span>}
+      {loadFailed && (
+        <span className="muted" style={{ color: 'var(--danger)' }}>
+          （加载失败）
+          <button className="sm ml-2" onClick={() => setReloadTick((t) => t + 1)}>重试</button>
+        </span>
+      )}
     </label>
   )
 }

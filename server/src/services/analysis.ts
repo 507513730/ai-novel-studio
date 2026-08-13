@@ -155,9 +155,6 @@ export async function analyzeCharacter(
   characterName: string,
   depth: CharacterProfileDepth = 'standard'
 ): Promise<Record<string, unknown>> {
-  const novel = db.prepare('SELECT title FROM novel WHERE id = ?').get(novelId) as
-    | { title: string }
-    | undefined
   // 取该角色出场的章节片段
   const chapters = db
     .prepare(
@@ -194,7 +191,7 @@ export async function analyzeCharacter(
       char.id
     )
   }
-  void novel
+  // v0.21.0（审查 P3 LOW）：移除残留 `void novel` 死取数——novel SELECT 仅用于 void 从未消费
   return result
 }
 

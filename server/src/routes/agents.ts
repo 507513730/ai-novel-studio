@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
 import { buildFrozenContext } from '../services/context'
 import { detectAntiAiHits, getBoundStyleRules, extractAntiAiWordsFromRules } from '../services/styleEngine'
+// v0.21.0（审查 M8 残）：统一 import JSON_FORMAT（此前本地副本与 prompts/index.ts 重复）
+import { JSON_FORMAT } from '../prompts'
 
 // ============================================================
 // P5 多智能体：Agent 管理 + 团队协作端点
@@ -447,5 +449,3 @@ export function createAgentsRouter(db: DatabaseSync): Router {
 
   return router
 }
-
-const JSON_FORMAT = '只输出 JSON，不要任何解释文字或 markdown 代码块标记。'

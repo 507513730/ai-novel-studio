@@ -478,8 +478,12 @@ export function StudioPage(): React.JSX.Element {
                 )}
                 {draft.steps.map((step, i) => (
                   // P22-C5：拖拽排序（draggable + drop 交换）
+                  // v0.21.0（审查 A32）：补键盘路径（Alt+↑/↓ 移动）与 role/aria——鼠标 DnD 之外可访问
                   <div
                     key={i}
+                    role="listitem"
+                    aria-label={`步骤 ${i + 1}：${step.role ?? agentName(step.agentId)}`}
+                    tabIndex={0}
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', String(i))
@@ -495,6 +499,17 @@ export function StudioPage(): React.JSX.Element {
                         const next = [...draft.steps]
                         const [moved] = next.splice(from, 1)
                         next.splice(i, 0, moved)
+                        patchDraft({ steps: next })
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                        e.preventDefault()
+                        const target = e.key === 'ArrowUp' ? i - 1 : i + 1
+                        if (target < 0 || target >= draft.steps.length) return
+                        const next = [...draft.steps]
+                        const [moved] = next.splice(i, 1)
+                        next.splice(target, 0, moved)
                         patchDraft({ steps: next })
                       }
                     }}

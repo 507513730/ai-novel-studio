@@ -24,7 +24,7 @@ importers:
         specifier: ^6.8.9
         version: 6.8.9
       epub-gen-memory:
-        specifier: ^1.1.2
+        specifier: 1.1.2
         version: 1.1.2
       epub2:
         specifier: ^3.0.2
@@ -39,7 +39,7 @@ importers:
         specifier: ^1.31.0
         version: 1.31.0(react@19.2.8)
       openai:
-        specifier: ^7.4.0
+        specifier: 7.4.0
         version: 7.4.0(zod@4.4.3)
       react:
         specifier: 19.2.8

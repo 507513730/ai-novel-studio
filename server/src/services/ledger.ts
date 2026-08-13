@@ -52,6 +52,8 @@ export function writeCharacterStates(
       const statesList = ledger.states ?? []
       if (!statesList.includes(cs.state)) {
         statesList.push(cs.state)
+        // v0.21.0（审查 P3 LOW）：状态数组上限 100——超出截断最早状态（防整本生产账本无限膨胀）
+        if (statesList.length > 100) statesList.splice(0, statesList.length - 100)
         db.prepare('UPDATE character SET ledger_json = ? WHERE id = ?').run(
           JSON.stringify({ ...ledger, states: statesList }),
           char.id

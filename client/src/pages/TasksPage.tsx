@@ -45,7 +45,8 @@ function JobTrace({ result }: { result: unknown }): React.JSX.Element | null {
             完成 {r.done ?? 0}/{r.total ?? 0}
             {typeof r.failed === 'number' && r.failed > 0 ? ` · 失败 ${r.failed}` : ''}
           </div>
-          {trace.map((t, i) => (
+          {/* v0.21.0（审查 P3 LOW）：trace 渲染切片前 100 条——防超长轨迹（整本生产可达数百步）堆出百行 DOM */}
+          {trace.slice(0, 100).map((t, i) => (
             <div key={i} className="row" style={{ gap: 8, alignItems: 'baseline', padding: '2px 0' }}>
               <span className="muted" style={{ minWidth: 52, fontVariantNumeric: 'tabular-nums' }}>{t.at}</span>
               <span className="muted" style={{ minWidth: 40 }}>{t.done}/{t.total}</span>
@@ -55,6 +56,9 @@ function JobTrace({ result }: { result: unknown }): React.JSX.Element | null {
               <span className="muted" style={{ flexShrink: 0 }}>{t.action}</span>
             </div>
           ))}
+          {trace.length > 100 && (
+            <div className="muted" style={{ marginTop: 4 }}>…仅显示前 100 条（共 {trace.length} 条）</div>
+          )}
           {trace.length === 0 && <span className="muted">任务已结束（无阶段轨迹）</span>}
         </div>
       )}

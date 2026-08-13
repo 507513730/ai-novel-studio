@@ -134,11 +134,32 @@ export function replaceProtagonistName(db: DatabaseSync, novelId: number, text: 
     .filter(Boolean)
   let out = text
   let replaced = 0
+  // 其他角色名（用于"保护前缀"：如主角名「惊蛰」时其他角色「林惊蛰」的前缀「林」）
+  const otherNames = rows
+    .map((r) => String(r.name ?? '').trim())
+    .filter((x) => x.length > 0)
   for (const n of protagonistNames) {
     if (!n || n === pc.keyword) continue
-    const before = out
-    out = out.split(n).join(pc.keyword)
-    if (out !== before) replaced++
+    // v0.21.0（审查 M11 残）：≥2 字才替换 + 冲突保护——1 字名放弃自动替换防误伤；
+    // 中文无词边界，用"其他角色名以该名结尾"的前缀保护（「林惊蛰」内不触发「惊蛰」）
+    if (n.length < 2) continue
+    const protectedPrefixes = otherNames
+      .filter((x) => x !== n && x.length > n.length && x.endsWith(n))
+      .map((x) => x.slice(0, x.length - n.length))
+    const protLen = protectedPrefixes.length > 0 ? Math.max(...protectedPrefixes.map((p) => p.length)) : 1
+    const parts = out.split(n)
+    if (parts.length === 1) continue
+    const bounded = parts.map((part, i) => {
+      if (i === 0) return part
+      const prevTail = parts[i - 1].slice(-protLen)
+      const blocked = protectedPrefixes.some((p) => prevTail.endsWith(p))
+      return (blocked ? n : pc.keyword) + part
+    })
+    const next = bounded.join('')
+    if (next !== out) {
+      replaced++
+      out = next
+    }
   }
   if (replaced > 0) console.warn(`[constraint] 主角名替换：${protagonistNames.join('、')} → ${pc.keyword}`)
   return out

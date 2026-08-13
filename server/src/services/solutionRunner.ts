@@ -505,12 +505,12 @@ export async function runProductionChapter(
   content = replaceProtagonistName(db, novelId, content)
   const title = outline?.title?.trim() || chapter.title || ''
 
-  // 落库 + 版本快照 + 状态
+  // 落库 + 版本快照 + 状态（v0.21.0 审查 N1：AI 产出记账——流水线直接落库不走客户端 delta）
   const wordCount = (content.match(/[\u4e00-\u9fff]/g) ?? []).length
   db.prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)').run(chapterId, content, 'AI 生产（方案流水线）')
   db.prepare(
-    "UPDATE chapter SET title = CASE WHEN ? != '' THEN ? ELSE title END, content = ?, word_count = ?, status = 'written', updated_at = datetime('now') WHERE id = ?"
-  ).run(title, title, content, wordCount, chapterId)
+    "UPDATE chapter SET title = CASE WHEN ? != '' THEN ? ELSE title END, content = ?, word_count = ?, status = 'written', ai_words = ai_words + ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(title, title, content, wordCount, wordCount, chapterId)
 
   return {
     content,

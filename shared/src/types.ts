@@ -51,6 +51,8 @@ export const modelRouteSchema = z.object({
   reasoningEffort: z.enum(reasoningEfforts),
   temperature: z.number().nullable(),
   maxTokens: z.number(),
+  // v0.21.0（审查 M10 残）：预留路由标记（未消费——UI 标注禁编辑）
+  reserved: z.boolean().optional(),
   fallback: z.array(fallbackEntrySchema)
 })
 export type ModelRoute = z.infer<typeof modelRouteSchema>
@@ -100,8 +102,7 @@ export const taskTypeLabels: Record<TaskType, string> = {
   embedding: 'Embedding'
 }
 
-
-// ===== ??????P12 C4 ??? client/types.ts? =====
+// ===== P12 C4：契约类型统一入 shared（此前 NovelSummary 等定义在 client/types.ts 内联，前后端易漂移） =====
 export interface NovelSummary {
   id: number
   title: string
@@ -200,4 +201,140 @@ export interface ChapterSummary {
   beatId: number | null
   volumeTitle: string | null
   beatTitle: string | null
+}
+
+// v0.20.0（NovelClaw 学习组）：记忆面——状态机显式视图（v0.21.0 审查 N5：契约类型入 shared）
+export interface NovelMemory {
+  characters: Array<{ name: string; states: string[] }>
+  factions: Array<{ name: string; currentState: string }>
+  pendingFacts: Array<{ id: number; content: string }>
+}
+
+// v0.20.0：运行轨迹（任务进度时间线条目）
+export interface RunTraceEntry {
+  at: string
+  chapter: string
+  action: string
+  done: number
+  total: number
+}
+
+export interface RunTraceResult extends Record<string, unknown> {
+  current?: string
+  action?: string
+  done?: number
+  total?: number
+  failed?: number
+  qualityDebts?: number
+  trace?: RunTraceEntry[]
+}
+
+// ============================================================
+// v0.21.0（审查 #20：契约类型补全）——从现有路由/前端内联类型提取，
+// 与 REST 返回（camelCase）对齐，供后续消费方引用（本批只补定义）
+// ============================================================
+
+/** 智能体（agent 表 + 技能挂载聚合；对齐 GET /agents 返回与 AgentsLibraryPage AgentRow） */
+export interface Agent {
+  id: number
+  name: string
+  role: string
+  systemPrompt: string
+  description: string
+  bodyMd: string
+  skills: string[]
+  skillIds: number[]
+  enabled: boolean
+  custom: boolean
+}
+
+/** 技能（skill 表；对齐 GET /skills 返回） */
+export interface Skill {
+  id: number
+  name: string
+  description: string
+  bodyMd: string
+  novelId: number
+  createdAt: string
+}
+
+/** 方案步骤（solution.steps_json 元素；对齐 services/solutionAssets.ts SolutionStep） */
+export interface SolutionStep {
+  agentId: number
+  role: string
+  stage: 'post_generate' | 'review' | 'whole_book'
+  include?: string[]
+  maxTokens?: number
+  if?: { field: string; op: '<' | '>' | '=='; value: number } | null
+}
+
+/** 创作方案（solution 表；对齐 GET /solutions 返回） */
+export interface Solution {
+  id: number
+  name: string
+  description: string
+  primaryAgentId: number | null
+  steps: SolutionStep[]
+}
+
+/** 流派（genre_asset 表；对齐 GET /genres 返回） */
+export interface Genre {
+  id: number
+  name: string
+  novelId: number | null
+}
+
+/** 写法特征（style_asset.features_json 元素；对齐 services/styleEngine.ts StyleFeature） */
+export interface StyleFeature {
+  id: string
+  name: string
+  description: string
+  enabled: boolean
+  category: 'syntax' | 'vocabulary' | 'rhythm' | 'dialogue' | 'description' | 'other'
+}
+
+/** 写法资产（style_asset 表；对齐 GET /:novelId/style 与 style-engine 全局资产返回） */
+export interface StyleAsset {
+  id: number
+  novelId: number
+  name: string
+  features: StyleFeature[]
+  antiAiRules: string[]
+  samples: string[]
+  rules: string[]
+  createdAt: string
+}
+
+/** 提示词资产（prompt_asset 表；对齐 GET /prompts 返回与 PromptWorkbenchPage 内联类型） */
+export interface PromptAsset {
+  id: number
+  name: string
+  taskType: string
+  template: string
+  slots: Record<string, unknown>
+  notes: string
+}
+
+/** 章节详情（对齐 GET /:novelId/chapters/:chapterId 返回） */
+export interface ChapterDetail {
+  id: number
+  title: string
+  summary: string | null
+  goal: Record<string, unknown>
+  status: string
+  wordCount: number
+  aiWords: number
+  humanWords: number
+  content: string
+}
+
+/** 通用资产视图（对齐 assets 端点产物统一视图：id/novelId/type/title/content/status/createdAt） */
+export interface Asset {
+  id: number
+  novelId: number
+  type: string
+  title: string
+  content: string
+  status: string
+  createdAt: string
 }

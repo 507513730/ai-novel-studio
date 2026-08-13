@@ -6,6 +6,7 @@ import { resourcesApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
 import { AssetCreator } from '../components/AssetCreator'
+import { useConfirm } from '../components/ConfirmDialog'
 
 // P17-2：推进模式库（升级流/日常流等节奏模板管理）
 export function StoryModesPage(): React.JSX.Element {
@@ -16,6 +17,8 @@ export function StoryModesPage(): React.JSX.Element {
   const [desc, setDesc] = useState('')
   // v0.17.0（审查 A20）：创建 busy 门控——防连点重复创建
   const [busy, setBusy] = useState(false)
+  // v0.21.0（审查 P3-6：themed confirm 统一）——替代 window.confirm 的主题化确认
+  const [confirmDelete, deleteDialog] = useConfirm()
 
   const modes = useQuery({ queryKey: ['story-modes'], queryFn: resourcesApi.storyModes })
 
@@ -41,8 +44,8 @@ export function StoryModesPage(): React.JSX.Element {
     }
   }
 
-  const remove = async (id: number, nm: string): Promise<void> => {
-    if (!window.confirm(`删除推进模式「${nm}」？`)) return
+  const remove = async (id: number): Promise<void> => {
+    // v0.21.0（审查 P3-6）：确认逻辑上移到调用点（themed confirm），此处仅执行删除
     try {
       await resourcesApi.storyModeDelete(id)
       toast('ok', '已删除')
@@ -94,7 +97,18 @@ export function StoryModesPage(): React.JSX.Element {
                 <strong>{m.name}</strong>
                 {m.description && <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{m.description}</div>}
               </div>
-              <button className="sm danger" onClick={() => void remove(m.id, m.name)}>
+              <button
+                className="sm danger"
+                onClick={() =>
+                  confirmDelete({
+                    title: '删除推进模式',
+                    message: `删除推进模式「${m.name}」？`,
+                    confirmText: '删除',
+                    danger: true,
+                    action: () => void remove(m.id)
+                  })
+                }
+              >
                 <Trash2 size={12} className="icon-gap" />删除
               </button>
             </div>
@@ -108,6 +122,7 @@ export function StoryModesPage(): React.JSX.Element {
           />
         )}
       </div>
+      {deleteDialog}
     </div>
   )
 }

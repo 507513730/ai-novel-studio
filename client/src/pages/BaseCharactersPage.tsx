@@ -6,6 +6,7 @@ import { UsersRound, Star, Trash2 } from 'lucide-react'
 import { novelApi, resourcesApi, assetsApi } from '../api'
 import { useToast } from '../components/Toast'
 import { AssetCreator } from '../components/AssetCreator'
+import { useConfirm } from '../components/ConfirmDialog'
 
 // P18 D1：基础角色库（跨书角色模板：从书角色存模板 / 应用模板到书）
 export function BaseCharactersPage(): React.JSX.Element {
@@ -13,6 +14,8 @@ export function BaseCharactersPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [busy, setBusy] = useState(false)
+  // v0.21.0（审查 P3-6：themed confirm 统一）——替代 window.confirm 的主题化确认
+  const [confirmDelete, deleteDialog] = useConfirm()
 
   const novels = useQuery<{ novels: Array<{ id: number; title: string }> }>({ queryKey: ['novels'], queryFn: novelApi.list })
   const templates = useQuery({ queryKey: ['base-characters'], queryFn: resourcesApi.baseCharacters })
@@ -45,8 +48,7 @@ export function BaseCharactersPage(): React.JSX.Element {
     }
   }
 
-  const deleteTemplate = async (templateId: number, name: string): Promise<void> => {
-    if (!window.confirm(`删除模板「${name}」？`)) return
+  const deleteTemplate = async (templateId: number): Promise<void> => {
     // v0.17.0（审查 A37）：确认后加 busy——此前无门控可连点并发删除
     if (busy) return
     setBusy(true)
@@ -111,7 +113,19 @@ export function BaseCharactersPage(): React.JSX.Element {
                     <option value="" disabled>应用到…</option>
                     {novels.data?.novels.map((n) => <option key={n.id} value={n.id}>{n.title || `#${n.id}`}</option>)}
                   </select>
-                  <button className="sm danger" disabled={busy} onClick={() => void deleteTemplate(t.id, t.name)}><Trash2 size={12} /></button>
+                  <button
+                    className="sm danger"
+                    disabled={busy}
+                    onClick={() =>
+                      confirmDelete({
+                        title: '删除模板',
+                        message: `删除模板「${t.name}」？`,
+                        confirmText: '删除',
+                        danger: true,
+                        action: () => void deleteTemplate(t.id)
+                      })
+                    }
+                  ><Trash2 size={12} /></button>
                 </div>
               </div>
             </div>
@@ -151,6 +165,7 @@ export function BaseCharactersPage(): React.JSX.Element {
           </div>
         )}
       </div>
+      {deleteDialog}
     </div>
   )
 }

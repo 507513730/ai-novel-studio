@@ -6,6 +6,7 @@ import { resourcesApi, novelApi, assetsApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { AssetCreator } from '../components/AssetCreator'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
 
 // P17-2：世界样本库（从书保存样本 / 应用样本到书）
 export function WorldsLibraryPage(): React.JSX.Element {
@@ -15,6 +16,8 @@ export function WorldsLibraryPage(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [saveFrom, setSaveFrom] = useState(0)
   const [saveName, setSaveName] = useState('')
+  // v0.21.0（审查 P3-6：themed confirm 统一）——替代 window.confirm 的主题化确认（删除/应用共用）
+  const [confirmAction, confirmDialog] = useConfirm()
 
   const templates = useQuery({ queryKey: ['world-templates'], queryFn: resourcesApi.worldTemplates })
   const novels = useQuery<{ novels: Array<{ id: number; title: string }> }>({ queryKey: ['novels'], queryFn: novelApi.list })
@@ -51,7 +54,6 @@ export function WorldsLibraryPage(): React.JSX.Element {
   }
 
   const remove = async (id: number): Promise<void> => {
-    if (!window.confirm('删除该世界样本？')) return
     // v0.17.0（审查 A37）：确认后加 busy——防连点重复删除
     if (busy) return
     setBusy(true)
@@ -119,7 +121,14 @@ export function WorldsLibraryPage(): React.JSX.Element {
                   defaultValue=""
                   onChange={(e) => {
                     if (e.target.value) {
-                      if (window.confirm('应用样本将覆盖目标书的世界观，继续？')) void apply(t.id, Number(e.target.value))
+                      const targetNovelId = Number(e.target.value)
+                      confirmAction({
+                        title: '应用世界样本',
+                        message: `将样本「${t.name}」应用到目标书？应用将覆盖该书的世界观，继续？`,
+                        confirmText: '应用',
+                        danger: true,
+                        action: () => void apply(t.id, targetNovelId)
+                      })
                       e.target.value = ''
                     }
                   }}
@@ -128,13 +137,26 @@ export function WorldsLibraryPage(): React.JSX.Element {
                   {novels.data?.novels.map((n) => <option key={n.id} value={n.id}>{n.title || `#${n.id}`}</option>)}
                 </select>
                 <button className="sm" title="复制样本 JSON" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ name: t.name, manual: t.manual, factions: t.factions, map: t.map }, null, 2)).then(() => toast('ok', '已复制样本 JSON'))}><Copy size={12} /></button>
-                <button className="sm danger" disabled={busy} onClick={() => void remove(t.id)}><Trash2 size={12} /></button>
+                <button
+                  className="sm danger"
+                  disabled={busy}
+                  onClick={() =>
+                    confirmAction({
+                      title: '删除世界样本',
+                      message: `删除世界样本「${t.name}」？`,
+                      confirmText: '删除',
+                      danger: true,
+                      action: () => void remove(t.id)
+                    })
+                  }
+                ><Trash2 size={12} /></button>
               </div>
             </div>
           </div>
         ))}
         {!templates.isLoading && templates.data?.templates.length === 0 && <EmptyState icon={Globe2} title="暂无世界样本" desc="可导入示例或从书籍内容提取世界观。" />}
       </div>
+      {confirmDialog}
     </div>
   )
 }

@@ -152,9 +152,11 @@ export const novelApi = {
   aiAction: (
     id: number,
     chapterId: number,
-    body: { action: string; selection?: string; instruction?: string; cursorPosition?: number }
+    body: { action: string; selection?: string; instruction?: string; cursorPosition?: number },
+    // v0.21.0（审查 N2）：可选 AbortSignal（续写请求取消）
+    signal?: AbortSignal
   ): Promise<{ action: string; isInsert: boolean; content: string; appliedAt?: number }> =>
-    js(`/novels/${id}/chapters/${chapterId}/ai-action`, { method: 'POST', body: JSON.stringify(body) }),
+    js(`/novels/${id}/chapters/${chapterId}/ai-action`, { method: 'POST', body: JSON.stringify(body), signal }),
   contextPreview: (id: number, chapterId: number): Promise<{ sections: Array<{ key: string; label: string; chars: number; tokens: number }>; totalTokens: number; budgetLimit: number }> =>
     j(`/novels/${id}/chapters/${chapterId}/context-preview`),
   versions: (id: number, chapterId: number): Promise<{ versions: Array<{ id: number; note: string; createdAt: string; wordCount: number; preview: string }> }> =>

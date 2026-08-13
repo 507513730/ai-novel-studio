@@ -5,6 +5,7 @@ import { agentsApi, studioApi, apiFetch } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
 import { usePrompt } from '../components/PromptDialog'
+import { useConfirm } from '../components/ConfirmDialog'
 
 // ============================================================
 // P29 A：智能体库（全局页）——列表/编辑/技能挂载/启停/新建
@@ -31,6 +32,8 @@ export function AgentsLibraryPage(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<AgentRow | null>(null)
   const { prompt: askPrompt, element: promptElement } = usePrompt()
+  // v0.21.0（审查 P3-6：themed confirm 统一）——替代 window.confirm 的主题化确认
+  const [confirmDelete, deleteDialog] = useConfirm()
 
   const agents = useQuery({ queryKey: ['agents'], queryFn: agentsApi.list })
   const skills = useQuery({ queryKey: ['studio-skills'], queryFn: studioApi.skills })
@@ -170,18 +173,25 @@ export function AgentsLibraryPage(): React.JSX.Element {
                       className="sm"
                       style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                       disabled={busy}
-                      onClick={() => {
-                        if (!window.confirm(`删除智能体「${a.name}」？（被方案引用时会被拒绝，需先移除引用步骤）`)) return
-                        // v0.9.0（审查 #12）：走 agentsApi.remove——此前裸 fetch('/api/...') 在 dev 下
-                        // 拿到 Vite 的 index.html（200）→ "假成功"提示但服务端从未删除
-                        void agentsApi
-                          .remove(a.id)
-                          .then(() => {
-                            toast('ok', '已删除')
-                            inval()
-                          })
-                          .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-                      }}
+                      onClick={() =>
+                        confirmDelete({
+                          title: '删除智能体',
+                          message: `删除智能体「${a.name}」？（被方案引用时会被拒绝，需先移除引用步骤）`,
+                          confirmText: '删除',
+                          danger: true,
+                          action: () => {
+                            // v0.9.0（审查 #12）：走 agentsApi.remove——此前裸 fetch('/api/...') 在 dev 下
+                            // 拿到 Vite 的 index.html（200）→ "假成功"提示但服务端从未删除
+                            void agentsApi
+                              .remove(a.id)
+                              .then(() => {
+                                toast('ok', '已删除')
+                                inval()
+                              })
+                              .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                          }
+                        })
+                      }
                     >
                       <Trash2 size={12} />
                     </button>
@@ -228,6 +238,7 @@ export function AgentsLibraryPage(): React.JSX.Element {
           onSaved={() => { setEditing(null); inval() }}
         />
       )}
+      {deleteDialog}
     </div>
   )
 }

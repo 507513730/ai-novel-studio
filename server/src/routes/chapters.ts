@@ -478,6 +478,8 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       } else if (input.state && !states.includes(input.state)) {
         states.push(input.state.slice(0, 120))
       }
+      // v0.21.0（审查 P3 LOW）：状态数组上限 100——与 writeCharacterStates 一致，超出截断最早状态
+      if (states.length > 100) states.splice(0, states.length - 100)
       db.prepare('UPDATE character SET ledger_json = ? WHERE id = ?').run(
         JSON.stringify({ ...ledger, states }),
         char.id
@@ -492,25 +494,36 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
     try {
       const novelId = Number(req.params.novelId)
       const input = z.object({ name: z.string().min(1), state: z.string().max(120) }).parse(req.body)
-      const world = db.prepare('SELECT factions_json FROM world WHERE novel_id = ?').get(novelId) as
-        | { factions_json: string }
-        | undefined
-      if (!world) {
-        res.status(404).json({ error: '世界观未生成' })
-        return
+      // v0.21.0（审查 P3 LOW）：factions_json 读改写原子化——BEGIN/COMMIT/ROLLBACK 包裹，
+      // 防并发请求（记忆面修正与回灌 writeFactionStates）读到旧值互相覆盖
+      db.exec('BEGIN')
+      try {
+        const world = db.prepare('SELECT factions_json FROM world WHERE novel_id = ?').get(novelId) as
+          | { factions_json: string }
+          | undefined
+        if (!world) {
+          db.exec('ROLLBACK')
+          res.status(404).json({ error: '世界观未生成' })
+          return
+        }
+        const factions = JSON.parse(world.factions_json || '[]') as Array<Record<string, unknown>>
+        const target = factions.find((f) => f.name === input.name)
+        if (!target) {
+          db.exec('ROLLBACK')
+          res.status(404).json({ error: '势力不存在' })
+          return
+        }
+        target.currentState = input.state
+        db.prepare("UPDATE world SET factions_json = ?, updated_at = datetime('now') WHERE novel_id = ?").run(
+          JSON.stringify(factions),
+          novelId
+        )
+        db.exec('COMMIT')
+        res.json({ ok: true })
+      } catch (err) {
+        db.exec('ROLLBACK')
+        throw err
       }
-      const factions = JSON.parse(world.factions_json || '[]') as Array<Record<string, unknown>>
-      const target = factions.find((f) => f.name === input.name)
-      if (!target) {
-        res.status(404).json({ error: '势力不存在' })
-        return
-      }
-      target.currentState = input.state
-      db.prepare("UPDATE world SET factions_json = ?, updated_at = datetime('now') WHERE novel_id = ?").run(
-        JSON.stringify(factions),
-        novelId
-      )
-      res.json({ ok: true })
     } catch (err) {
       next(err)
     }

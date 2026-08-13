@@ -78,9 +78,11 @@ export async function fixChapterOnce(
     'fix'
   )
   fixHistory.push({ round: fixHistory.length + 1, issues: issues.length, signature: sig })
+  // v0.21.0（审查 N1）：AI 修复产出记账（累计语义；修复重写整章为 AI 产出）
+  const fixedWordCount = (fixed.content.match(/[\u4e00-\u9fff]/g) ?? []).length
   db.prepare(
-    "UPDATE chapter SET content = ?, fix_history_json = ?, word_count = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(fixed.content, JSON.stringify(fixHistory), (fixed.content.match(/[\u4e00-\u9fff]/g) ?? []).length, chapterId)
+    "UPDATE chapter SET content = ?, fix_history_json = ?, word_count = ?, ai_words = ai_words + ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(fixed.content, JSON.stringify(fixHistory), fixedWordCount, fixedWordCount, chapterId)
 
   // ④ 重审闭环：score≥75 或达轮数上限停止
   const reviewMessages = buildChapterReviewContext(db, novelId, chapterId, fixed.content)

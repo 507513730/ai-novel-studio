@@ -145,4 +145,25 @@ if (isUtilityProcess()) {
   start()
 }
 
+// v0.21.0（审查 M17/M20 残）：信号防御——Windows 上 SIGTERM 不触发（查证 Node 文档），
+// SIGINT（Ctrl+C）/SIGBREAK（Ctrl+Break）可用；优雅关闭与 shutdown 消息共用路径
+let shuttingDown = false
+function gracefulExit(): void {
+  if (shuttingDown) return
+  shuttingDown = true
+  try {
+    stopScheduler()
+  } catch {
+    /* ignore */
+  }
+  process.exit(0)
+}
+for (const sig of ['SIGINT', 'SIGBREAK', 'SIGTERM'] as const) {
+  try {
+    process.on(sig, gracefulExit)
+  } catch {
+    /* 平台不支持时忽略 */
+  }
+}
+
 export { openDatabase }

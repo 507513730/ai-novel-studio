@@ -1,17 +1,8 @@
-// v0.9.0（审查 #9）：带状态码的业务错误 + 统一错误中间件
+// v0.9.0（审查 #9）：统一错误中间件
 // 未分类错误只回固定文案（防内部信息泄露：SQLite 约束文本/绝对路径/TypeError 原文）
 
 import type { Request, Response, NextFunction } from 'express'
 import { ZodError } from 'zod'
-
-export class ApiError extends Error {
-  readonly status: number
-  constructor(status: number, message: string) {
-    super(message)
-    this.status = status
-    this.name = 'ApiError'
-  }
-}
 
 export function apiErrorMiddleware(
   err: unknown,
@@ -19,11 +10,6 @@ export function apiErrorMiddleware(
   res: Response,
   _next: NextFunction
 ): void {
-  // v0.17.0（审查 H1）：ApiError 分支——此前缺失导致业务状态码被吞（全走兜底 500）
-  if (err instanceof ApiError) {
-    res.status(err.status).json({ error: err.message })
-    return
-  }
   if (err instanceof ZodError) {
     res.status(400).json({ error: '参数校验失败', issues: err.issues })
     return

@@ -174,7 +174,7 @@ export function createSettingsRouter(db: DatabaseSync): Router {
     const rows = db
       .prepare(
         `SELECT mr.id, mr.task_type, mr.model, mr.thinking_enabled, mr.reasoning_effort,
-                mr.temperature, mr.max_tokens, mr.fallback_json,
+                mr.temperature, mr.max_tokens, mr.fallback_json, mr.reserved,
                 p.id AS provider_id, p.name AS provider_name
          FROM model_route mr JOIN provider p ON p.id = mr.provider_id ORDER BY mr.id`
       )
@@ -187,6 +187,7 @@ export function createSettingsRouter(db: DatabaseSync): Router {
       temperature: number | null
       max_tokens: number
       fallback_json: string
+      reserved: number
       provider_id: number
       provider_name: string
     }>
@@ -201,6 +202,8 @@ export function createSettingsRouter(db: DatabaseSync): Router {
         reasoningEffort: r.reasoning_effort as 'low' | 'high' | 'max',
         temperature: r.temperature,
         maxTokens: r.max_tokens,
+        // v0.21.0（审查 M10 残）：reserved 回传（UI 据此隐藏/标注死路由）
+        reserved: r.reserved === 1,
         fallback: JSON.parse(r.fallback_json) as Array<{ providerId: number; model: string }>
       }))
     })

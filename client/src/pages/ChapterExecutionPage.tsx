@@ -32,13 +32,14 @@ function extractProtagonistNameFromDraft(text: string): string {
 }
 
 // v0.20.0：记忆面小组件——角色状态追加（Enter 提交）
-function CharStateAdd({ name, onAdd }: { name: string; onAdd: (s: string) => void }): React.JSX.Element {
+function CharStateAdd({ name, disabled, onAdd }: { name: string; disabled: boolean; onAdd: (s: string) => void }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   return (
     <input
       style={{ width: 140, fontSize: 11, padding: '2px 6px' }}
       placeholder={`给 ${name} 加状态…`}
       value={draft}
+      disabled={disabled}
       onChange={(e) => setDraft(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && draft.trim()) {
@@ -53,9 +54,11 @@ function CharStateAdd({ name, onAdd }: { name: string; onAdd: (s: string) => voi
 // v0.20.0：记忆面小组件——势力当前状态修正（Enter 保存）
 function FactionStateEdit({
   current,
+  disabled,
   onSave
 }: {
   current: string
+  disabled: boolean
   onSave: (s: string) => void
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
@@ -64,6 +67,7 @@ function FactionStateEdit({
       style={{ width: 160, fontSize: 11, padding: '2px 6px' }}
       placeholder={current ? `当前：${current}` : '设置势力状态…'}
       value={draft}
+      disabled={disabled}
       onChange={(e) => setDraft(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && draft.trim()) {
@@ -129,6 +133,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const id = Number(novelId)
   const queryClient = useQueryClient()
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null)
+// v0.21.0（审查 N2）：当前章节 ref（续写响应校验用——防切章后旧章建议串入）
+const selectedChapterRef = useRef<number | null>(null)
   const [content, setContent] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [contentLoading, setContentLoading] = useState(false)
@@ -164,6 +170,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
     // v0.19.0：光标续写（Cmd/Ctrl+J 触发 / Tab 接受）
     suggestContinue: () => Promise<void>
     acceptSuggestion: () => void
+    // v0.21.0（审查 N3）：Tab 门控（仅编辑器内有建议时拦截）
+    hasSuggestion: () => boolean
   } | null>(null)
   // P27 0b：应用内输入对话框（替代 window.prompt）
   const { prompt: askChapterTitle, element: chapterPromptElement } = usePrompt()
@@ -329,19 +337,29 @@ export function ChapterExecutionPage(): React.JSX.Element {
   // 光标续写：Cmd/Ctrl+J → 建议浮层 → Tab 插入 / Esc 关闭
   const [suggestion, setSuggestion] = useState<{ text: string; pos: number } | null>(null)
   const [sugBusy, setSugBusy] = useState(false)
+  // v0.21.0（审查 N2）：续写请求 abort 控制（切章/unmount/新请求时取消 + seq 校验防跨章串内容）
+  const sugAbortRef = useRef<AbortController | null>(null)
+  const sugSeqRef = useRef(0)
   const suggestContinue = async (): Promise<void> => {
     const view = editorRef.current?.view
     if (!view || !selectedChapter || sugBusy || streaming) return
+    sugAbortRef.current?.abort()
+    const seq = ++sugSeqRef.current
+    const ctrl = new AbortController()
+    sugAbortRef.current = ctrl
+    const capturedChapter = selectedChapter
     const pos = view.state.selection.main.head
     setSugBusy(true)
     setActionError(null)
     try {
-      const r = await novelApi.aiAction(id, selectedChapter, { action: 'continue', cursorPosition: pos })
+      const r = await novelApi.aiAction(id, capturedChapter, { action: 'continue', cursorPosition: pos }, ctrl.signal)
+      if (seq !== sugSeqRef.current || selectedChapterRef.current !== capturedChapter) return
       setSuggestion({ text: r.content, pos: r.appliedAt ?? pos })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err))
+      if (ctrl.signal.aborted) return
+      if (seq === sugSeqRef.current) setActionError(err instanceof Error ? err.message : String(err))
     } finally {
-      setSugBusy(false)
+      if (seq === sugSeqRef.current) setSugBusy(false)
     }
   }
   const acceptSuggestion = (): void => {
@@ -365,6 +383,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
     if (!selectedChapter && list.length > 0) {
       const first = list.find((c) => c.status === 'planned') ?? list[0]
       setSelectedChapter(first.id)
+      // v0.21.0（审查 N2）：初始选中同步 ref
+      selectedChapterRef.current = first.id
     }
   }, [list, selectedChapter])
 
@@ -405,6 +425,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
   }, [])
 
   // v0.19.0：Cmd/Ctrl+J 光标续写；Tab 接受建议（编辑器聚焦时）
+  // v0.21.0（审查 N3）：Tab 仅在编辑器内且有建议时 preventDefault + 插入（不再全局吞 Tab/焦点移动）
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
@@ -413,7 +434,11 @@ export function ChapterExecutionPage(): React.JSX.Element {
         return
       }
       if (e.key === 'Tab') {
-        latestActionsRef.current?.acceptSuggestion()
+        const editorEl = document.querySelector('.cm-editor')
+        if (editorEl && editorEl.contains(document.activeElement) && latestActionsRef.current?.hasSuggestion()) {
+          e.preventDefault()
+          latestActionsRef.current.acceptSuggestion()
+        }
       }
     }
     window.addEventListener('keydown', onKey)
@@ -560,12 +585,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
               const batch = pendingDeltaRef.current
               pendingDeltaRef.current = ''
               setContent((prev) => prev + batch)
-              // v0.19.0：流式生成计入 AI 字数
-              const cjk = countCjk(batch)
-              if (cjk > 0) {
-                aiDeltaRef.current += cjk
-                setWordStats((s) => ({ ...s, ai: s.ai + cjk }))
-              }
+              // v0.21.0（审查 N1）：生成路径改由服务端记账（ai_words += wordCount）——
+              // 此前 onDelta 本地累计会在保存时与服务端计数双计；选区 AI 操作仍走本地 delta
               const total = (editorRef.current?.view?.state.doc.toString() ?? '').length
               // v0.9.0（审查 C）：token 估算传正文文本本身——此前传"字数"的字符串（如 "12345" 数成 5 tokens）
               const t = estimateTokens(editorRef.current?.view?.state.doc.toString() ?? '')
@@ -758,7 +779,16 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
   // v0.17.0（审查 A5）：每渲染刷新快捷键闭包缓存（effect 固定注册仍取最新实现）
   useEffect(() => {
-    latestActionsRef.current = { saveContent, generate, withBusy, runReview, backfill, suggestContinue, acceptSuggestion }
+    latestActionsRef.current = {
+    saveContent,
+    generate,
+    withBusy,
+    runReview,
+    backfill,
+    suggestContinue,
+    acceptSuggestion,
+    hasSuggestion: () => suggestion !== null
+  }
   })
 
   const loadPending = async (): Promise<void> => {
@@ -791,20 +821,35 @@ export function ChapterExecutionPage(): React.JSX.Element {
       setMemoryBusy(false)
     }
   }
+  // v0.21.0（审查 N4）：记忆面操作 busy 锁（ref 防连点并发 POST）
+  const memoryPatchBusyRef = useRef(false)
+  const [memoryPatchBusy, setMemoryPatchBusy] = useState(false)
   const patchCharState = async (name: string, state: string, remove: boolean): Promise<void> => {
+    if (memoryPatchBusyRef.current) return
+    memoryPatchBusyRef.current = true
+    setMemoryPatchBusy(true)
     try {
       await novelApi.memoryCharacter(id, { name, state, remove })
       await loadMemory()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      memoryPatchBusyRef.current = false
+      setMemoryPatchBusy(false)
     }
   }
   const patchFactionState = async (name: string, state: string): Promise<void> => {
+    if (memoryPatchBusyRef.current) return
+    memoryPatchBusyRef.current = true
+    setMemoryPatchBusy(true)
     try {
       await novelApi.memoryFaction(id, { name, state })
       await loadMemory()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      memoryPatchBusyRef.current = false
+      setMemoryPatchBusy(false)
     }
   }
 
@@ -918,6 +963,11 @@ export function ChapterExecutionPage(): React.JSX.Element {
       return
     }
     setSelectedChapter(chapterId)
+    // v0.21.0（审查 N2）：同步 ref + 中止在途续写请求 + seq 失效
+    selectedChapterRef.current = chapterId
+    sugAbortRef.current?.abort()
+    sugSeqRef.current++
+    setSuggestion(null)
     setReviewResult(null)
     setBackfillResult(null)
     setActionError(null)
@@ -1190,7 +1240,12 @@ export function ChapterExecutionPage(): React.JSX.Element {
             {chapter?.summary && <span className="muted t-small">{chapter.summary}</span>}
             <span className="muted t-small">｜{hanCount} 字</span>
             {/* v0.19.0：人类/AI 字数分离（NovelCraft 学习——你的字 vs AI 贡献） */}
-            <span className="muted t-small" style={{ color: 'var(--ok)' }}>
+            {/* v0.21.0（审查 N1）：明确累计语义——AI 产出/人工输入总量（可超当前字数） */}
+            <span
+              className="muted t-small"
+              style={{ color: 'var(--ok)', cursor: 'help' }}
+              title="本书累计：AI 产出与人工输入总量（生成/修复按整章计入，可超当前字数；版本恢复不重复计）"
+            >
               ｜我的 {statsShow.human.toLocaleString()} · AI {statsShow.ai.toLocaleString()}
             </span>
           </div>
@@ -1688,6 +1743,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
                             {s}
                             <button
                               style={{ marginLeft: 4, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}
+                              disabled={memoryPatchBusy}
                               onClick={() => void patchCharState(c.name, s, true)}
                               title="删除此状态"
                             >
@@ -1695,7 +1751,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
                             </button>
                           </span>
                         ))}
-                        <CharStateAdd name={c.name} onAdd={(s) => void patchCharState(c.name, s, false)} />
+                        <CharStateAdd name={c.name} disabled={memoryPatchBusy} onAdd={(s) => void patchCharState(c.name, s, false)} />
                       </div>
                     ))}
                 </div>
@@ -1708,6 +1764,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
                       <span className="muted">{f.currentState || '（无）'}</span>
                       <FactionStateEdit
                         current={f.currentState}
+                        disabled={memoryPatchBusy}
                         onSave={(s) => void patchFactionState(f.name, s)}
                       />
                     </div>

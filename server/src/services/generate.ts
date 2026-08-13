@@ -122,9 +122,11 @@ export async function generateChapter(
       content,
       aborted ? 'AI 生成（中止）' : 'AI 生成'
     )
+    // v0.21.0（审查 N1）：AI 产出记账（累计语义）——生成直接落库不经过客户端 PATCH delta，
+    // 此前不记账 → 字数分离恒 0/脱节。abort 部分内容同样计入（已产出即 AI 贡献）。
     db.prepare(
-      "UPDATE chapter SET content = ?, word_count = ?, status = 'written', updated_at = datetime('now') WHERE id = ?"
-    ).run(content, wordCount, chapterId)
+      "UPDATE chapter SET content = ?, word_count = ?, status = 'written', ai_words = ai_words + ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(content, wordCount, wordCount, chapterId)
   } else {
     // v0.17.0（审查 H2）：空内容显式置 failed（此前跳过 UPDATE → 永久卡 'generating'）
     db.prepare(
