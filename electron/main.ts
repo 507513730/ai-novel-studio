@@ -513,8 +513,10 @@ function initUpdater(): void {
 }
 
 function broadcastUpdater(): void {
+  // v0.16.3：广播与 invoke 返回一致——都带 currentVersion（此前广播缺版本号 → 覆盖后显示「v—」）
+  const payload = { ...updaterStatus, currentVersion: app.getVersion() }
   for (const w of BrowserWindow.getAllWindows()) {
-    w.webContents.send('updater-status', updaterStatus)
+    w.webContents.send('updater-status', payload)
   }
 }
 

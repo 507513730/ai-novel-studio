@@ -714,7 +714,8 @@ function UpdatePanel(): React.JSX.Element {
     void window.novelStudio?.updaterInstall()
   }
 
-  const current = status.currentVersion ?? '—'
+  // v0.16.3：版本显示双保险——IPC 版本优先，编译期 __APP_VERSION__ 兜底（防广播覆盖后缺版本）
+  const current = status.currentVersion ?? __APP_VERSION__ ?? '—'
   return (
     <div className="panel col">
       <h2>检查更新</h2>
