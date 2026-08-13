@@ -463,6 +463,14 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     statements: [
       `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('web_search_enabled', '0')`
     ]
+  },
+  {
+    // v0.19.0：人类/AI 字数分离统计（编辑器按来源累计，保存时 delta 上报）
+    version: 20,
+    statements: [
+      `ALTER TABLE chapter ADD COLUMN ai_words INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE chapter ADD COLUMN human_words INTEGER NOT NULL DEFAULT 0`
+    ]
   }
 ]
 

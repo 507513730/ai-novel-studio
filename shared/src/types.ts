@@ -193,6 +193,9 @@ export interface ChapterSummary {
   goal: Record<string, unknown>
   status: string
   wordCount: number
+  // v0.19.0：人类/AI 字数分离累计
+  aiWords?: number
+  humanWords?: number
   volumeId: number | null
   beatId: number | null
   volumeTitle: string | null

@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
+import { Annotation, type AnnotationType } from '@codemirror/state'
 import { novelEditorTheme } from '../editor/theme'
 import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, automationApi } from '../api'
 import { usePrompt } from '../components/PromptDialog'
@@ -12,8 +13,16 @@ import type { ChapterSummary, WorldData } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
-import { BookOpenText, Users, Map, Scale, Pin } from 'lucide-react'
+import { BookOpenText, Users, Map, Scale, Pin, Wand2 } from 'lucide-react'
 import { estimateCost, estimateTokens, fmtCost } from '../utils/costEstimate'
+
+// v0.19.0：AI 写入标记（字数分离：区分 AI 插入与人工输入）
+const aiWrite = Annotation.define<boolean>()
+
+/** 中文字符计数（字数分离口径：与 word_count 一致） */
+function countCjk(text: string): number {
+  return (text.match(/[\u4e00-\u9fff]/g) ?? []).length
+}
 
 // v0.15.0：「主角必须叫 Jing」类文本 → 提取规范名
 function extractProtagonistNameFromDraft(text: string): string {
@@ -108,6 +117,9 @@ export function ChapterExecutionPage(): React.JSX.Element {
     withBusy: (key: string, fn: () => Promise<void> | void) => Promise<void>
     runReview: () => Promise<void>
     backfill: () => Promise<void>
+    // v0.19.0：光标续写（Cmd/Ctrl+J 触发 / Tab 接受）
+    suggestContinue: () => Promise<void>
+    acceptSuggestion: () => void
   } | null>(null)
   // P27 0b：应用内输入对话框（替代 window.prompt）
   const { prompt: askChapterTitle, element: chapterPromptElement } = usePrompt()
@@ -188,27 +200,110 @@ export function ChapterExecutionPage(): React.JSX.Element {
     }
   }
 
-  // A1：应用选区替换
+  // A1：应用选区替换（AI 改写——v0.19.0 标记来源计入 AI 字数）
   const applySelection = (replacement: string): void => {
     const view = editorRef.current?.view
     if (!view) return
     const { from, to } = view.state.selection.main
     if (to > from) {
-      view.dispatch({ changes: { from, to, insert: replacement } })
+      view.dispatch({
+        changes: { from, to, insert: replacement },
+        annotations: aiWrite.of(true)
+      })
       view.dispatch({ selection: { anchor: from + replacement.length } })
+    }
+    const cjk = countCjk(replacement)
+    if (cjk > 0) {
+      aiDeltaRef.current += cjk
+      setWordStats((s) => ({ ...s, ai: s.ai + cjk }))
     }
     setContent(view.state.doc.toString())
     updateSelectionInfo()
   }
 
-  // A1：在指定位置插入
+  // A1：在指定位置插入（AI 插入——v0.19.0 标记来源计入 AI 字数）
   const insertAt = (text: string, pos: number): void => {
     const view = editorRef.current?.view
     if (!view) return
     const insertPos = Math.min(pos, view.state.doc.length)
-    view.dispatch({ changes: { from: insertPos, insert: text }, selection: { anchor: insertPos + text.length } })
+    view.dispatch({
+      changes: { from: insertPos, insert: text },
+      selection: { anchor: insertPos + text.length },
+      annotations: aiWrite.of(true)
+    })
+    const cjk = countCjk(text)
+    if (cjk > 0) {
+      aiDeltaRef.current += cjk
+      setWordStats((s) => ({ ...s, ai: s.ai + cjk }))
+    }
     setContent(view.state.doc.toString())
     updateSelectionInfo()
+  }
+
+  // ============ v0.19.0：字数分离（人类/AI）+ 光标续写 ============
+  // 会话增量（ref 累计，保存时上报后清零）；总字数 = 服务端累计 + 会话增量
+  const aiDeltaRef = useRef(0)
+  const humanDeltaRef = useRef(0)
+  const [wordStats, setWordStats] = useState<{ ai: number; human: number }>({ ai: 0, human: 0 })
+
+  /** AI 写入（标记来源 + 累计 AI 字数）——续写插入/选区工具共用 */
+  const insertAi = (text: string, pos: number): void => {
+    const view = editorRef.current?.view
+    if (!view || !text) return
+    const insertPos = Math.min(pos, view.state.doc.length)
+    const cjk = countCjk(text)
+    view.dispatch({
+      changes: { from: insertPos, insert: text },
+      selection: { anchor: insertPos + text.length },
+      annotations: aiWrite.of(true)
+    })
+    if (cjk > 0) {
+      aiDeltaRef.current += cjk
+      setWordStats((s) => ({ ...s, ai: s.ai + cjk }))
+    }
+    setContent(view.state.doc.toString())
+    updateSelectionInfo()
+  }
+
+  /** 人工输入/粘贴统计（CodeMirror onUpdate；流式生成期间跳过——AI 字数已在 onDelta 累计） */
+  const trackHumanWords = (update: {
+    docChanged: boolean
+    transactions: Array<{ annotation: (a: AnnotationType<boolean>) => boolean | undefined }>
+    changes: { inserted?: string }
+  }): void => {
+    if (!update.docChanged || streamingRef.current) return
+    const isAi = update.transactions.some((t) => t.annotation(aiWrite))
+    if (isAi) return
+    const inserted = update.changes.inserted ?? ''
+    const cjk = countCjk(inserted)
+    if (cjk > 0) {
+      humanDeltaRef.current += cjk
+      setWordStats((s) => ({ ...s, human: s.human + cjk }))
+    }
+  }
+
+  // 光标续写：Cmd/Ctrl+J → 建议浮层 → Tab 插入 / Esc 关闭
+  const [suggestion, setSuggestion] = useState<{ text: string; pos: number } | null>(null)
+  const [sugBusy, setSugBusy] = useState(false)
+  const suggestContinue = async (): Promise<void> => {
+    const view = editorRef.current?.view
+    if (!view || !selectedChapter || sugBusy || streaming) return
+    const pos = view.state.selection.main.head
+    setSugBusy(true)
+    setActionError(null)
+    try {
+      const r = await novelApi.aiAction(id, selectedChapter, { action: 'continue', cursorPosition: pos })
+      setSuggestion({ text: r.content, pos: r.appliedAt ?? pos })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSugBusy(false)
+    }
+  }
+  const acceptSuggestion = (): void => {
+    if (!suggestion) return
+    insertAi(suggestion.text, suggestion.pos)
+    setSuggestion(null)
   }
 
   const chapters = useQuery({
@@ -217,6 +312,10 @@ export function ChapterExecutionPage(): React.JSX.Element {
   })
   const list = chapters.data?.chapters ?? []
   const chapter = list.find((c) => c.id === selectedChapter)
+  // v0.19.0：字数分离展示（服务端累计 + 会话增量）
+  const statsShow = chapter
+    ? { ai: (chapter.aiWords ?? 0) + wordStats.ai, human: (chapter.humanWords ?? 0) + wordStats.human }
+    : { ai: wordStats.ai, human: wordStats.human }
 
   useEffect(() => {
     if (!selectedChapter && list.length > 0) {
@@ -254,6 +353,24 @@ export function ChapterExecutionPage(): React.JSX.Element {
       setResourceDetail(null)
       // v0.17.0（审查 A3）：提示文案写了「Esc 退出」，此前 Esc 并不退出专注模式
       setFocusMode(false)
+      // v0.19.0：Esc 关闭续写建议
+      setSuggestion(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // v0.19.0：Cmd/Ctrl+J 光标续写；Tab 接受建议（编辑器聚焦时）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault()
+        void latestActionsRef.current?.suggestContinue()
+        return
+      }
+      if (e.key === 'Tab') {
+        latestActionsRef.current?.acceptSuggestion()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -333,6 +450,17 @@ export function ChapterExecutionPage(): React.JSX.Element {
     try {
       const patch: Record<string, unknown> = { content: text }
       if (text.trim()) patch.status = 'written'
+      // v0.19.0：字数分离增量上报（累计后清零；0 增量不发）
+      const aiD = aiDeltaRef.current
+      const humanD = humanDeltaRef.current
+      if (aiD > 0) {
+        patch.aiWordsDelta = aiD
+        aiDeltaRef.current = 0
+      }
+      if (humanD > 0) {
+        patch.humanWordsDelta = humanD
+        humanDeltaRef.current = 0
+      }
       await novelApi.chapterPatch(id, selectedChapter, patch)
       savedContentRef.current = text
       dirtyRef.current = false
@@ -388,6 +516,12 @@ export function ChapterExecutionPage(): React.JSX.Element {
               const batch = pendingDeltaRef.current
               pendingDeltaRef.current = ''
               setContent((prev) => prev + batch)
+              // v0.19.0：流式生成计入 AI 字数
+              const cjk = countCjk(batch)
+              if (cjk > 0) {
+                aiDeltaRef.current += cjk
+                setWordStats((s) => ({ ...s, ai: s.ai + cjk }))
+              }
               const total = (editorRef.current?.view?.state.doc.toString() ?? '').length
               // v0.9.0（审查 C）：token 估算传正文文本本身——此前传"字数"的字符串（如 "12345" 数成 5 tokens）
               const t = estimateTokens(editorRef.current?.view?.state.doc.toString() ?? '')
@@ -580,7 +714,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
   // v0.17.0（审查 A5）：每渲染刷新快捷键闭包缓存（effect 固定注册仍取最新实现）
   useEffect(() => {
-    latestActionsRef.current = { saveContent, generate, withBusy, runReview, backfill }
+    latestActionsRef.current = { saveContent, generate, withBusy, runReview, backfill, suggestContinue, acceptSuggestion }
   })
 
   const loadPending = async (): Promise<void> => {
@@ -663,6 +797,11 @@ export function ChapterExecutionPage(): React.JSX.Element {
     loadedChapterRef.current = null
     savedContentRef.current = ''
     dirtyRef.current = false
+    // v0.19.0：切换章节重置会话字数统计与续写建议
+    aiDeltaRef.current = 0
+    humanDeltaRef.current = 0
+    setWordStats({ ai: 0, human: 0 })
+    setSuggestion(null)
     void novelApi
       .chapterDetail(id, selectedChapter)
       .then((d) => {
@@ -968,7 +1107,12 @@ export function ChapterExecutionPage(): React.JSX.Element {
               </strong>
             )}
             {chapter?.summary && <span className="muted t-small">{chapter.summary}</span>}
-            <span className="muted t-small">｜{hanCount} 字</span>          </div>
+            <span className="muted t-small">｜{hanCount} 字</span>
+            {/* v0.19.0：人类/AI 字数分离（NovelCraft 学习——你的字 vs AI 贡献） */}
+            <span className="muted t-small" style={{ color: 'var(--ok)' }}>
+              ｜我的 {statsShow.human.toLocaleString()} · AI {statsShow.ai.toLocaleString()}
+            </span>
+          </div>
           <div className="row flex-wrap">
             <button onClick={() => void saveContent().catch(() => undefined)} disabled={saving || contentLoading || streaming}>
               {saving ? '保存中…' : '保存'}
@@ -1043,13 +1187,67 @@ export function ChapterExecutionPage(): React.JSX.Element {
               dirtyRef.current = true
               setContent(v)
             }}
-            onUpdate={updateSelectionInfo}
+            onUpdate={(u) => {
+              updateSelectionInfo()
+              // v0.19.0：人工输入统计（AI 来源已在 dispatch 侧累计）
+              trackHumanWords(u as never)
+            }}
             height="100%"
             theme={novelEditorTheme}
             extensions={[markdown()]}
             style={{ height: '100%' }}
             ref={editorRef}
           />
+          {/* v0.19.0：光标续写建议浮层（Cmd/Ctrl+J 生成 → Tab 插入 / Esc 关闭） */}
+          {(suggestion || sugBusy) && !streaming && selectedChapter && (
+            <div
+              style={{
+                position: 'absolute',
+                left: 8,
+                right: 8,
+                bottom: 8,
+                zIndex: 20,
+                background: 'var(--bg-panel)',
+                border: '1px solid var(--accent)',
+                borderRadius: 'var(--radius-m)',
+                boxShadow: 'var(--shadow-lg)',
+                padding: '8px 12px'
+              }}
+            >
+              {sugBusy && !suggestion ? (
+                <div className="row" style={{ gap: 8, fontSize: 12, color: 'var(--text-dim)' }}>
+                  <Wand2 size={13} /> 正在生成续写建议…
+                </div>
+              ) : suggestion ? (
+                <div className="col" style={{ gap: 6 }}>
+                  <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                    <Wand2 size={13} color="var(--accent-bright)" />
+                    <strong style={{ fontSize: 12 }}>AI 续写建议</strong>
+                    <span className="muted t-small">（{countCjk(suggestion.text)} 字）</span>
+                    <span style={{ flex: 1 }} />
+                    <button className="sm primary" onClick={acceptSuggestion}>Tab 插入</button>
+                    <button className="sm" onClick={() => void suggestContinue()}>↻ 再生成</button>
+                    <button className="sm" onClick={() => setSuggestion(null)}>Esc 关闭</button>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.7,
+                      color: 'var(--text)',
+                      maxHeight: 96,
+                      overflow: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      padding: '6px 8px',
+                      background: 'var(--bg-card)',
+                      borderRadius: 6
+                    }}
+                  >
+                    {suggestion.text}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
           {/* P10：空状态引导（参考项目：编辑器空置时给引导） */}
           {!contentLoading && !streaming && !content && selectedChapter && (
             <div

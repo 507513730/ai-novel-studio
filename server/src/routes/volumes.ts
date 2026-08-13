@@ -329,6 +329,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
     const rows = db
       .prepare(
         `SELECT c.id, c.title, c.summary, c.goal_json, c.status, c.word_count,
+                c.ai_words, c.human_words,
                 c.volume_id, c.beat_id, v.title AS volume_title, b.title AS beat_title
          FROM chapter c
          LEFT JOIN volume v ON v.id = c.volume_id
@@ -344,6 +345,9 @@ export function createVolumesRouter(db: DatabaseSync): Router {
         goal: JSON.parse(String(r.goal_json ?? '{}')),
         status: r.status,
         wordCount: r.word_count,
+        // v0.19.0：字数分离（人类/AI 累计）
+        aiWords: Number(r.ai_words ?? 0),
+        humanWords: Number(r.human_words ?? 0),
         volumeId: r.volume_id,
         beatId: r.beat_id,
         volumeTitle: r.volume_title,
@@ -359,11 +363,11 @@ export function createVolumesRouter(db: DatabaseSync): Router {
       const chapterId = Number(req.params.chapterId)
       const row = db
         .prepare(
-          `SELECT c.id, c.title, c.summary, c.goal_json, c.status, c.word_count, c.content
+          `SELECT c.id, c.title, c.summary, c.goal_json, c.status, c.word_count, c.ai_words, c.human_words, c.content
            FROM chapter c WHERE c.id = ? AND c.novel_id = ?`
         )
         .get(chapterId, novelId) as
-        | { id: number; title: string; summary: string | null; goal_json: string; status: string; word_count: number; content: string }
+        | { id: number; title: string; summary: string | null; goal_json: string; status: string; word_count: number; ai_words: number; human_words: number; content: string }
         | undefined
       if (!row) {
         res.status(404).json({ error: '章节不存在' })
@@ -377,6 +381,9 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           goal: JSON.parse(String(row.goal_json ?? '{}')),
           status: row.status,
           wordCount: row.word_count,
+          // v0.19.0：字数分离（人类/AI 累计）
+          aiWords: Number(row.ai_words ?? 0),
+          humanWords: Number(row.human_words ?? 0),
           content: row.content ?? ''
         }
       })
@@ -399,7 +406,10 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           status: z
             .enum(['planned', 'imported', 'written', 'reviewed', 'done', 'failed'])
             .optional(),
-          content: z.string().optional()
+          content: z.string().optional(),
+          // v0.19.0：人类/AI 字数分离——编辑器按来源累计，保存时上报增量
+          aiWordsDelta: z.number().int().nonnegative().optional(),
+          humanWordsDelta: z.number().int().nonnegative().optional()
         })
         .parse(req.body)
       const sets: string[] = []
@@ -430,6 +440,15 @@ export function createVolumesRouter(db: DatabaseSync): Router {
         params.push(input.content)
         sets.push('word_count = ?')
         params.push((input.content.match(/[\u4e00-\u9fff]/g) ?? []).length)
+      }
+      // v0.19.0：字数分离增量累计（仅累加，不覆盖）
+      if (input.aiWordsDelta !== undefined && input.aiWordsDelta > 0) {
+        sets.push('ai_words = ai_words + ?')
+        params.push(input.aiWordsDelta)
+      }
+      if (input.humanWordsDelta !== undefined && input.humanWordsDelta > 0) {
+        sets.push('human_words = human_words + ?')
+        params.push(input.humanWordsDelta)
       }
       sets.push("updated_at = datetime('now')")
       db.prepare(`UPDATE chapter SET ${sets.join(', ')} WHERE id = ? AND novel_id = ?`).run(
