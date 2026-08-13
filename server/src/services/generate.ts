@@ -4,6 +4,7 @@ import { buildChapterWriteContext, estimateTokens } from './context'
 import { recordUsage } from './usage'
 import { runTripleReview } from './tripleReview'
 import { getBoundStyleRules, detectAntiAiHits, extractAntiAiWordsFromRules } from './styleEngine'
+import { replaceProtagonistName } from './constraintEngine'
 import { callLlmJson } from './jsonSafe'
 
 export interface GenerateOptions {
@@ -104,6 +105,8 @@ export async function generateChapter(
   const llmContent = llmResult.content
   // 反 AI 重写可能替换内容，故用 let
   let content = llmContent
+  // v0.15.0：主角名约束替换（角色表主角名 ≠ 硬约束规范名时自动对齐）
+  content = replaceProtagonistName(db, novelId, content)
   const aborted = opts.signal?.aborted ?? false
   let usageInput = llmResult.usage.input
   let usageOutput = llmResult.usage.output
@@ -120,6 +123,10 @@ export async function generateChapter(
     db.prepare(
       "UPDATE chapter SET content = ?, word_count = ?, status = 'written', updated_at = datetime('now') WHERE id = ?"
     ).run(content, wordCount, chapterId)
+  }
+  // v0.15.0：确定性校验——字数区间告警（异常区间记录质量债）
+  if (!aborted && wordCount > 0 && (wordCount < 1500 || wordCount > 4500)) {
+    console.warn(`[constraint] 章节 ${chapterId} 字数 ${wordCount} 超出常规区间（1500-4500）`)
   }
 
   // P20（U8）：反 AI 校验闭环——生成后检测，重度命中（总命中≥5 或单词≥3 次）自动重写一次

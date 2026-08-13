@@ -122,6 +122,17 @@ export interface DirectionScheme {
   readerFeeling: string
 }
 
+// v0.15.0：用户创作约束（硬 MUST / 软 SHOULD）
+export interface NovelConstraint {
+  id: string
+  text: string
+  level: 'must' | 'should'
+  enabled: boolean
+  createdAt: string
+  keyword?: string
+  replaceWith?: string
+}
+
 export interface NovelDetail {
   id: number
   title: string
@@ -131,6 +142,9 @@ export interface NovelDetail {
   direction: Array<{ id: string; scheme: DirectionScheme }>
   titleGroup: string[]
   framing: Record<string, unknown>
+  guidance?: string
+  currentSolutionId?: number | null
+  constraints?: NovelConstraint[]
   // P10：各阶段完成度计数
   charactersCount?: number
   volumesCount?: number

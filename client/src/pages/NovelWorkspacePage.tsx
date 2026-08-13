@@ -3,17 +3,18 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { novelApi } from '../api'
 import { SetupPanel } from '../workspace/SetupPanel'
+import { ConstraintPanel } from '../workspace/ConstraintPanel'
 import { WorldPanel } from '../workspace/WorldPanel'
 import { CharacterPanel } from '../workspace/CharacterPanel'
 import { VolumePanel } from '../workspace/VolumePanel'
 import { AnalysisPanel } from '../workspace/AnalysisPanel'
 import { StylePanel } from '../workspace/StylePanel'
 import { AgentPanel } from '../workspace/AgentPanel'
-import { FileText, Globe, Users, BookMarked, Search, Feather, Bot, Clapperboard, Brain, BookOpenText } from 'lucide-react'
+import { FileText, ShieldCheck, Globe, Users, BookMarked, Search, Feather, Bot, Clapperboard, Brain, BookOpenText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { AiStatusBar } from '../components/AiStatusBar'
 
-type Tab = 'setup' | 'world' | 'characters' | 'volumes' | 'analysis' | 'style' | 'agents'
+type Tab = 'setup' | 'constraints' | 'world' | 'characters' | 'volumes' | 'analysis' | 'style' | 'agents'
 
 // P10：步骤导航（参考项目：7 步流程显性化 + 状态徽章）；P11-4：图标化
 interface StepDef {
@@ -25,6 +26,8 @@ interface StepDef {
 
 const STEPS: StepDef[] = [
   { key: 'setup', label: '项目设定', desc: '书名 / 流派 / 书级 framing', icon: FileText },
+  // v0.15.0：创作约束——用户强调的事项（主角名/红线）全链强制
+  { key: 'constraints', label: '创作约束', desc: '硬性要求 / 偏好（全链注入+校验）', icon: ShieldCheck },
   { key: 'world', label: '世界观', desc: '世界手册 / 势力 / 地图', icon: Globe },
   { key: 'characters', label: '角色', desc: '名册 / 待确认 / 资源账本', icon: Users },
   { key: 'volumes', label: '卷 / 章节规划', desc: '卷战略 / 节奏板 / 章节清单', icon: BookMarked },
@@ -147,6 +150,8 @@ export function NovelWorkspacePage(): React.JSX.Element {
     switch (key) {
       case 'setup':
         return Object.keys(n.framing ?? {}).length > 0 ? 'done' : 'todo'
+      case 'constraints':
+        return (n.constraints ?? []).some((c) => c.level === 'must') ? 'done' : 'todo'
       case 'world':
         return n.worldDone ? 'done' : 'todo'
       case 'characters':
@@ -282,6 +287,7 @@ export function NovelWorkspacePage(): React.JSX.Element {
         )}
 
         {tab === 'setup' && <SetupPanel novelId={id} onDirtyChange={setDirty} />}
+        {tab === 'constraints' && <ConstraintPanel novelId={id} />}
         {tab === 'world' && <WorldPanel novelId={id} onDirtyChange={setDirty} />}
         {tab === 'characters' && <CharacterPanel novelId={id} />}
         {tab === 'volumes' && <VolumePanel novelId={id} />}

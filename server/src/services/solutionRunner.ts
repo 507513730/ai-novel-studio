@@ -3,6 +3,7 @@ import { callLlmJson } from './jsonSafe'
 import { loadSolution, type SolutionStep } from './solutionAssets'
 import { buildChapterWriteContext } from './context'
 import { chapterPositionBlock } from './chapterRole'
+import { constraintsBlock, replaceProtagonistName } from './constraintEngine'
 import { JSON_FORMAT } from '../prompts'
 
 // ============================================================
@@ -354,6 +355,8 @@ export async function runProductionChapter(
         chapter.title ? `《${chapter.title}》` : '（未命名章节）',
         // v0.12.0（批D/P31）：卷章定位注入——方案步骤感知章在卷中的角色（开篇/推进/收尾）
         chapterPositionBlock(db, novelId, chapterId),
+        // v0.15.0：创作约束注入（硬约束+简报+引导）——方案步骤遵循用户强调的事项
+        constraintsBlock(db, novelId) ? `\n\n${constraintsBlock(db, novelId)}` : '',
         `${formatRule}${instruction}`,
         prevBlock,
         `\n\n（步骤 ${i + 1}/${solution.steps.length}，请只完成本步骤职责）`
@@ -495,6 +498,8 @@ export async function runProductionChapter(
       : outputs.map((o) => `${o.role}:${o.error ?? '?'}`).join('; ').slice(0, 500)
     throw new Error(`生产流水线未产出正文（所有产出步骤失败）：${reasons || '未知原因'}`)
   }
+  // v0.15.0：主角名约束替换（方案流水线产出同样对齐规范名）
+  content = replaceProtagonistName(db, novelId, content)
   const title = outline?.title?.trim() || chapter.title || ''
 
   // 落库 + 版本快照 + 状态

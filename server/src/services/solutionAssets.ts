@@ -259,6 +259,8 @@ export interface SolutionBundle {
     name: string
     description: string
     primaryAgentName?: string | null
+    // v0.15.0：方案建议约束（随方案沉淀用户强调的事项）
+    suggestedConstraints?: string[]
     steps: Array<Omit<SolutionStep, 'agentId'> & { agentName: string }>
   }
   agents: Array<{
@@ -293,6 +295,8 @@ export interface SolutionPack {
   solution: SolutionBundle['solution']
   agents: SolutionBundle['agents']
   skills: SolutionBundle['skills']
+  // v0.15.0：方案建议约束（导入时提示可应用——用户强调的事项随方案沉淀）
+  suggestedConstraints?: string[]
   sampleBook?: {
     title: string
     worldSummary: string
@@ -445,6 +449,10 @@ export function exportSolutionBundle(
     solution: bundle.solution,
     agents: bundle.agents,
     skills: bundle.skills,
+    // v0.15.0：建议约束随方案导出（编辑 bundle 或由导入透传而来）
+    ...(bundle.solution.suggestedConstraints?.length
+      ? { suggestedConstraints: bundle.solution.suggestedConstraints }
+      : {}),
     ...(opts.sample?.novelId ? { sampleBook: buildSampleBook(db, opts.sample.novelId) } : {})
   }
   return JSON.stringify(pack, null, 2)
@@ -527,7 +535,14 @@ export function importSolutionBundle(
     name: bundle.solution.name,
     // v0.11.0（批C/I3）：solution-pack 元数据透传（前端展示；样例不进库）
     ...(bundle.kind === 'solution-pack'
-      ? { version: bundle.version, sampleBook: (bundle as SolutionPack).sampleBook }
+      ? {
+          version: bundle.version,
+          sampleBook: (bundle as SolutionPack).sampleBook,
+          // v0.15.0：方案建议约束透传（前端导入后提示可应用）
+          ...(bundle.solution.suggestedConstraints?.length
+            ? { suggestedConstraints: bundle.solution.suggestedConstraints }
+            : {})
+        }
       : {})
   }
 }

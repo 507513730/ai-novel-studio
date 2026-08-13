@@ -423,6 +423,21 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
         ('cost_monthly_budget', '0'),
         ('auto_fix_debts', '1')`
     ]
+  },
+  {
+    // 写书修复（2026-08-12）：全局知识库占位书（novel_id=0）——/knowledge 端点写死 0，
+    // 但 novel 表无 id=0 行导致 FK 409（知识库新建功能实际不可用）；全局文档对所有书可见
+    version: 15,
+    statements: [
+      `INSERT OR IGNORE INTO novel (id, title, inspiration, status) VALUES (0, '__global__', '', 'draft')`
+    ]
+  },
+  {
+    // v0.15.0：用户创作约束机制——主角名/叙事红线等硬约束独立存储（不受导演 framing 覆盖影响）
+    version: 16,
+    statements: [
+      `ALTER TABLE novel ADD COLUMN constraints_json TEXT NOT NULL DEFAULT '[]'`
+    ]
   }
 ]
 

@@ -12,8 +12,15 @@ import type { ChapterSummary } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
-import { BookOpenText, Users, Map, Scale } from 'lucide-react'
+import { BookOpenText, Users, Map, Scale, Pin } from 'lucide-react'
 import { estimateCost, estimateTokens, fmtCost } from '../utils/costEstimate'
+
+// v0.15.0：「主角必须叫 Jing」类文本 → 提取规范名
+function extractProtagonistNameFromDraft(text: string): string {
+  if (!text.includes('主角')) return ''
+  const m = text.match(/(?:必须|要|应|请)?(?:叫|是|名为|名)[「"“'（(]*([^\s」"“”'’）)、。，！？!?]{1,12})/)
+  return m ? m[1] : ''
+}
 
 // v0.10.0（批B/I2）：质量债待修复徽标——整本生产后自动修复队列的显性入口
 // 用户必须"看得明白"：徽标显示待修复章节数，点击后任务入队（任务中心可见），修复上限由服务端保证
@@ -918,6 +925,34 @@ export function ChapterExecutionPage(): React.JSX.Element {
               onChange={(e) => setGuidanceDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !streaming) void generate() }}
             />
+            {/* v0.15.0：反馈沉淀——把这句要求固定为硬约束（全链生效） */}
+            <button
+              className="sm"
+              title="把这句话设为书级硬约束（导演/方案/生成/修复全链强制生效）"
+              disabled={streaming || !guidanceDraft.trim()}
+              onClick={() => {
+                const t = guidanceDraft.trim()
+                if (!t) return
+                void (async () => {
+                  const d = await novelApi.detail(id)
+                  const cur = d.novel.constraints ?? []
+                  const list = cur.filter((c) => c.text !== t)
+                  const canon = extractProtagonistNameFromDraft(t)
+                  list.push({
+                    id: `c${Date.now()}`,
+                    text: t,
+                    level: 'must' as const,
+                    enabled: true,
+                    createdAt: new Date().toISOString(),
+                    ...(canon ? { keyword: canon, replaceWith: canon } : {})
+                  })
+                  await novelApi.patch(id, { constraints: list })
+                  setGuidanceDraft('')
+                })().catch(() => undefined)
+              }}
+            >
+              <Pin size={12} /> 固定为约束
+            </button>
             <span style={{ margin: '0 8px', color: 'var(--border)' }}>|</span>
             <button className="sm" style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }} disabled={exportBusy !== null} onClick={() => void exportChapter('txt')}>
               {exportBusy === 'txt' ? '导出中…' : 'TXT'}

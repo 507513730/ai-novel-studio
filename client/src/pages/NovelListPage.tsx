@@ -12,6 +12,8 @@ export function NovelListPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [inspiration, setInspiration] = useState('')
+  // v0.15.0：建书时可选硬性要求（每行一条→自动转 must 约束）
+  const [hardReqs, setHardReqs] = useState('')
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -49,9 +51,38 @@ export function NovelListPage(): React.JSX.Element {
     setError(null)
     void createNovel
       .mutateAsync(insp)
-      .catch(() => undefined)
+      .then(async (data) => {
+        // v0.15.0：硬性要求（每行一条）→ 创建后立即设为 must 约束
+        const reqs = hardReqs
+          .split('\n')
+          .map((r) => r.trim())
+          .filter(Boolean)
+        if (reqs.length > 0) {
+          await novelApi.patch(data.id, {
+            constraints: reqs.map((r) => {
+              const canon = extractProtagonistName(r)
+              return {
+                id: `c${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                text: r,
+                level: 'must' as const,
+                enabled: true,
+                createdAt: new Date().toISOString(),
+                ...(canon ? { keyword: canon, replaceWith: canon } : {})
+              }
+            })
+          })
+        }
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setCreating(false))
   }
+
+/** 「主角必须叫 Jing」类文本 → 提取规范名（含中文引号/括号/空格容忍） */
+function extractProtagonistName(text: string): string {
+  if (!text.includes('主角')) return ''
+  const m = /(?:必须|要|应|请)?(?:叫|是|名为|名)?[「「"“'（(]*([^\s「」"“”'’（）()，。、；：!?！？]{1,12})[」」"”'’（）)]?$/.exec(text.replace(/^.+?(叫|是|名为|名)/, '$1'))
+  return m ? m[1] : ''
+}
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: 24 }}>
@@ -78,6 +109,17 @@ export function NovelListPage(): React.JSX.Element {
           >
             {creating || createNovel.isPending ? '创建中…' : '创建'}
           </button>
+        </div>
+        {/* v0.15.0：硬性要求（每行一条，建书即设为硬约束——全链强制，产出自动校验） */}
+        <textarea
+          rows={2}
+          placeholder="硬性要求（可选，每行一条）：主角必须叫 Jing / 不许虐主 / 系统金手指克制……"
+          value={hardReqs}
+          onChange={(e) => setHardReqs(e.target.value)}
+          style={{ width: '100%', marginTop: 8, resize: 'vertical' }}
+        />
+        <div className="muted t-small" style={{ marginTop: 4 }}>
+          硬性要求会注入导演 / 方案 / 章节生成全链路并在产出后自动校验——可在书工作区「创作约束」随时增改。
         </div>
         {error && <ErrorMsg error={error} />}
       </div>

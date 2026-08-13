@@ -1,6 +1,7 @@
 ﻿import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
+import { generateSettingBrief } from '../services/settingBrief'
 import { callLlmJson } from '../services/jsonSafe'
 import { JSON_FORMAT } from '../prompts'
 import { getSystemPrompt } from '../prompts/promptAsset'
@@ -57,7 +58,7 @@ export function createNovelsRouter(db: DatabaseSync): Router {
                 (SELECT COUNT(*) FROM chapter c WHERE c.novel_id = n.id AND c.status IN ('done','reviewed','written')) AS chapters_done,
                 (SELECT COUNT(*) FROM chapter c WHERE c.novel_id = n.id) AS chapters_total,
                 (SELECT COUNT(*) FROM character ch WHERE ch.novel_id = n.id) AS characters
-         FROM novel n ORDER BY COALESCE(n.last_opened_at, n.updated_at) DESC`
+         FROM novel n WHERE n.id != 0 ORDER BY COALESCE(n.last_opened_at, n.updated_at) DESC`
       )
       .all() as Array<Record<string, unknown>>
     res.json({
@@ -125,6 +126,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         guidance: String(row.guidance ?? ''),
         // v0.9.0（审查 #13）：绑定值回传（此前 GET 不回传，UI 无法回显绑定状态）
         currentSolutionId: row.current_solution_id ?? null,
+        // v0.15.0：创作约束回传（工作区「创作约束」tab 维护）
+        constraints: JSON.parse(String(row.constraints_json ?? '[]')),
         charactersCount: counts.characters,
         volumesCount: counts.volumes,
         chaptersCount: counts.chapters,
@@ -151,6 +154,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           framing: z.unknown().optional(),
           genre: z.string().optional(),
           guidance: z.string().max(2000).optional(),
+          // v0.15.0：创作约束列表（[{id,text,level,enabled,keyword?,replaceWith?}]）
+          constraints: z.array(z.unknown()).optional(),
           // P30：书级生产方案绑定（production pipeline 逐章走流水线）
           currentSolutionId: z.number().int().positive().nullable().optional()
         })
@@ -185,6 +190,22 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         sets.push('guidance = ?')
         params.push(input.guidance)
       }
+      if (input.constraints !== undefined) {
+        // v0.15.0：约束校验（text 必填、level 枚举）
+        for (const c of input.constraints) {
+          const item = c as { text?: unknown; level?: unknown }
+          if (typeof item.text !== 'string' || item.text.trim() === '') {
+            res.status(400).json({ error: 'constraint.text is required' })
+            return
+          }
+          if (item.level !== 'must' && item.level !== 'should') {
+            res.status(400).json({ error: "constraint.level must be 'must' or 'should'" })
+            return
+          }
+        }
+        sets.push('constraints_json = ?')
+        params.push(JSON.stringify(input.constraints))
+      }
       if (input.currentSolutionId !== undefined) {
         // v0.9.0（审查 #13）：绑定校验——不存在/已停用的方案静默绑定会让整本生产无提示走默认生成
         if (input.currentSolutionId !== null) {
@@ -210,6 +231,26 @@ export function createNovelsRouter(db: DatabaseSync): Router {
       sets.push("updated_at = datetime('now')")
       db.prepare(`UPDATE novel SET ${sets.join(', ')} WHERE id = ?`).run(...params, id)
       res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // 「帝路十章」写书修复：生成书级设定简报（导演各阶段注入参考设定）
+  router.post('/:id/setting-brief', async (req, res, next) => {
+    try {
+      const id = Number(req.params.id)
+      const novel = db.prepare('SELECT id FROM novel WHERE id = ?').get(id)
+      if (!novel) {
+        res.status(404).json({ error: 'novel not found' })
+        return
+      }
+      const brief = await generateSettingBrief(db, id)
+      if (!brief) {
+        res.status(400).json({ error: '知识库无设定资料（需 ≥100 字），无法生成简报' })
+        return
+      }
+      res.json({ brief })
     } catch (err) {
       next(err)
     }

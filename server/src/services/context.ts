@@ -5,6 +5,7 @@ import { smartContextText, type SmartContext } from './smartContext'
 import type { LlmMessage } from './llm'
 import { TfidfRetriever } from './retrieval'
 import { getGuidance, getWritingSettings, buildWritingRules } from './guidance'
+import { constraintsBlock } from './constraintEngine'
 
 // 前缀冻结组装器（PLAN §3.3）
 // [冻结前缀区] 系统提示 → 书级合约(framing) → 世界观手册 → 角色账本(按参与者筛选)
@@ -311,9 +312,10 @@ function kbCacheGet(novelId: number): { version: string; retriever: TfidfRetriev
 export function getKnowledgeRetrieval(db: DatabaseSync, novelId: number, query: string): string | null {
   if (!query.trim()) return null
   // P20（D7）：status='direct' 的直塞资料排除（已走冻结区直塞，避免双份进提示词）
+  // 写书修复（2026-08-12）：全局知识库（novel_id=0）对所有书可见（IN (0, ?)）
   const docs = db
     .prepare(
-      "SELECT id, title, content FROM kb_doc WHERE novel_id = ? AND content != '' AND status != 'direct' ORDER BY id"
+      "SELECT id, title, content FROM kb_doc WHERE novel_id IN (0, ?) AND content != '' AND status != 'direct' ORDER BY id"
     )
     .all(novelId) as Array<{ id: number; title: string; content: string }>
   if (docs.length === 0) return null
@@ -335,7 +337,7 @@ export function getKnowledgeRetrieval(db: DatabaseSync, novelId: number, query: 
 }function getExternalMaterials(db: DatabaseSync, novelId: number, maxChars = 6000): string {
   const rows = db
     .prepare(
-      "SELECT title, content FROM kb_doc WHERE novel_id = ? AND status = 'direct' ORDER BY id LIMIT 5"
+      "SELECT title, content FROM kb_doc WHERE novel_id IN (0, ?) AND status = 'direct' ORDER BY id LIMIT 5"
     )
     .all(novelId) as Array<{ title: string; content: string }>
   if (rows.length === 0) return ''
@@ -555,6 +557,11 @@ export function buildChapterWriteContext(
 
   // 冻结前缀区（按优先级：合约 > 世界观 > 角色 > 外部资料 > 书级引导 > 写作要求；B1 include 过滤）
   let frozenText = getSystemPrompt('prose')
+  // v0.15.0：硬约束最高优先（用户强调的事项——主角名/红线，任何产出不得违反）
+  if (has('contract')) {
+    const cBlock = constraintsBlock(db, novelId)
+    if (cBlock) frozenText += '\n\n' + cBlock
+  }
   if (frozen.contract && has('contract')) frozenText += '\n\n' + frozen.contract
   if (frozen.world && has('world')) frozenText += '\n\n' + frozen.world
   if (frozen.characters && has('characters')) frozenText += '\n\n【角色账本】\n' + frozen.characters
@@ -689,6 +696,8 @@ export function buildBackfillContext(
   const frozen = buildFrozenContext(db, novelId)
   const text = [
     getSystemPrompt('backfill'),
+    // v0.15.0：约束注入（修复/回灌链同样遵循硬约束）
+    constraintsBlock(db, novelId),
     frozen.contract,
     frozen.world ? `\n${frozen.world}` : '',
     frozen.characters ? `\n【角色账本】\n${frozen.characters}` : '',
@@ -701,14 +710,16 @@ export function buildBackfillContext(
 }
 
 export function buildFixContext(
-  _db: DatabaseSync,
-  _novelId: number,
+  db: DatabaseSync,
+  novelId: number,
   chapterId: number,
   content: string,
   issues: unknown[]
 ): LlmMessage[] {
   const text = [
     getSystemPrompt('fix'),
+    // v0.15.0：约束注入（修复链不违背硬约束——如不改变主角名/红线）
+    constraintsBlock(db, novelId),
     `【审核问题清单】\n${JSON.stringify(issues, null, 2)}`,
     `【原章节正文】\n${content}`,
     // P14 D：必须含 "json" 字样（json_object response_format 硬要求，DeepSeek/网关 400 规则）

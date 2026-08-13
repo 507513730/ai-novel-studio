@@ -1,3 +1,5 @@
+import { getConstraints } from './constraintEngine'
+import { injectGuidance } from './settingBrief'
 import { DatabaseSync } from 'node:sqlite'
 import { callLlmJson } from './jsonSafe'
 import { isJobCancelled, isJobAborted } from './jobQueue'
@@ -275,7 +277,7 @@ async function runStage(
         'extraction',
         {
           novelId,
-          messages: [{ role: 'user', content: generateDirectionsPrompt(novel.inspiration) }],
+          messages: [{ role: 'user', content: injectGuidance(db, novelId, generateDirectionsPrompt(novel.inspiration)) }],
           maxTokens: 4096
         },
         parseDirections,
@@ -297,7 +299,7 @@ async function runStage(
         {
           novelId,
           messages: [
-            { role: 'user', content: generateFramingPrompt(novel.inspiration, dirs[0]?.scheme ?? {}) }
+            { role: 'user', content: injectGuidance(db, novelId, generateFramingPrompt(novel.inspiration, dirs[0]?.scheme ?? {})) }
           ],
           maxTokens: 2048
         },
@@ -312,7 +314,8 @@ async function runStage(
         "UPDATE novel SET title = ?, framing_json = ?, genre = ?, status = 'framed', updated_at = datetime('now') WHERE id = ?"
       ).run(
         (dirs[0]?.scheme?.title as string) ?? novel.title ?? '未命名小说',
-        JSON.stringify(framing),
+        // 写书修复：保留既有字段（settingBrief 等）——此前整体覆盖导致设定简报丢失
+        JSON.stringify({ ...(JSON.parse(novel.framing_json || '{}') as Record<string, unknown>), ...framing }),
         matchedGenre,
         novelId
       )
@@ -324,7 +327,7 @@ async function runStage(
         'extraction',
         {
           novelId,
-          messages: [{ role: 'user', content: generateMacroPrompt(novel.title, novel.framing_json) }],
+          messages: [{ role: 'user', content: injectGuidance(db, novelId, generateMacroPrompt(novel.title, novel.framing_json)) }],
           maxTokens: 2048
         },
         (obj) => (obj && typeof obj === 'object' ? (obj as Record<string, unknown>) : null),
@@ -338,13 +341,17 @@ async function runStage(
       return
     }
     case 'world': {
+      // 写书修复：world 行可能不存在（新书/清理后）——UPDATE 会 0 行丢内容，先确保行存在
+      db.prepare(
+        "INSERT OR IGNORE INTO world (novel_id, manual_json, factions_json, map_json) VALUES (?, '{}', '[]', '{}')"
+      ).run(novelId)
       const base = `书名设定：${novel.framing_json}\n灵感：${novel.inspiration}`
       const manual = await callLlmJson<Record<string, string>>(
         db,
         'extraction',
         {
           novelId,
-          messages: [{ role: 'user', content: generateWorldManualPrompt(base) }],
+          messages: [{ role: 'user', content: injectGuidance(db, novelId, generateWorldManualPrompt(base)) }],
           maxTokens: 2048
         },
         (obj) => {
@@ -361,7 +368,7 @@ async function runStage(
         'extraction',
         {
           novelId,
-          messages: [{ role: 'user', content: generateWorldFactionsPrompt(base, manual) }],
+          messages: [{ role: 'user', content: injectGuidance(db, novelId, generateWorldFactionsPrompt(base, manual)) }],
           maxTokens: 2048
         },
         (obj) => {
@@ -379,7 +386,7 @@ async function runStage(
         'extraction',
         {
           novelId,
-          messages: [{ role: 'user', content: generateWorldMapPrompt(base) }],
+          messages: [{ role: 'user', content: injectGuidance(db, novelId, generateWorldMapPrompt(base)) }],
           maxTokens: 2048
         },
         (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj) ? (obj as Record<string, string>) : null),
@@ -401,12 +408,44 @@ async function runStage(
         'extraction',
         {
           novelId,
-          messages: [{ role: 'user', content: generateCharsCorePrompt(base) }],
+          messages: [{ role: 'user', content: injectGuidance(db, novelId, generateCharsCorePrompt(base)) }],
           maxTokens: 4096
         },
         parseCharacters,
         'director-characters-core'
       )
+      // v0.15.0：主角名硬约束校验——角色阶段产出主角名 ≠ 规范名时自动重试一次
+      const pc = getConstraints(db, novelId).find((c) => c.keyword && c.replaceWith && c.text.includes('主角'))
+      if (pc && core.length > 0) {
+        const proto = core.find((c) => String(c.role || '').includes('主角'))
+        if (proto && proto.name && proto.name !== pc.keyword) {
+          console.warn(`[constraint] 角色阶段主角名「${proto.name}」≠ 规范名「${pc.keyword}」，重试一次`)
+          const coreRetry = await callLlmJson<Char[]>(
+            db,
+            'extraction',
+            {
+              novelId,
+              messages: [
+                {
+                  role: 'user',
+                  content:
+                    injectGuidance(
+                      db,
+                      novelId,
+                      generateCharsCorePrompt(base) + `\n【硬性要求】本书主角必须叫「${pc.keyword}」，所有角色产出中主角一律使用此名，不得使用其他名字。`
+                    )
+                }
+              ],
+              maxTokens: 4096
+            },
+            parseCharacters,
+            'director-characters-core-retry'
+          )
+          if (coreRetry.length > 0) {
+            core.splice(0, core.length, ...coreRetry)
+          }
+        }
+      }
       const extended = await callLlmJson<Char[]>(
         db,
         'extraction',
@@ -415,7 +454,7 @@ async function runStage(
           messages: [
             {
               role: 'user',
-              content: generateCharsExtendedPrompt(base, core.map((c) => ({ name: c.name, role: c.role })))
+              content: injectGuidance(db, novelId, generateCharsExtendedPrompt(base, core.map((c) => ({ name: c.name, role: c.role }))))
             }
           ],
           maxTokens: 4096
@@ -472,12 +511,12 @@ async function runStage(
           messages: [
             {
               role: 'user',
-              content: generateVolumesPrompt(
+              content: injectGuidance(db, novelId, generateVolumesPrompt(
                 novel.title,
                 novel.framing_json,
                 characters.map((c) => c.name).join('；'),
                 ctx.chaptersPerVolume
-              )
+              ))
             }
           ],
           maxTokens: 4096
@@ -534,13 +573,13 @@ async function runStage(
             messages: [
               {
                 role: 'user',
-                content: generateBeatsPrompt(
+                content: injectGuidance(db, novelId, generateBeatsPrompt(
                   v.title,
                   v.strategy_json,
                   v.skeleton_json,
                   strategy.chaptersPerVolume ?? 20,
                   genreTemplate
-                )
+                ))
               }
             ],
             maxTokens: 4096
@@ -604,13 +643,13 @@ async function runStage(
             messages: [
               {
                 role: 'user',
-                content: generateChaptersPrompt(
+                content: injectGuidance(db, novelId, generateChaptersPrompt(
                   v.title,
                   v.strategy_json,
                   JSON.stringify(beats),
                   count,
                   prevHook
-                )
+                ))
               }
             ],
             maxTokens: 8192
@@ -679,7 +718,7 @@ async function runStage(
               messages: [
                 {
                   role: 'user',
-                  content: generateRefinePrompt(ch.title, ch.summary, ch.goal_json, prevEnding)
+                  content: injectGuidance(db, novelId, generateRefinePrompt(ch.title, ch.summary, ch.goal_json, prevEnding))
                 }
               ],
               maxTokens: 2048

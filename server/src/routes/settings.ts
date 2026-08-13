@@ -403,6 +403,16 @@ export function createSettingsRouter(db: DatabaseSync): Router {
          GROUP BY c.novel_id ORDER BY high_count DESC`
       )
       .all() as Array<Record<string, number | string>>
+    // v0.15.0：约束遵守统计（违反记录 → 遵守率 = 1 - 违反/产出章节数）
+    for (const r of rows) {
+      const novelId = Number(r.novel_id)
+      const viol = db
+        .prepare("SELECT COUNT(*) AS c FROM quality_debt q JOIN chapter c ON c.id = q.chapter_id WHERE c.novel_id = ? AND q.issue LIKE '[约束违反]%'")
+        .get(novelId) as { c: number }
+      const chapters = db.prepare("SELECT COUNT(*) AS c FROM chapter WHERE novel_id = ? AND status = 'written'").get(novelId) as { c: number }
+      r.constraintViolations = viol.c
+      r.constraintAdherence = chapters.c > 0 ? Math.max(0, Math.round((1 - viol.c / chapters.c) * 100)) : 100
+    }
     res.json({ debts: rows })
   })
 
