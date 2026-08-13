@@ -1,4 +1,35 @@
-# AI-Novel-Studio 变更日志（CHANGELOG）
+# AI-Novel-Studio 发布说明
+
+## v0.15.0（2026-08-13）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.15.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.15.0-portable-x64.exe`
+
+### 变更
+
+#### 用户创作约束机制（v0.15.0 核心）
+- **约束分级**：硬约束（MUST，不可违反——主角名/叙事红线/禁写内容）与软偏好（SHOULD，倾向性）分级维护；存储于 `novel.constraints_json`（v16 迁移），独立于 framing 永不被导演覆盖
+- **全链强制注入**：统一「创作指导」块（硬约束 + 设定简报 + 书级引导）接入导演全部阶段、方案全部步骤、章节生成、自动修复/回灌链——修复过程不违背约束
+- **确定性校验**：章节产出后主角名自动对齐（角色表主角名 ≠ 规范名时自动替换 + 告警）；导演角色阶段产出主角名不符自动重试一次；字数异常区间告警
+- **UI 三级入口**：建书表单「硬性要求」、书工作区「创作约束」tab、章节页「固定为约束」按钮（一句反馈直接沉淀为书级硬约束）
+- **方案包携带建议约束**：solution-pack 支持 `suggestedConstraints`，导入时提示可应用
+- **约束遵守率**：违反记录入质量债，统计端点按书输出 `constraintAdherence`
+
+#### 写书流程修复（30 万字项目实战沉淀）
+- 设定简报机制：导演阶段注入书级设定简报（此前只注入章节生成，导致导演产出世界观完全跑偏）
+- 全局知识库修复：v15 迁移全局占位书（novel_id=0），/knowledge 检索 `IN (0, ?)`，novels 列表过滤占位书
+- 导演 framing 覆盖修复（spread 保留既有字段）+ world 行缺失时 INSERT OR IGNORE
+- 真机修正：书 #25 主角名对齐 Jing（角色表/正文/简报全量替换）
+
+#### 规范
+- **versioning 1.0 判据修订**：稳定承诺语义——真实写书完成 + 核心链 1-2 版无 P0/P1 + 数据格式冻结（不再绑定跨端）
+
+- 3209b79 feat: 用户创作约束机制（硬/软分级 · 全链注入 · 确定性校验 · 主角名自动对齐）+ 写书修复（设定简报/全局知识库/versioning 1.0 判据）（v0.15.0）
+- de70c20 chore: 仓库整理（CodeQL workflow + README badge + Release body 自动化 + 安全功能开启）（免发版）
+- fd76abb fix: release versioning 自动标记补 writeFileSync import + 0.14.0 ✅（scripts，免发版）
+
+## v0.15.0
 
 > 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
