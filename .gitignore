@@ -16,3 +16,4 @@ server/data-probe/
 
 
 .npmrc.local
+.zcode/
