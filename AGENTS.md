@@ -1,6 +1,7 @@
 # AGENTS.md — AI-Novel-Studio 实施约束
 
 ## 每次任务前必读
+- **新 AI agent 进场先读 `docs/AI-AGENT-ONBOARDING.md`**（协作者手册：工作流/验证门禁/实战教训/协作边界——v0.21.0 起，verify-docs 守护其一致性）
 - **先读 `PLAN.md` 对应阶段章节**，按清单勾选进度 `[x]`，完成后更新
 - 每阶段结束必须跑：`pnpm typecheck` + `pnpm lint`
 - **测试 Key 纪律（2026-08-09 起）**：所有 E2E/校准/连通性测试**优先使用 OpenCode Go 网关 key**（来源：`~/.local/share/opencode/auth.json` 的 `opencode-go` 条目；端点 `https://opencode.ai/zen/go/v1`，OpenAI 兼容）。校准脚本传参示例：
@@ -97,7 +98,7 @@ docs/          校准报告 + P9 体验修复明细
 54. **方案生成纪律**：/solutions/generate 必须走 callLlmJson + schema 校验 + 限次重试；长任务超时按 90s 处理；降级时记录 degradedReasons。
 
 55. **发布流程纪律**：版本发布必须走 `pnpm release`（scripts/release.mjs，含 versioning.md §3 校验），禁止手动改版本/tag；发布前必须执行 `pnpm dist`（产物在 release/），发布走 GitHub Release。
-56. **文档同步纪律**：功能/修复/版本变更同步更新 docs/README.md；重大变更记入 CHANGELOG.md / PLAN.md / decision-log.md；发版必须同步 CHANGELOG。
+56. **文档同步纪律**：功能/修复/版本变更同步更新 docs/README.md；重大变更记入 CHANGELOG.md / PLAN.md / decision-log.md；发版必须同步 CHANGELOG。**v0.21.0 起：机制/纪律/教训变更若触及 `docs/AI-AGENT-ONBOARDING.md` 章节（§6/§8/§11/§14）必须同批回写**（onboarding 保鲜纪律，verify-docs 守护存在性与锚点）。
 
 57. **发版纪律**：仅正式发布/里程碑在 main 上 bump 并执行 `pnpm release --push`；"改动即发版"不可取——release/ 产物 = 正式交付，变更必须记入 PLAN/decision-log。
 58. **CI 纪律**：CI 失败必须本地复现修复，禁止用 if: false 跳过流程或静默吞错。

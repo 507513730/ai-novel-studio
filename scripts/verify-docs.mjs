@@ -34,6 +34,41 @@ check('PLAN.md 含 v' + version, plan.includes(`v${version}`), `缺 "v${version}
 // 4) CHANGELOG 顶部 Unreleased 段存在（KaC 规范）
 check('CHANGELOG.md 有 [Unreleased] 段', changelog.includes('## [Unreleased]'))
 
+// ---------- v0.21.0：onboarding 一致性检查组（AI Agent 协作者手册保鲜机制） ----------
+const ONBOARDING = 'docs/AI-AGENT-ONBOARDING.md'
+const onboardingPath = join(ROOT, ONBOARDING)
+if (existsSync(onboardingPath)) {
+  const ob = readFileSync(onboardingPath, 'utf8')
+
+  // 5) onboarding 存在性（上层 if 已保证；此处显式断言）
+  check('AI-AGENT-ONBOARDING.md 存在', true)
+
+  // 6) 内部引用完整性：文中所有 docs/*.md 引用路径存在
+  const refs = [...ob.matchAll(/docs\/[A-Za-z0-9_.-]+\.md/g)].map((m) => m[0])
+  const missingRefs = [...new Set(refs)].filter((r) => !existsSync(join(ROOT, r)))
+  check('onboarding 内部引用路径存在', missingRefs.length === 0, `缺失: ${missingRefs.join(', ')}`)
+
+  // 7) 命令真实性：文中所有 `pnpm <cmd>` 均存在于 package.json scripts（pnpm 内置命令除外）
+  const PNPM_BUILTIN = new Set(['install', 'add', 'remove', 'run', 'exec', 'dlx', 'store', 'link', 'rebuild', 'patch', 'why', 'list', 'outdated', 'update'])
+  const cmds = [...ob.matchAll(/`pnpm ([a-z0-9:-]+)`/g)].map((m) => m[1])
+  const unknownCmds = [...new Set(cmds)].filter((c) => !pkg.scripts[c] && !PNPM_BUILTIN.has(c))
+  check('onboarding 命令均真实', unknownCmds.length === 0, `未知命令: ${unknownCmds.join(', ')}`)
+
+  // 8) 版本锚点：`当前版本：vX.Y.Z`（容忍加粗/反引号）== package.json version
+  const versionAnchor = ob.match(/当前版本.*?：`?v(\d+\.\d+\.\d+)/)
+  check(
+    'onboarding 当前版本锚点一致',
+    versionAnchor !== null && versionAnchor[1] === version,
+    versionAnchor ? `文档 v${versionAnchor[1]} ≠ package.json v${version}` : '缺「当前版本：vX.Y.Z」锚点'
+  )
+
+  // 9) AGENTS.md 含 onboarding 指引行
+  const agents = readFileSync(join(ROOT, 'AGENTS.md'), 'utf8')
+  check('AGENTS.md 含 onboarding 指引', agents.includes('AI-AGENT-ONBOARDING'))
+} else {
+  check('AI-AGENT-ONBOARDING.md 存在', false, '缺失 onboarding 文档（AI 协作者手册）')
+}
+
 if (failures.length > 0) {
   console.error(`\n文档检查失败 ${failures.length} 项：${failures.join('、')}——发布前必须补齐`)
   process.exit(1)
