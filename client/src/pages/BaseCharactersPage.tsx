@@ -1,5 +1,5 @@
 import { EmptyState } from '../components/EmptyState'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { UsersRound, Star, Trash2 } from 'lucide-react'
@@ -47,11 +47,16 @@ export function BaseCharactersPage(): React.JSX.Element {
 
   const deleteTemplate = async (templateId: number, name: string): Promise<void> => {
     if (!window.confirm(`删除模板「${name}」？`)) return
+    // v0.17.0（审查 A37）：确认后加 busy——此前无门控可连点并发删除
+    if (busy) return
+    setBusy(true)
     try {
       await resourcesApi.baseCharacterDelete(templateId)
       void queryClient.invalidateQueries({ queryKey: ['base-characters'] })
     } catch (err) {
       toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -106,7 +111,7 @@ export function BaseCharactersPage(): React.JSX.Element {
                     <option value="" disabled>应用到…</option>
                     {novels.data?.novels.map((n) => <option key={n.id} value={n.id}>{n.title || `#${n.id}`}</option>)}
                   </select>
-                  <button className="sm danger" onClick={() => void deleteTemplate(t.id, t.name)}><Trash2 size={12} /></button>
+                  <button className="sm danger" disabled={busy} onClick={() => void deleteTemplate(t.id, t.name)}><Trash2 size={12} /></button>
                 </div>
               </div>
             </div>
@@ -164,7 +169,12 @@ function NovelChars({ novelId, title, chars, busy, onLoad, onOpen, onSaveTemplat
     queryFn: () => novelApi.characters(novelId),
     enabled: chars === undefined
   })
-  if (chars === undefined && q.data) onLoad(q.data.characters)
+  // v0.17.0（审查 A18）：渲染期调用 onLoad 设父组件 state 会触发"setState during render"告警并产生重复渲染；
+  // 移入 useEffect——数据就绪后再回传父组件缓存
+  useEffect(() => {
+    if (chars === undefined && q.data) onLoad(q.data.characters)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q.data, chars === undefined])
   const list = chars ?? q.data?.characters
   return (
     <div className="panel">

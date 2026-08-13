@@ -44,8 +44,9 @@ function getSmartContext(db: DatabaseSync, novelId: number): SmartContext | null
 
 function hashOf(s: string): string {
   let h = 2166136261
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
+  // v0.17.0（LOW）：codePointAt 覆盖 emoji/补充平面（charCodeAt 取半代理 → 碰撞）
+  for (const ch of s) {
+    h ^= ch.codePointAt(0) ?? 0
     h = Math.imul(h, 16777619)
   }
   return (h >>> 0).toString(36)

@@ -409,7 +409,8 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
   router.get('/:novelId/pending', (req, res) => {
     const novelId = Number(req.params.novelId)
     const facts = db
-      .prepare('SELECT id, content, chapter_id FROM fact WHERE novel_id = ? AND confirmed = 0')
+      // v0.17.0（审查 M5）：DAO 边界 camelCase（此前 chapter_id 直出）
+      .prepare('SELECT id, content, chapter_id AS chapterId FROM fact WHERE novel_id = ? AND confirmed = 0')
       .all(novelId) as Array<Record<string, unknown>>
     const chars = db
       .prepare('SELECT id, name, profile_json FROM character WHERE novel_id = ? AND status = \'pending\'')
@@ -526,12 +527,13 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       const chapterId = Number(req.params.chapterId)
       const versionId = Number(req.params.versionId)
       const row = db
-        .prepare('SELECT id, content, note, created_at FROM chapter_version WHERE id = ? AND chapter_id = ?')
-        .get(versionId, chapterId) as { id: number; content: string; note: string; created_at: string } | undefined
+        .prepare('SELECT id, content, note, created_at AS createdAt FROM chapter_version WHERE id = ? AND chapter_id = ?')
+        .get(versionId, chapterId) as { id: number; content: string; note: string; createdAt: string } | undefined
       if (!row) {
         res.status(404).json({ error: 'version not found' })
         return
       }
+      // v0.17.0（审查 M5）：单版本详情与列表端点字段一致（此前 created_at 直出）
       res.json({ version: row })
     } catch (err) {
       next(err)

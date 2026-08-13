@@ -21,7 +21,7 @@ import { createPromptsRouter } from './routes/prompts'
 import { createSolutionsRouter } from './routes/solutions'                   
 import { createAssetsRouter } from './routes/assets'                         
 import { initPromptDb } from './prompts/promptAsset'
-import { startScheduler } from './services/scheduler'
+import { startScheduler, stopScheduler } from './services/scheduler'
 import { refreshAutoRate } from './services/currency'
 import { originGuard } from './services/security'
 
@@ -117,6 +117,17 @@ function start(): void {
           process.parentPort.postMessage({ type: 'checkpoint-done', id: m.id })
         } catch (err) {
           process.parentPort.postMessage({ type: 'checkpoint-error', id: m.id, error: String(err) })
+        }
+      }
+      // v0.17.0（审查 M20）：优雅关闭——main 通知 shutdown → server.close + stopScheduler（进程随后退出）
+      if (m?.type === 'shutdown') {
+        try {
+          stopScheduler()
+          server.close(() => process.exit(0))
+          // 兜底：3s 内未关闭完成直接退出
+          setTimeout(() => process.exit(0), 3000).unref()
+        } catch {
+          process.exit(0)
         }
       }
     })

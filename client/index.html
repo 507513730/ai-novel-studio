@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI 小说创作工作台</title>
+    <!-- v0.17.0（审查 M19）：CSP（file:// 打包态生效——webRequest 不拦截 file 协议） -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* ws://localhost:* https://api.deepseek.com https://opencode.ai https://open.er-api.com https://api.github.com https://raw.githubusercontent.com"
+    />
   </head>
   <body>
     <div id="root"></div>

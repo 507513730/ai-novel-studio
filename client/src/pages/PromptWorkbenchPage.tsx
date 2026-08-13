@@ -142,6 +142,8 @@ export function PromptWorkbenchPage(): React.JSX.Element {
                       setBusy('restore')
                       void apiFetch(`/prompts/${selected.id}/restore`, { method: 'POST' })
                         .then(async () => {
+                          // v0.17.0（审查 A19）：还原后失效 prompts 缓存——此前缓存里仍是旧模板，列表/其他面板显示过期内容
+                          void queryClient.invalidateQueries({ queryKey: ['prompts'] })
                           const all = (await apiFetch('/prompts')) as { prompts: Array<{ id: number; template: string }> }
                           const target = all.prompts.find((x) => x.id === selected.id)
                           if (target) setDraft(target.template)

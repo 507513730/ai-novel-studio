@@ -448,6 +448,14 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     statements: [
       `ALTER TABLE novel ADD COLUMN constraints_json TEXT NOT NULL DEFAULT '[]'`
     ]
+  },
+  {
+    // v0.17.0（审查 M10）：reserved 落库——预留路由（未消费）此前仅 seed 数组标记，DB 无法区分死配置
+    version: 18,
+    statements: [
+      `ALTER TABLE model_route ADD COLUMN reserved INTEGER NOT NULL DEFAULT 0`,
+      `UPDATE model_route SET reserved = 1 WHERE task_type IN ('planning', 'review', 'analysis', 'summary', 'director', 'embedding')`
+    ]
   }
 ]
 

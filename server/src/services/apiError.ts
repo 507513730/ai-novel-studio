@@ -13,20 +13,17 @@ export class ApiError extends Error {
   }
 }
 
-/** 客户端可见的错误文案（固定、无内部信息） */
-export function publicErrorText(err: unknown): { status: number; message: string } {
-  if (err instanceof ApiError) {
-    return { status: err.status, message: err.message }
-  }
-  return { status: 500, message: 'internal error' }
-}
-
 export function apiErrorMiddleware(
   err: unknown,
   _req: Request,
   res: Response,
   _next: NextFunction
 ): void {
+  // v0.17.0（审查 H1）：ApiError 分支——此前缺失导致业务状态码被吞（全走兜底 500）
+  if (err instanceof ApiError) {
+    res.status(err.status).json({ error: err.message })
+    return
+  }
   if (err instanceof ZodError) {
     res.status(400).json({ error: '参数校验失败', issues: err.issues })
     return

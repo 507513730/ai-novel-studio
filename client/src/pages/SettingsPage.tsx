@@ -203,6 +203,8 @@ function ModelRoutesPanel(): React.JSX.Element {
   const { toast } = useToast()
   const [error, setError] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  // v0.17.0（审查 A8）：一键预设 busy 门控
+  const [presetBusy, setPresetBusy] = useState(false)
 
   const routes = useQuery<{ routes: ModelRoute[] }>({
     queryKey: ['model-routes'],
@@ -231,41 +233,51 @@ function ModelRoutesPanel(): React.JSX.Element {
     onError: (err) => setError(err instanceof Error ? err.message : String(err))
   })
 
-  const setDeepSeekPreset = (): void => {
+  const setDeepSeekPreset = async (): Promise<void> => {
     const providerId = providers.data?.providers.find((p) => p.name === 'DeepSeek')?.id
     if (!providerId) return
-    const presets: Array<{
-      task: (typeof taskTypes)[number]
-      thinking: boolean
-      effort: 'low' | 'high' | 'max'
-      temp: number | null
-    }> = [
-      { task: 'prose', thinking: false, effort: 'high', temp: 1.0 },
-      { task: 'planning', thinking: true, effort: 'high', temp: null },
-      { task: 'review', thinking: true, effort: 'max', temp: null },
-      { task: 'analysis', thinking: true, effort: 'max', temp: null },
-      { task: 'summary', thinking: false, effort: 'high', temp: 0.3 },
-      { task: 'extraction', thinking: false, effort: 'high', temp: 0.2 },
-      { task: 'director', thinking: true, effort: 'high', temp: null },
-      { task: 'chat', thinking: false, effort: 'high', temp: 0.7 },
-      { task: 'embedding', thinking: false, effort: 'high', temp: null }
-    ]
-    for (const p of presets) {
-      void saveRoute.mutateAsync({
-        id: 0,
-        taskType: p.task,
-        providerId,
-        providerName: 'DeepSeek',
-        model: 'deepseek-v4-flash',
-        thinkingEnabled: p.thinking,
-        reasoningEffort: p.effort,
-        temperature: p.temp,
-        maxTokens: 8192,
-        fallback: [
-          { providerId, model: 'deepseek-v4-flash' },
-          { providerId, model: 'deepseek-v4-pro' }
-        ]
-      })
+    // v0.17.0（审查 A8）：busy 门控 + 串行 await——此前 9 个 mutateAsync 并发发出，无顺序且可重复点击
+    setPresetBusy(true)
+    setError(null)
+    try {
+      const presets: Array<{
+        task: (typeof taskTypes)[number]
+        thinking: boolean
+        effort: 'low' | 'high' | 'max'
+        temp: number | null
+      }> = [
+        { task: 'prose', thinking: false, effort: 'high', temp: 1.0 },
+        { task: 'planning', thinking: true, effort: 'high', temp: null },
+        { task: 'review', thinking: true, effort: 'max', temp: null },
+        { task: 'analysis', thinking: true, effort: 'max', temp: null },
+        { task: 'summary', thinking: false, effort: 'high', temp: 0.3 },
+        { task: 'extraction', thinking: false, effort: 'high', temp: 0.2 },
+        { task: 'director', thinking: true, effort: 'high', temp: null },
+        { task: 'chat', thinking: false, effort: 'high', temp: 0.7 },
+        { task: 'embedding', thinking: false, effort: 'high', temp: null }
+      ]
+      for (const p of presets) {
+        await saveRoute.mutateAsync({
+          id: 0,
+          taskType: p.task,
+          providerId,
+          providerName: 'DeepSeek',
+          model: 'deepseek-v4-flash',
+          thinkingEnabled: p.thinking,
+          reasoningEffort: p.effort,
+          temperature: p.temp,
+          maxTokens: 8192,
+          fallback: [
+            { providerId, model: 'deepseek-v4-flash' },
+            { providerId, model: 'deepseek-v4-pro' }
+          ]
+        })
+      }
+      toast('ok', 'DeepSeek 预设已应用到全部 9 个任务')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPresetBusy(false)
     }
   }
 
@@ -273,8 +285,9 @@ function ModelRoutesPanel(): React.JSX.Element {
     <div className="panel col">
       <div className="row justify-between">
         <h2>模型路由（任务级）</h2>
-        <button onClick={setDeepSeekPreset} disabled={!providers.data?.providers.some((p) => p.name === 'DeepSeek')}>
-          一键应用 DeepSeek 预设
+        {/* v0.17.0（审查 A8）：busy 门控——串行应用期间禁点 */}
+        <button onClick={() => void setDeepSeekPreset()} disabled={presetBusy || !providers.data?.providers.some((p) => p.name === 'DeepSeek')}>
+          {presetBusy ? '应用中…' : '一键应用 DeepSeek 预设'}
         </button>
       </div>
       {error && <ErrorMsg error={error} />}
@@ -287,8 +300,18 @@ function ModelRoutesPanel(): React.JSX.Element {
             </span>
           </div>
           <div className="row">
+            {/* v0.17.0（审查 H9）：加载/错误态移出 <select>（无效 HTML——此前被浏览器丢弃不可见） */}
+            {providers.isLoading && <p className="muted t-small">加载中…</p>}
+            {providers.isError && (
+              <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
+                加载失败：{String(providers.error)}
+                <button className="sm ml-2" onClick={() => void providers.refetch()}>重试</button>
+              </div>
+            )}
+            {/* v0.17.0（审查 A6）：isPending 门控——保存期间禁改，防连发覆盖 */}
             <select
               value={r.providerId}
+              disabled={saveRoute.isPending}
               onChange={(e) =>
                 saveRoute.mutate({
                   ...r,
@@ -298,14 +321,7 @@ function ModelRoutesPanel(): React.JSX.Element {
                 })
               }
             >
-      {providers.isLoading && <p className="muted t-small">加载中…</p>}
-      {providers.isError && (
-        <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
-          加载失败：{String(providers.error)}
-          <button className="sm ml-2" onClick={() => void providers.refetch()}>重试</button>
-        </div>
-      )}
-      {providers.data?.providers.map((p) => (
+              {providers.data?.providers.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -313,6 +329,7 @@ function ModelRoutesPanel(): React.JSX.Element {
             </select>
             <input
               style={{ width: 180 }}
+              disabled={saveRoute.isPending}
               value={drafts[`${r.taskType}:model`] ?? r.model}
               onChange={(e) => setDrafts((d) => ({ ...d, [`${r.taskType}:model`]: e.target.value }))}
               onBlur={(e) => {
@@ -323,6 +340,7 @@ function ModelRoutesPanel(): React.JSX.Element {
             />
             <select
               value={r.thinkingEnabled ? r.reasoningEffort : 'off'}
+              disabled={saveRoute.isPending}
               onChange={(e) => {
                 const v = e.target.value
                 saveRoute.mutate({
@@ -340,6 +358,7 @@ function ModelRoutesPanel(): React.JSX.Element {
             <input
               type="number"
               style={{ width: 72 }}
+              disabled={saveRoute.isPending}
               value={drafts[`${r.taskType}:temp`] ?? (r.temperature ?? '')}
               placeholder="温度"
               onChange={(e) => setDrafts((d) => ({ ...d, [`${r.taskType}:temp`]: e.target.value }))}
@@ -364,6 +383,7 @@ function ModelRoutesPanel(): React.JSX.Element {
             <input
               type="number"
               style={{ width: 80 }}
+              disabled={saveRoute.isPending}
               value={drafts[`${r.taskType}:max`] ?? r.maxTokens}
               onChange={(e) => setDrafts((d) => ({ ...d, [`${r.taskType}:max`]: e.target.value }))}
               onBlur={(e) => {
@@ -409,24 +429,42 @@ function UsagePanel(): React.JSX.Element {
       }
   })
   const [budgetInput, setBudgetInput] = useState('')
+  // v0.17.0（审查 A7）：busy 门控 + try/catch——此前失败直接 unhandledrejection，且可连点
+  const [busy, setBusy] = useState<string | null>(null)
   const saveBudget = async (): Promise<void> => {
+    if (busy) return
     const v = Number(budgetInput)
     if (Number.isNaN(v) || v < 0) {
       toast('error', '请输入合法的预算金额（元）')
       return
     }
-    await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ costMonthlyBudget: v }) })
-    toast('ok', v > 0 ? `月度预算已设为 ¥${v}` : '月度预算预警已关闭')
-    void app.refetch()
+    setBusy('budget')
+    try {
+      await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ costMonthlyBudget: v }) })
+      toast('ok', v > 0 ? `月度预算已设为 ¥${v}` : '月度预算预警已关闭')
+      void app.refetch()
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
   }
   const toggleAutoFix = async (on: boolean): Promise<void> => {
-    await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ autoFixDebts: on }) })
-    toast('ok', on ? '质量债自动修复已开启' : '质量债自动修复已关闭')
-    void app.refetch()
+    if (busy) return
+    setBusy('autofix')
+    try {
+      await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ autoFixDebts: on }) })
+      toast('ok', on ? '质量债自动修复已开启' : '质量债自动修复已关闭')
+      void app.refetch()
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
   }
 
   const total = usage.data?.total
-  const hitRate = total && total.input_tokens > 0 ? ((total.cache_hit / total.input_tokens) * 100).toFixed(1) : '—'
+  const hitRate = total && total.inputTokens > 0 ? ((total.cacheHits / total.inputTokens) * 100).toFixed(1) : '—'
 
   // P12 D2：近 7 日缓存命中率
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
@@ -436,26 +474,42 @@ function UsagePanel(): React.JSX.Element {
       (await apiFetch(`/settings/usage/stats?from=${encodeURIComponent(weekAgo)}`)) as { total: UsageTotal }
   })
   const weekTotal = weekUsage.data?.total
-  const weekHitRate = weekTotal && weekTotal.input_tokens > 0 ? ((weekTotal.cache_hit / weekTotal.input_tokens) * 100).toFixed(1) : '—'
+  const weekHitRate = weekTotal && weekTotal.inputTokens > 0 ? ((weekTotal.cacheHits / weekTotal.inputTokens) * 100).toFixed(1) : '—'
   const budget = app.data?.costMonthlyBudget ?? 0
   const monthlyCost = app.data?.monthlyCost ?? 0
   const overBudget = budget > 0 && monthlyCost > budget
   // v0.16.0：汇率（自动获取/手动覆盖）
   const [rateInput, setRateInput] = useState('')
   const saveRate = async (): Promise<void> => {
+    if (busy) return
     const v = Number(rateInput)
     if (Number.isNaN(v) || v <= 0) {
       toast('error', '请输入合法的汇率（USD→CNY，如 7.2）')
       return
     }
-    await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ cnyUsdRate: v }) })
-    toast('ok', `汇率已手动设为 ${v}（后续自动获取不再覆盖）`)
-    void app.refetch()
+    setBusy('rate')
+    try {
+      await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ cnyUsdRate: v }) })
+      toast('ok', `汇率已手动设为 ${v}（后续自动获取不再覆盖）`)
+      void app.refetch()
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
   }
   const resetRate = async (): Promise<void> => {
-    await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ cnyUsdRateReset: true }) })
-    toast('ok', '已恢复自动获取汇率')
-    void app.refetch()
+    if (busy) return
+    setBusy('rate')
+    try {
+      await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ cnyUsdRateReset: true }) })
+      toast('ok', '已恢复自动获取汇率')
+      void app.refetch()
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
   }
 
   return (
@@ -494,7 +548,7 @@ function UsagePanel(): React.JSX.Element {
             if (e.key === 'Enter') void saveBudget()
           }}
         />
-        <button className="sm" onClick={() => void saveBudget()}>保存预算</button>
+        <button className="sm" disabled={busy !== null} onClick={() => void saveBudget()}>{busy === 'budget' ? '保存中…' : '保存预算'}</button>
         {budget > 0 ? (
           <span className="t-small" style={{ color: overBudget ? 'var(--danger)' : 'var(--ok)' }}>
             本月已用 ¥{monthlyCost.toFixed(2)} / ¥{budget}
@@ -527,9 +581,9 @@ function UsagePanel(): React.JSX.Element {
             if (e.key === 'Enter') void saveRate()
           }}
         />
-        <button className="sm" onClick={() => void saveRate()}>手动设置</button>
+        <button className="sm" disabled={busy !== null} onClick={() => void saveRate()}>{busy === 'rate' ? '保存中…' : '手动设置'}</button>
         {app.data?.cnyUsdRateSource === 'manual' && (
-          <button className="sm" onClick={() => void resetRate()}>恢复自动</button>
+          <button className="sm" disabled={busy !== null} onClick={() => void resetRate()}>{busy === 'rate' ? '恢复中…' : '恢复自动'}</button>
         )}
         <span className="muted t-small" style={{ maxWidth: 360 }}>
           成本内部按美元计价，此处汇率仅用于人民币显示；启动时自动联网获取实时汇率，手动设置后不再被覆盖。
@@ -541,9 +595,10 @@ function UsagePanel(): React.JSX.Element {
         <span className="muted t-small">质量债自动修复：</span>
         <button
           className="sm"
+          disabled={busy !== null}
           onClick={() => void toggleAutoFix(!(app.data?.autoFixDebts ?? true))}
         >
-          {app.data?.autoFixDebts === false ? '开启' : '关闭'}
+          {busy === 'autofix' ? '切换中…' : app.data?.autoFixDebts === false ? '开启' : '关闭'}
         </button>
         <span className="muted t-small" style={{ maxWidth: 420 }}>
           整本生产后，评分低于 75 的章节将自动排队修复（每章最多 2 轮 + 同问题防重复）。可随时关闭；任务中心可查看/取消修复进度。
@@ -565,13 +620,13 @@ function UsagePanel(): React.JSX.Element {
           <tbody>
             {usage.data.groups.map((g, i) => (
               <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: 6 }}>{taskTypeLabels[g.task_type as keyof typeof taskTypeLabels] ?? g.task_type}</td>
+                <td style={{ padding: 6 }}>{taskTypeLabels[g.taskType as keyof typeof taskTypeLabels] ?? g.taskType}</td>
                 <td style={{ padding: 6 }} className="muted">
                   {g.provider}/{g.model}
                 </td>
                 <td style={{ padding: 6, textAlign: 'right' }}>{g.calls}</td>
-                <td style={{ padding: 6, textAlign: 'right' }}>{g.input_tokens}</td>
-                <td style={{ padding: 6, textAlign: 'right' }}>{g.output_tokens}</td>
+                <td style={{ padding: 6, textAlign: 'right' }}>{g.inputTokens}</td>
+                <td style={{ padding: 6, textAlign: 'right' }}>{g.outputTokens}</td>
                 <td style={{ padding: 6, textAlign: 'right' }}>{g.cost.toFixed(4)}</td>
                 <td style={{ padding: 6, textAlign: 'right' }}>{g.degraded > 0 ? g.degraded : ''}</td>
               </tr>

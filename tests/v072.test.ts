@@ -103,11 +103,12 @@ describe('v0.7.2 批1-2 打包态（null Origin）鉴权：SSE/导出缺 token �
     db.close()
   })
 
-  it('未配置 SERVER_TOKEN（独立调试）时 null Origin 放行', async () => {
+  // v0.17.0（审查 M1）：fail-closed——未配置 SERVER_TOKEN 时 null Origin 一律拒绝（此前放行=裸奔）
+  it('未配置 SERVER_TOKEN（独立调试）时 null Origin 拒绝 403', async () => {
     const db = makeDb()
     await withServer(makeApp(db), async (base) => {
       const res = await fetch(`${base}/api/novels/1`, { headers: { Origin: 'null' } })
-      expect(res.status).toBe(404)
+      expect(res.status).toBe(403)
     })
     db.close()
   })

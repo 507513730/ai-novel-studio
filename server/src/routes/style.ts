@@ -46,7 +46,8 @@ export function createStyleRouter(db: DatabaseSync): Router {
       }
       const description = fingerprintDescription(fp)
       // 复用写法引擎落库（features_json 格式一致 → 现有绑定/注入链路自动生效）
-      db.prepare(
+      // v0.17.0（LOW）：用 run 的 lastInsertRowid（此前二次 SELECT last_insert_rowid() 冗余）
+      const ins = db.prepare(
         'INSERT INTO style_asset (novel_id, name, features_json, samples_json, anti_ai_rules_json) VALUES (?, ?, ?, ?, ?)'
       ).run(
         novelId,
@@ -56,7 +57,7 @@ export function createStyleRouter(db: DatabaseSync): Router {
         '[]'
       )
       res.status(201).json({
-        id: (db.prepare('SELECT last_insert_rowid() AS id').get() as { id: number }).id,
+        id: Number(ins.lastInsertRowid),
         fingerprint: fp,
         description
       })

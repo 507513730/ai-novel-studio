@@ -112,8 +112,7 @@ export function DirectorPage(): React.JSX.Element {
   }
 
   const cancel = async (): Promise<void> => {
-    // P9 C9：取消是破坏性动作，需确认
-    if (!window.confirm('确定取消当前导演任务？已生成的章节会保留。')) return
+    // v0.17.0（审查 A15）：确认已由 themed ConfirmDialog（cancelWithConfirm）承担，删掉这里的内层原生 confirm
     setBusy(true)
     try {
       await automationApi.directorCancel(id)

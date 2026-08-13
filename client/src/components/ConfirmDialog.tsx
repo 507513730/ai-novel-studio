@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 // P13 F1：确认对话框（替代 window.confirm，暗色主题化 + Esc/遮罩关闭）
 
@@ -16,13 +16,16 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({ options, onConfirm, onCancel }: ConfirmDialogProps): React.JSX.Element {
+  // v0.17.0（审查 C33）：onCancel 经 ref 取最新值——监听只注册一次，父组件 inline 箭头不再反复拆装
+  const onCancelRef = useRef(onCancel)
+  onCancelRef.current = onCancel
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onCancel()
+      if (e.key === 'Escape') onCancelRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
+  }, [])
 
   return (
     <div

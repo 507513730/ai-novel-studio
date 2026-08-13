@@ -133,6 +133,8 @@ export function createAnalysisRouter(db: DatabaseSync): Router {
         return
       }
       const result = JSON.parse(row.result_json) as Record<string, unknown>
+      // v0.17.0（审查 M9）：产出正确 StyleFeature 形状（此前 {feature,value} 与 StyleFeature 不兼容 → 永不编译为规则）
+      const stamp = Date.now()
       const styleAsset = db
         .prepare(
           "INSERT INTO style_asset (novel_id, name, features_json, rules_json, samples_json, anti_ai_rules_json) VALUES (?, ?, ?, ?, ?, ?)"
@@ -141,8 +143,8 @@ export function createAnalysisRouter(db: DatabaseSync): Router {
           novelId,
           `拆书转写法-${analysisId}`,
           JSON.stringify([
-            { feature: '题材定位', value: dimText(result.genre) },
-            { feature: '写法技法', value: dimText(result.style) }
+            { id: `fs${stamp}-1`, name: '题材定位', description: dimText(result.genre), enabled: true, category: 'other' },
+            { id: `fs${stamp}-2`, name: '写法技法', description: dimText(result.style), enabled: true, category: 'other' }
           ]),
           JSON.stringify({ source: '拆书', depth: row.depth }),
           '[]',

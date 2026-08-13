@@ -111,6 +111,12 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
 
   router.delete('/solutions/:id', (req, res, next) => {
     try {
+      // v0.17.0（LOW）：存在性检查（此前不存在恒返 ok:true）
+      const sol = db.prepare('SELECT id FROM solution WHERE id = ?').get(Number(req.params.id))
+      if (!sol) {
+        res.status(404).json({ error: 'solution not found' })
+        return
+      }
       deleteSolution(db, Number(req.params.id))
       res.json({ ok: true })
     } catch (err) {
@@ -375,7 +381,8 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
         id: r.id,
         name: r.name,
         description: r.description,
-        body_md: r.body_md,
+        // v0.17.0（审查 M6）：统一 camelCase（此前 body_md 与邻字段不一致）
+        bodyMd: r.body_md,
         novelId: r.novel_id,
         createdAt: r.created_at
       }))

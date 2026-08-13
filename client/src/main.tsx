@@ -31,7 +31,11 @@ const queryClient = new QueryClient({
   }
 })
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+// v0.17.0（审查 C24）：去掉非空断言——#root 缺失时给出明确错误而非静默崩溃
+const rootEl = document.getElementById('root')
+if (!rootEl) throw new Error('找不到 #root 挂载点（index.html 结构异常）')
+
+ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

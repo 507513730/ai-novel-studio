@@ -28,7 +28,12 @@ export const SHORTCUT_ACTIONS: Record<ShortcutAction, ShortcutBinding> = {
 
 const STORAGE_KEY = 'ai-novel.shortcuts'
 
+// v0.17.0（审查 B23）：模块级缓存——此前每次 keydown 都 JSON.parse localStorage（每次按键几微秒损耗）；
+// save/reset 时失效重读，其余路径惰性复用
+let cachedShortcuts: Record<ShortcutAction, string> | null = null
+
 export function getStoredShortcuts(): Record<ShortcutAction, string> {
+  if (cachedShortcuts) return cachedShortcuts
   const defaults = Object.fromEntries(
     Object.entries(SHORTCUT_ACTIONS).map(([k, v]) => [k, v.combo])
   ) as Record<ShortcutAction, string>
@@ -36,12 +41,14 @@ export function getStoredShortcuts(): Record<ShortcutAction, string> {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<Record<ShortcutAction, string>>
-      return { ...defaults, ...parsed }
+      cachedShortcuts = { ...defaults, ...parsed }
+      return cachedShortcuts
     }
   } catch {
     /* 损坏回退默认 */
   }
-  return defaults
+  cachedShortcuts = defaults
+  return cachedShortcuts
 }
 
 export function saveShortcut(action: ShortcutAction, combo: string): void {
@@ -52,6 +59,8 @@ export function saveShortcut(action: ShortcutAction, combo: string): void {
 
 export function resetShortcuts(): void {
   localStorage.removeItem(STORAGE_KEY)
+  // v0.17.0（审查 B23）：失效缓存，下次读取重新解析
+  cachedShortcuts = null
 }
 
 /** 事件 → 标准化 combo（mod=ctrl/cmd） */

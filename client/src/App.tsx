@@ -62,6 +62,8 @@ function PageFallback(): React.JSX.Element {
 
 export function App(): React.JSX.Element {
   const [baseUrl, setBaseUrl] = useState<string | null>(null)
+  // v0.17.0（审查 C25）：命令面板状态提升到组件顶层——此前在 useEffect 源序之后声明（先使用后声明）
+  const [commandOpen, setCommandOpen] = useState(false)
 
   useEffect(() => {
     if (window.novelStudio) {
@@ -126,19 +128,18 @@ export function App(): React.JSX.Element {
   }, [])
 
   // v0.16.0：启动拉取汇率 → fmtCost 人民币显示（服务端已换算/回传汇率）
+  // v0.17.0（审查 H8）：改 apiFetch——此前手动 fetch 拼出双 /api 且无 token/超时 → 恒兜底 7.2
   useEffect(() => {
     if (!baseUrl) return
-    void fetch(`${baseUrl}/api/settings/app`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { cnyUsdRate?: number } | null) => {
-        if (d?.cnyUsdRate) setCnyRate(d.cnyUsdRate)
+    void apiFetch('/settings/app')
+      .then((d) => {
+        const r = d as { cnyUsdRate?: number } | null
+        if (r?.cnyUsdRate) setCnyRate(r.cnyUsdRate)
       })
       .catch(() => undefined)
   }, [baseUrl])
 
   // P27 2-7：命令面板（搜小说 + 跳页面）
-  const [commandOpen, setCommandOpen] = useState(false)
-
   if (!baseUrl) return <div style={{ padding: 40 }}>正在启动本地服务…</div>
   if (bootstrap.isLoading) return <div style={{ padding: 40 }}>正在连接本地服务…</div>
   if (bootstrap.isError) {

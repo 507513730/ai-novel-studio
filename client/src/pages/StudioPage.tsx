@@ -339,6 +339,7 @@ export function StudioPage(): React.JSX.Element {
                     <button
                       className="sm"
                       style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '0 6px', fontSize: 10 }}
+                      disabled={busy !== null}
                       onClick={(e) => {
                         e.stopPropagation()
                         if (!window.confirm(`删除方案「${sol.name}」？`)) return
@@ -402,12 +403,19 @@ export function StudioPage(): React.JSX.Element {
                   <button
                     className="sm"
                     style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '0 6px', fontSize: 10 }}
+                    // v0.17.0（审查 A9）：删除加 busy 门控 + try/catch（此前无禁用，可连点重复删除）
+                    disabled={busy !== null}
                     onClick={() => {
                       if (!window.confirm(`删除技能「${String(sk.name)}」？`)) return
-                      void studioApi.skillDelete(Number(sk.id)).then(() => {
-                        toast('ok', '已删除')
-                        void queryClient.invalidateQueries({ queryKey: ['studio-skills'] })
-                      })
+                      setBusy('skill-del')
+                      void studioApi
+                        .skillDelete(Number(sk.id))
+                        .then(() => {
+                          toast('ok', '已删除')
+                          void queryClient.invalidateQueries({ queryKey: ['studio-skills'] })
+                        })
+                        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                        .finally(() => setBusy(null))
                     }}
                   >
                     ✕
@@ -540,7 +548,8 @@ export function StudioPage(): React.JSX.Element {
                           value={step.production?.output ?? 'draft'}
                           onChange={(e) => {
                             const next = [...draft.steps]
-                            next[i] = { ...step, production: { output: e.target.value as never, reviewRounds: 1 } }
+                            // v0.17.0（审查 A30）：消除 `as never`——output 本就是 string，无需转型
+                            next[i] = { ...step, production: { output: e.target.value, reviewRounds: 1 } }
                             patchDraft({ steps: next })
                           }}
                         >

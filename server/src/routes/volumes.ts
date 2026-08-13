@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
 import { JSON_FORMAT, CHAPTER_TITLE_RULE } from '../prompts'
+import { generateRefinePrompt, parseRefine } from '../services/planner'
 import { getSystemPrompt } from '../prompts/promptAsset'
 
 // P12 A4：单章细化（单章端点与批量端点共用；质量门禁：关键字段非空）
@@ -13,6 +14,7 @@ async function refineOne(
 ): Promise<Record<string, unknown>> {
   const novelId = (db.prepare('SELECT novel_id FROM chapter WHERE id = ?').get(chapterId) as { novel_id: number })
     .novel_id
+  // v0.17.0（审查 M7）：prompt/解析统一走 planner.ts（此前内联副本重复）
   const refined = await callLlmJson<Record<string, unknown>>(
     db,
     'extraction',
@@ -21,27 +23,12 @@ async function refineOne(
       messages: [
         {
           role: 'user',
-          content: `你是章节细化师。请细化本章任务单：${CHAPTER_TITLE_RULE}\n${JSON_FORMAT}\n\n章节：${chapter.title}\n摘要：${chapter.summary}\n初步目标：${chapter.goal_json}\n\n请输出 {"purpose": "本章推进目的（非空）", "boundary": "本章边界（非空）", "tasks": ["任务1","任务2"], "scenes": ["场景1","场景2"], "ending": "结尾钩子（非空）"}`
+          content: generateRefinePrompt(chapter.title, chapter.summary, chapter.goal_json)
         }
       ],
       maxTokens: 2048
     },
-    (obj) => {
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null
-      const r = obj as Record<string, unknown>
-      if (typeof r.purpose !== 'string' || r.purpose.trim().length < 4) return null
-      if (typeof r.boundary !== 'string' || r.boundary.trim().length < 4) return null
-      if (typeof r.ending !== 'string' || r.ending.trim().length < 4) return null
-      if (!Array.isArray(r.tasks) || r.tasks.length === 0) return null
-      if (!Array.isArray(r.scenes) || r.scenes.length === 0) return null
-      return {
-        purpose: String(r.purpose),
-        boundary: String(r.boundary),
-        tasks: r.tasks.map(String),
-        scenes: r.scenes.map(String),
-        ending: String(r.ending)
-      }
-    },
+    parseRefine,
     'refine'
   )
   db.prepare("UPDATE chapter SET goal_json = ?, updated_at = datetime('now') WHERE id = ?").run(
@@ -90,6 +77,14 @@ export function createVolumesRouter(db: DatabaseSync): Router {
   })
 
   router.delete('/:novelId/volumes/:volId', (req, res) => {
+    // v0.17.0（LOW）：存在性检查（此前无检查恒返 ok:true）
+    const vol = db
+      .prepare('SELECT id FROM volume WHERE id = ? AND novel_id = ?')
+      .get(Number(req.params.volId), Number(req.params.novelId))
+    if (!vol) {
+      res.status(404).json({ error: '卷不存在' })
+      return
+    }
     db.prepare('DELETE FROM volume WHERE id = ? AND novel_id = ?').run(
       Number(req.params.volId),
       Number(req.params.novelId)
@@ -400,8 +395,9 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           summary: z.string().optional(),
           goal: z.unknown().optional(),
           // v0.9.0（审查 #19）：章节状态机枚举校验
+          // v0.17.0（审查 M13）：移除 'generating'——内部态不允许客户端手动置（防卡死状态机）
           status: z
-            .enum(['planned', 'imported', 'generating', 'written', 'reviewed', 'done', 'failed'])
+            .enum(['planned', 'imported', 'written', 'reviewed', 'done', 'failed'])
             .optional(),
           content: z.string().optional()
         })
@@ -425,6 +421,11 @@ export function createVolumesRouter(db: DatabaseSync): Router {
         params.push(input.status)
       }
       if (input.content !== undefined) {
+        // v0.17.0（审查 M13）：空内容保护——拒绝用空串覆盖正文（避免误清空）
+        if (input.content.trim() === '') {
+          res.status(400).json({ error: 'content 不能为空（如需清空请删除章节）' })
+          return
+        }
         sets.push('content = ?')
         params.push(input.content)
         sets.push('word_count = ?')

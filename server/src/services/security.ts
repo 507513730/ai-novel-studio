@@ -38,8 +38,10 @@ export function originGuard(req: Request, res: Response, next: NextFunction): vo
     return
   }
   // P20（S1）：null Origin（file:// 与恶意沙箱 iframe 无法从 Origin 区分）强制 token
-  if (origin === 'null' && process.env.SERVER_TOKEN) {
-    if (req.headers['x-app-token'] !== process.env.SERVER_TOKEN) {
+  if (origin === 'null') {
+    // v0.17.0（审查 M1）：fail-closed——未配置 SERVER_TOKEN 时 null Origin 一律拒绝
+    // （此前放行导致打包态未设 token 时 null-origin 完全裸奔；dev 模式走 localhost:5173 不受影响）
+    if (!process.env.SERVER_TOKEN || req.headers['x-app-token'] !== process.env.SERVER_TOKEN) {
       res.status(403).json({ error: 'origin not allowed' })
       return
     }

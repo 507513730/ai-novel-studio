@@ -408,11 +408,8 @@ export function exportSolutionBundle(
       name: sol.name,
       description: sol.description,
       primaryAgentName: primaryAgent?.name ?? null,
-      steps: sol.steps.map((s) => {
-        const agentName = agents.find((a) => a.name === undefined) // 占位，下面重映射
-        void agentName
-        return { ...s, agentName: '' }
-      })
+      // v0.17.0（审查 M12）：占位步骤删除——agentName 由下方 nameById 反查填充
+      steps: sol.steps.map((s) => ({ ...s, agentName: '' }))
     },
     agents,
     skills

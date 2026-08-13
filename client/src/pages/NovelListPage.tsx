@@ -153,19 +153,11 @@ function extractProtagonistName(text: string): string {
             return (
             <div
               key={n.id}
-              role="button"
-              tabIndex={0}
               className="panel"
               style={{ background: 'var(--bg-card)', cursor: 'pointer', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, transition: 'transform 150ms ease, border-color 150ms ease' }}
               onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = 'var(--border-hover)' }}
               onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = 'var(--border)' }}
               onClick={() => navigate(`/novels/${n.id}`)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  navigate(`/novels/${n.id}`)
-                }
-              }}
             >
               <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
                 {/* 封面色块（流派占位） */}
@@ -219,6 +211,8 @@ function extractProtagonistName(text: string): string {
                   )}
                 </div>
                 <div className="row">
+                  {/* v0.17.0（审查 A16）：外层 role="button" div 内嵌 button 属无效 ARIA——外层改无 role，
+                      键盘进入靠内层「进入」按钮（内层按钮均已 stopPropagation） */}
                   <button className="sm" onClick={(e) => { e.stopPropagation(); navigate(`/novels/${n.id}`) }}>进入</button>
                   <button
                     className="danger sm"

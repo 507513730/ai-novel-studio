@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
 import { buildFrozenContext } from '../services/context'
-import { detectAntiAiHits, getBoundStyleRules } from '../services/styleEngine'
+import { detectAntiAiHits, getBoundStyleRules, extractAntiAiWordsFromRules } from '../services/styleEngine'
 
 // ============================================================
 // P5 多智能体：Agent 管理 + 团队协作端点
@@ -17,7 +17,8 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
     const rows = db
       .prepare(
         `SELECT a.id, a.name, a.role, a.system_prompt, a.description, a.body_md, a.skills_json, a.tools_json, a.enabled, a.is_custom,
-                (SELECT COUNT(*) FROM agent_skill s WHERE s.agent_id = a.id) AS skill_count
+                (SELECT COUNT(*) FROM agent_skill s WHERE s.agent_id = a.id) AS skill_count,
+                (SELECT COALESCE(json_group_array(s.skill_id), '[]') FROM agent_skill s WHERE s.agent_id = a.id) AS skill_ids
          FROM agent a ORDER BY a.id`
       )
       .all() as Array<Record<string, unknown>>
@@ -31,6 +32,8 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
         bodyMd: r.body_md,
         skills: JSON.parse(String(r.skills_json ?? '[]')),
         skillCount: r.skill_count,
+        // v0.17.0（审查 H11）：真实挂载 id 列表（此前仅旧 skills_json——UI 无法回显"已挂载"）
+        skillIds: JSON.parse(String(r.skill_ids ?? '[]')),
         tools: JSON.parse(String(r.tools_json ?? '[]')),
         enabled: r.enabled === 1,
         custom: r.is_custom === 1
@@ -48,8 +51,11 @@ export function createAgentAdminRouter(db: DatabaseSync): Router {
           tools: z.array(z.string()).default([])
         })
         .parse(req.body)
+      // v0.17.0（审查 H5）：显式 is_custom=1——此前漏写默认 0 → 用户创建的 agent 被判"内置"不可删
       const result = db
-        .prepare('INSERT INTO agent (name, role, system_prompt, tools_json, enabled) VALUES (?, ?, ?, ?, 1)')
+        .prepare(
+          'INSERT INTO agent (name, role, system_prompt, tools_json, enabled, is_custom) VALUES (?, ?, ?, ?, 1, 1)'
+        )
         .run(input.name, input.role, input.systemPrompt, JSON.stringify(input.tools))
       res.status(201).json({ id: Number(result.lastInsertRowid) })
     } catch (err) {
@@ -383,7 +389,7 @@ export function createAgentsRouter(db: DatabaseSync): Router {
 
       // 反 AI 词检测（文风顾问辅助）
       const bound = getBoundStyleRules(db, novelId)
-      const antiAiWords = bound ? extractAntiAiWords(bound.antiAiRules) : []
+      const antiAiWords = bound ? extractAntiAiWordsFromRules(bound.antiAiRules) : []
       const antiAiHits = detectAntiAiHits(chapter.content, antiAiWords)
 
       // 汇总评分（成功维度均值；全失败时 0 并标记）
@@ -440,17 +446,6 @@ export function createAgentsRouter(db: DatabaseSync): Router {
   })
 
   return router
-}
-
-function extractAntiAiWords(rules: string[]): string[] {
-  const words: string[] = []
-  for (const rule of rules) {
-    const m = rule.match(/严禁出现以下词汇\/句式：(.+)/)
-    if (m) {
-      for (const w of m[1].split(/[、，,]/)) words.push(w.trim())
-    }
-  }
-  return words.filter(Boolean)
 }
 
 const JSON_FORMAT = '只输出 JSON，不要任何解释文字或 markdown 代码块标记。'

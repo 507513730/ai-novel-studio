@@ -1,6 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
 import { callLlmJson } from './jsonSafe'
-import { buildFrozenContext } from './context'
 
 // ============================================================
 // P3 拆书工作台（拆书优先，RAG 为可选子项）
@@ -96,7 +95,7 @@ export async function runBookAnalysis(
     | { title: string; framing_json: string; inspiration: string }
     | undefined
   if (!novel) throw new Error('novel not found')
-  const frozen = buildFrozenContext(db, novelId)
+  // v0.17.0（审查 M9）：移除死计算 buildFrozenContext（此前取后仅 void）
 
   // 取正文（按深度限制章节数，控制 token）；P18 D2：带 id + 章节编号供证据引用
   const chapterLimit = depth === 'quick' ? 3 : depth === 'standard' ? 10 : 30
@@ -137,8 +136,6 @@ export async function runBookAnalysis(
     "INSERT INTO book_analysis (novel_id, depth, result_json, status) VALUES (?, ?, ?, 'done')"
   ).run(novelId, depth, JSON.stringify(report))
 
-  void novel
-  void frozen
   return report
 }
 

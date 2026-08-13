@@ -6,6 +6,20 @@ import { useToast } from './Toast'
 // v0.11.0（批C）：方案市场——GitHub 仓库 solutions/ 目录即市场（index.json 索引，raw 拉取）
 const MARKET_INDEX_URL = 'https://raw.githubusercontent.com/507513730/ai-novel-studio/main/solutions/index.json'
 
+// v0.17.0（审查 B22）：外部 fetch 统一 10s 超时（AbortController）——GitHub 被墙/断网时不再无限挂起
+async function fetchWithTimeout(url: string): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 10_000)
+  try {
+    return await fetch(url, { signal: ctrl.signal })
+  } catch (err) {
+    if (ctrl.signal.aborted) throw new Error('请求超时（10s）——请检查网络后重试')
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 interface MarketEntry {
   id: string
   name: string
@@ -38,7 +52,7 @@ export function MarketPanel(): React.JSX.Element {
   const market = useQuery<MarketEntry[]>({
     queryKey: ['market'],
     queryFn: async () => {
-      const res = await fetch(MARKET_INDEX_URL)
+      const res = await fetchWithTimeout(MARKET_INDEX_URL)
       if (!res.ok) throw new Error(`市场索引不可用（HTTP ${res.status}）`)
       return (await res.json()) as MarketEntry[]
     },
@@ -55,7 +69,7 @@ export function MarketPanel(): React.JSX.Element {
   const openDetail = async (entry: MarketEntry): Promise<void> => {
     setDetail({ entry, pack: null, loading: true })
     try {
-      const res = await fetch(`https://raw.githubusercontent.com/507513730/ai-novel-studio/main/solutions/${entry.file}`)
+      const res = await fetchWithTimeout(`https://raw.githubusercontent.com/507513730/ai-novel-studio/main/solutions/${entry.file}`)
       if (!res.ok) throw new Error(`下载失败（HTTP ${res.status}）`)
       setDetail({ entry, pack: (await res.json()) as SolutionPack, loading: false })
     } catch (err) {

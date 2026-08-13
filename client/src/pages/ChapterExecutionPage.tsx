@@ -8,7 +8,7 @@ import { novelEditorTheme } from '../editor/theme'
 import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, automationApi } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
-import type { ChapterSummary } from '../types'
+import type { ChapterSummary, WorldData } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
@@ -99,6 +99,16 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const dirtyRef = useRef(false)
   const streamingRef = useRef(false)
   const generateBusyRef = useRef(false)
+  // v0.17.0（审查 A2）：withBusy 用 ref 做 TOCTOU 守卫（state 更新前双击会双跑）
+  const actionBusyRef = useRef<string | null>(null)
+  // v0.17.0（审查 A5）：快捷键闭包缓存——effect 固定注册，回调始终取最新版函数
+  const latestActionsRef = useRef<{
+    saveContent: () => Promise<void>
+    generate: () => Promise<void>
+    withBusy: (key: string, fn: () => Promise<void> | void) => Promise<void>
+    runReview: () => Promise<void>
+    backfill: () => Promise<void>
+  } | null>(null)
   // P27 0b：应用内输入对话框（替代 window.prompt）
   const { prompt: askChapterTitle, element: chapterPromptElement } = usePrompt()
   // P20（U6）：流式 rAF 合并缓冲
@@ -133,7 +143,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
   // D1：左栏资源树（章节/角色/设定/规则 分组）
   const [resourceTab, setResourceTab] = useState<'chapters' | 'characters' | 'world' | 'rules'>('chapters')
   const [resourceChars, setResourceChars] = useState<Array<{ id: number; name: string; status: string; profile: Record<string, unknown> }> | null>(null)
-  const [resourceWorld, setResourceWorld] = useState<Record<string, unknown> | null>(null)
+  const [resourceWorld, setResourceWorld] = useState<WorldData | null>(null)
   const [resourceRules, setResourceRules] = useState<Array<{ id: number; name: string; features: Array<Record<string, unknown>> }> | null>(null)
   const [resourceDetail, setResourceDetail] = useState<{ title: string; body: string } | null>(null)
   const [resourceLoading, setResourceLoading] = useState(false)
@@ -152,7 +162,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
       } else if (tab === 'world' && !resourceWorld) {
         setResourceLoading(true)
         const r = await novelApi.world(id)
-        setResourceWorld(r.world as unknown as Record<string, unknown>)
+        // v0.17.0（审查 A29）：消除 `as unknown as Record` 双转型——状态直接持 WorldData 类型
+        setResourceWorld(r.world)
       } else if (tab === 'rules' && !resourceRules) {
         setResourceLoading(true)
         const r = await styleApi.list(id)
@@ -241,6 +252,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
       setShowPending(false)
       setCtxSections(null)
       setResourceDetail(null)
+      // v0.17.0（审查 A3）：提示文案写了「Esc 退出」，此前 Esc 并不退出专注模式
+      setFocusMode(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -252,17 +265,18 @@ export function ChapterExecutionPage(): React.JSX.Element {
 
   // A2：Ctrl+S 保存（CodeMirror keymap）+ P22-C4 快捷键（生成/审核/回灌）
   useEffect(() => {
-    // P27 1-9：快捷键迁移到注册表（onShortcut 事件桥，用户可自定义）
+    // v0.17.0（审查 A5）：依赖从 [selectedChapter, content] 改为 []——此前每按一次键都拆装监听；
+    // 回调经 latestActionsRef 恒取最新版闭包（不依赖 effect 重注册）
+    const l = latestActionsRef
     const unsubs = [
-      onShortcut('save', () => void saveContent().catch(() => undefined)),
-      onShortcut('generate', () => void generate()),
-      onShortcut('review', () => void withBusy('review', () => runReview())),
-      onShortcut('backfill', () => void withBusy('backfill', () => backfill())),
+      onShortcut('save', () => void l.current?.saveContent().catch(() => undefined)),
+      onShortcut('generate', () => void l.current?.generate()),
+      onShortcut('review', () => void l.current?.withBusy('review', () => void l.current?.runReview())),
+      onShortcut('backfill', () => void l.current?.withBusy('backfill', () => void l.current?.backfill())),
       onShortcut('focus-mode', () => setFocusMode((v) => !v))
     ]
     return () => unsubs.forEach((u) => u())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChapter, content])
+  }, [])
 
   // A2：失焦自动保存（P9 A6：生成/正文加载中挂起，避免与流式竞态）
   useEffect(() => {
@@ -367,7 +381,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
         {
           onDelta: (text) => {
             // P20（U6）：rAF 合并——每帧只触发一次 setState + 统计（避免高频 delta 全页重渲染）
-            const pending = (pendingDeltaRef.current += text)
+            pendingDeltaRef.current += text
             if (rAFRef.current !== null) return
             rAFRef.current = requestAnimationFrame(() => {
               rAFRef.current = null
@@ -377,8 +391,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
               const total = (editorRef.current?.view?.state.doc.toString() ?? '').length
               // v0.9.0（审查 C）：token 估算传正文文本本身——此前传"字数"的字符串（如 "12345" 数成 5 tokens）
               const t = estimateTokens(editorRef.current?.view?.state.doc.toString() ?? '')
+              // v0.17.0（审查 A27）：删除死代码 `void pending`
               setStreamStat(`已生成 ${total.toLocaleString()} 字 · 约 ${t.toLocaleString()} tokens · ${fmtCost(estimateCost('', t).cost)}`)
-              void pending
             })
           },
           onDone: async (payload) => {
@@ -467,22 +481,31 @@ export function ChapterExecutionPage(): React.JSX.Element {
     if (!window.confirm('用方案步骤接力生产正文（将替换本章内容）？')) return
     setActionError(null)
     setSolutionRunSummary(null)
-    const r = await studioApi.solutionProduceChapter(solutionId, id, selectedChapter)
-    setContent(r.content)
-    savedContentRef.current = r.content
-    dirtyRef.current = false
-    setActionMsg(`方案生产完成：${r.wordCount} 字${r.degraded ? '（部分步骤降级）' : ''}`)
-    setSolutionRunSummary(r.outputs.map((o, i) => `${i + 1}.${o.role}${o.ok ? '' : ' ✗'}`).join(' | '))
-    await invalidate()
+    // v0.17.0（审查 A4）：此前无 try/catch——失败时异常穿透 withBusy 的 finally，按钮卡在 busy 态
+    try {
+      const r = await studioApi.solutionProduceChapter(solutionId, id, selectedChapter)
+      setContent(r.content)
+      savedContentRef.current = r.content
+      dirtyRef.current = false
+      setActionMsg(`方案生产完成：${r.wordCount} 字${r.degraded ? '（部分步骤降级）' : ''}`)
+      setSolutionRunSummary(r.outputs.map((o, i) => `${i + 1}.${o.role}${o.ok ? '' : ' ✗'}`).join(' | '))
+      await invalidate()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   const runSolutionOnChapter = async (): Promise<void> => {
     if (!selectedChapter || !solutionId) return
     setSolutionRunSummary(null)
     setActionError(null)
-    const r = await studioApi.solutionRun(solutionId, id, selectedChapter)
-    setSolutionRunSummary(r.run.degraded ? `⚠ 部分步骤降级\n${r.summary}` : r.summary)
-    setActionMsg(`方案完成${r.run.degraded ? '（部分降级）' : ''}`)
+    try {
+      const r = await studioApi.solutionRun(solutionId, id, selectedChapter)
+      setSolutionRunSummary(r.run.degraded ? `⚠ 部分步骤降级\n${r.summary}` : r.summary)
+      setActionMsg(`方案完成${r.run.degraded ? '（部分降级）' : ''}`)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   const cancelGenerate = (): void => {
@@ -490,12 +513,15 @@ export function ChapterExecutionPage(): React.JSX.Element {
   }
 
   // P9 B1：per-action busy 锁（防重复提交）
-  const withBusy = async (key: string, fn: () => Promise<void>): Promise<void> => {
-    if (actionBusy) return
+  const withBusy = async (key: string, fn: () => Promise<void> | void): Promise<void> => {
+    // v0.17.0（审查 A2）：ref 守卫替代 state——双击同一帧内两次调用此前都能通过 `if (actionBusy)` 检查
+    if (actionBusyRef.current) return
+    actionBusyRef.current = key
     setActionBusy(key)
     try {
       await fn()
     } finally {
+      actionBusyRef.current = null
       setActionBusy(null)
     }
   }
@@ -551,6 +577,11 @@ export function ChapterExecutionPage(): React.JSX.Element {
       setActionError(err instanceof Error ? err.message : String(err))
     }
   }
+
+  // v0.17.0（审查 A5）：每渲染刷新快捷键闭包缓存（effect 固定注册仍取最新实现）
+  useEffect(() => {
+    latestActionsRef.current = { saveContent, generate, withBusy, runReview, backfill }
+  })
 
   const loadPending = async (): Promise<void> => {
     try {
@@ -810,7 +841,16 @@ export function ChapterExecutionPage(): React.JSX.Element {
             {resourceChars?.map((c) => (
               <div
                 key={c.id}
+                // v0.17.0（审查 A21）：可点击 div 补键盘可达（参考 ChapterListItem 模式）
+                role="button"
+                tabIndex={0}
                 onClick={() => setResourceDetail({ title: c.name, body: Object.entries(c.profile).map(([k, v]) => `${k}：${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join('\n') })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setResourceDetail({ title: c.name, body: Object.entries(c.profile).map(([k, v]) => `${k}：${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join('\n') })
+                  }
+                }}
                 style={{ padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'var(--bg-card)' }}
               >
                 {c.name}
@@ -832,9 +872,20 @@ export function ChapterExecutionPage(): React.JSX.Element {
                 <button className="sm ml-2" onClick={() => void loadResourceTab('world')}>重试</button>
               </div>
             )}
-            {resourceWorld && Object.entries((resourceWorld as { manual?: Record<string, string> }).manual ?? {}).map(([k, v]) => (
-              <div key={k} onClick={() => setResourceDetail({ title: k, body: String(v) })} style={{ padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'var(--bg-card)' }}>
-                {k}
+            {resourceWorld && Object.entries(resourceWorld.manual ?? {}).map(([k, v]) => (
+              <div
+                key={k}
+                role="button"
+                tabIndex={0}
+                onClick={() => setResourceDetail({ title: k, body: String(v) })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setResourceDetail({ title: k, body: String(v) })
+                  }
+                }}
+                style={{ padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'var(--bg-card)' }}
+              >                {k}
               </div>
             ))}
             {resourceWorld === null && !resourceLoading && !resourceError && (
@@ -855,7 +906,15 @@ export function ChapterExecutionPage(): React.JSX.Element {
             {resourceRules?.map((r) => (
               <div
                 key={r.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setResourceDetail({ title: r.name, body: (r.features as Array<Record<string, unknown>>).map((f) => `✓ ${String(f.name)}：${String(f.description ?? '')}`).join('\n') })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setResourceDetail({ title: r.name, body: (r.features as Array<Record<string, unknown>>).map((f) => `✓ ${String(f.name)}：${String(f.description ?? '')}`).join('\n') })
+                  }
+                }}
                 style={{ padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'var(--bg-card)' }}
               >
                 {r.name}
@@ -1400,7 +1459,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
                     <input
                       type="checkbox"
                       checked={ctxToggles[s.key] ?? true}
-                      onChange={() => setCtxToggles((prev) => ({ ...prev!, [s.key]: !(prev![s.key] ?? true) }))}
+                      // v0.17.0（审查 A28）：消除 `prev!` 非空断言（面板渲染前已保证非空，仍做兜底）
+                      onChange={() => setCtxToggles((prev) => ({ ...(prev ?? {}), [s.key]: !(prev?.[s.key] ?? true) }))}
                     />
                     {s.key}
                   </span>

@@ -156,10 +156,13 @@ export async function runSolutionById(
     if (opts.signal?.aborted) break
     const step = solution.steps[i]
     const t0 = Date.now()
-    // 条件分支（P21-5c 预留：仅支持对上一步输出长度判断）
+    // 条件分支（P21-5c 预留：支持对上一步输出字段长度判断）
     if (step.if && outputs.length > 0) {
       const last = outputs[outputs.length - 1]
-      const val = last.output.length
+      // v0.17.0（审查 M12）：消费 field（默认 output 字符串长度；其他字段取数值/长度）——此前声明但恒用 output
+      const field = step.if.field ?? 'output'
+      const raw = field === 'output' ? last.output : String((last as unknown as Record<string, unknown>)[field] ?? '')
+      const val = field === 'output' ? raw.length : Number(raw) || String(raw).length
       const { op, value } = step.if
       const hit = op === '<' ? val < value : op === '>' ? val > value : val === value
       if (!hit) {

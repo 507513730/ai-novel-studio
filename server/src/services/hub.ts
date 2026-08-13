@@ -150,13 +150,25 @@ function toolsFor(_db: DatabaseSync): HubTool[] {
           | { id: number; title: string }
           | undefined
         if (!ch) return JSON.stringify({ error: `章节 ${chapterId} 不存在` })
-        const result = await generateChapter(db2, novelId, chapterId)
-        return JSON.stringify({
-          chapter: ch.title,
-          wordCount: result.wordCount,
-          ok: result.wordCount > 200,
-          note: result.aborted ? '生成被中止' : '生成完成'
-        })
+        try {
+          // v0.17.0（审查 H4）：超时经 AbortSignal 真实中断生成请求（僵尸请求不再继续烧 token）
+          const result = (await runToolWithSignal(
+            (signal) => generateChapter(db2, novelId, chapterId, { signal }),
+            TOOL_TIMEOUT_MS
+          )) as { wordCount: number; aborted: boolean }
+          return JSON.stringify({
+            chapter: ch.title,
+            wordCount: result.wordCount,
+            ok: result.wordCount > 200,
+            note: result.aborted ? '生成被中止' : '生成完成'
+          })
+        } catch (err) {
+          // v0.17.0（审查 H4）：失败复位（generateChapter 已自复位，此处双保险防绕过）
+          db2.prepare(
+            "UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'generating'"
+          ).run(chapterId)
+          return JSON.stringify({ error: `生成失败: ${err instanceof Error ? err.message : String(err)}` })
+        }
       }
     },
     {
@@ -337,6 +349,17 @@ const TOOL_TIMEOUT_MS = 150_000
 // P20（M5）：同一小说会话串行锁（并发 chat 请求排队，消息流不穿插）
 const sessionLocks = new Set<number>()
 
+// v0.17.0（审查 H4）：生成类工具超时——abort 工厂式，真实中断底层 LLM 请求（Promise.race 只 reject 不取消，僵尸请求继续烧 token）
+function runToolWithSignal(
+  fn: (signal: AbortSignal) => Promise<unknown>,
+  ms: number
+): Promise<unknown> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), ms)
+  return fn(ctrl.signal).finally(() => clearTimeout(timer))
+}
+
+// 非生成类工具（本地/快速）：Promise.race 兜底超时（无底层请求可中断）
 async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {

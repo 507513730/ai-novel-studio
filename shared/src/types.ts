@@ -55,15 +55,16 @@ export const modelRouteSchema = z.object({
 })
 export type ModelRoute = z.infer<typeof modelRouteSchema>
 
+// v0.17.0（审查 M4）：REST 契约统一 camelCase（此前 snake_case 直出违反 #20）
 export const usageGroupSchema = z.object({
-  task_type: z.string(),
+  taskType: z.string(),
   provider: z.string(),
   model: z.string(),
   calls: z.number(),
-  input_tokens: z.number(),
-  output_tokens: z.number(),
-  cache_hit: z.number(),
-  cache_miss: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheHits: z.number(),
+  cacheMisses: z.number(),
   cost: z.number(),
   degraded: z.number()
 })
@@ -71,10 +72,10 @@ export type UsageGroup = z.infer<typeof usageGroupSchema>
 
 export const usageTotalSchema = z.object({
   calls: z.number(),
-  input_tokens: z.number(),
-  output_tokens: z.number(),
-  cache_hit: z.number(),
-  cache_miss: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheHits: z.number(),
+  cacheMisses: z.number(),
   cost: z.number()
 })
 export type UsageTotal = z.infer<typeof usageTotalSchema>

@@ -5,6 +5,15 @@ import { directorProgress } from '../services/director'
 import { hubChat } from '../services/hub'
 import { enqueueDirectorJob } from '../services/jobQueue'
 
+/** v0.17.0（LOW）：安全 JSON 解析（损坏数据兜底） */
+function safeParseJson(v: unknown): unknown {
+  try {
+    return JSON.parse(String(v ?? '')) 
+  } catch {
+    return {}
+  }
+}
+
 export function createJobsRouter(db: DatabaseSync): Router {
   const router = Router()
 
@@ -19,8 +28,9 @@ export function createJobsRouter(db: DatabaseSync): Router {
         type: r.type,
         status: r.status,
         progress: r.progress,
-        payload: JSON.parse(String(r.payload_json ?? '{}')),
-        result: JSON.parse(String(r.result_json ?? '{}')),
+        // v0.17.0（LOW）：JSON.parse 兜底（损坏 payload 不炸整个任务列表）
+        payload: safeParseJson(r.payload_json),
+        result: safeParseJson(r.result_json),
         error: r.error,
         createdAt: r.created_at
       }))
@@ -52,8 +62,8 @@ export function createJobsRouter(db: DatabaseSync): Router {
         type: row.type,
         status: row.status,
         progress: row.progress,
-        payload: JSON.parse(String(row.payload_json ?? '{}')),
-        result: JSON.parse(String(row.result_json ?? '{}')),
+        payload: safeParseJson(row.payload_json),
+        result: safeParseJson(row.result_json),
         error: row.error,
         createdAt: row.created_at
       }
@@ -148,15 +158,6 @@ export function createAutomationRouter(db: DatabaseSync): Router {
   router.post('/:novelId/director/resume', (req, res, next) => {
     try {
       const novelId = Number(req.params.novelId)
-      const existing = db
-        .prepare(
-          "SELECT id FROM job WHERE type = 'director' AND status IN ('queued','running') AND json_extract(payload_json, '$.novelId') = ?"
-        )
-        .get(novelId) as { id: number } | undefined
-      if (existing) {
-        res.status(409).json({ error: '导演任务已在运行中' })
-        return
-      }
       const task = directorProgress(db, novelId)
       if (!task) {
         res.status(404).json({ error: '没有导演任务，先 run' })
@@ -164,11 +165,20 @@ export function createAutomationRouter(db: DatabaseSync): Router {
       }
       // P2.2 🟡10：resume 保留用户配置的 chaptersPerVolume（不再硬编码 20）
       const chaptersPerVolume = task.checkpoint.chaptersPerVolume ?? 20
+      // v0.17.0（审查 M14）：原子入队（INSERT ... WHERE NOT EXISTS 替代 SELECT→INSERT 的 TOCTOU）
       const result = db
         .prepare(
-          "INSERT INTO job (type, status, progress, payload_json) VALUES ('director', 'queued', 0, ?)"
+          `INSERT INTO job (type, status, progress, payload_json)
+           SELECT 'director', 'queued', 0, ?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM job WHERE type = 'director' AND status IN ('queued','running') AND json_extract(payload_json, '$.novelId') = ?
+           )`
         )
-        .run(JSON.stringify({ novelId, mode: task.mode, chaptersPerVolume }))
+        .run(JSON.stringify({ novelId, mode: task.mode, chaptersPerVolume }), novelId)
+      if (Number(result.changes) === 0) {
+        res.status(409).json({ error: '导演任务已在运行中' })
+        return
+      }
       res.status(201).json({ jobId: Number(result.lastInsertRowid), resumedFrom: task.checkpoint.displayStatus })
     } catch (err) {
       next(err)

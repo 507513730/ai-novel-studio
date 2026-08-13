@@ -46,13 +46,12 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<unknow
   return body
 }
 
-const base = getApiBaseUrl
-
 async function j<T>(path: string, init?: RequestInit, timeout = DEFAULT_TIMEOUT): Promise<T> {
-  const res = await fetch(`${base()}${path}`, {
-    headers: authHeaders(),
-    signal: init?.signal ?? AbortSignal.timeout(timeout),
-    ...init
+  // v0.17.0（审查 A1/A26）：合并 headers 而非被 `...init` 覆盖（丢 X-App-Token/Content-Type）；去掉无意义别名
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
+    ...init,
+    headers: { ...authHeaders(), ...(init?.headers ?? {}) },
+    signal: init?.signal ?? AbortSignal.timeout(timeout)
   })
   const body = (await res.json().catch(() => null)) as { error?: string } | null
   if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`)
@@ -84,7 +83,7 @@ export const novelApi = {
   macro: (id: number): Promise<{ macro: Record<string, unknown> }> =>
     js(`/novels/${id}/macro`, { method: 'POST' }),
   exportUrl: (id: number, format: 'txt' | 'md' | 'epub'): string =>
-    `${base()}/novels/${id}/export?format=${format}`,
+    `${getApiBaseUrl()}/novels/${id}/export?format=${format}`,
 
   // P11-3：流派管理
   genres: (novelId?: number): Promise<{ genres: Array<{ id: number; name: string; novelId: number | null; custom: boolean }> }> =>
@@ -346,7 +345,7 @@ export const resourcesApi = {
 }
 
 export const agentsApi = {
-  list: (): Promise<{ agents: Array<{ id: number; name: string; role: string; systemPrompt: string; description: string; bodyMd: string; skills: string[]; skillCount: number; enabled: boolean; custom: boolean }> }> =>
+  list: (): Promise<{ agents: Array<{ id: number; name: string; role: string; systemPrompt: string; description: string; bodyMd: string; skills: string[]; skillCount: number; skillIds: number[]; enabled: boolean; custom: boolean }> }> =>
     j('/agents'),
   create: (body: { name: string; role?: string; systemPrompt: string }): Promise<{ id: number }> =>
     j('/agents', { method: 'POST', body: JSON.stringify(body) }),
@@ -387,7 +386,7 @@ export async function generateChapterSse(
   let accumulated = ''
   let res: Response
   try {
-    res = await fetch(`${base()}/novels/${novelId}/chapters/${chapterId}/generate${params}`, {
+    res = await fetch(`${getApiBaseUrl()}/novels/${novelId}/chapters/${chapterId}/generate${params}`, {
       method: 'POST',
       headers: authHeaders(),
       signal,

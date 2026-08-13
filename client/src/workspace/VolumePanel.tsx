@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -57,8 +57,13 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
   }
 
   const patchChapter = async (chapterId: number, patch: Record<string, unknown>): Promise<void> => {
-    await novelApi.chapterPatch(novelId, chapterId, patch)
-    await inval()
+    // v0.17.0（审查 A10）：try/catch——此前失败为未处理 rejection（ChapterRow onPatch 无兜底）
+    try {
+      await novelApi.chapterPatch(novelId, chapterId, patch)
+      await inval()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   return (
@@ -138,17 +143,19 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
                 <button onClick={() => setExpandedVol(expandedVol === v.id ? null : v.id)}>
                   {expandedVol === v.id ? '收起' : '展开'}
                 </button>
-                <button onClick={() => void run(`genbeats-${v.id}`, () => novelApi.beatsGenerate(novelId, v.id))}>
+                {/* v0.17.0（审查 A10）：每卷操作按钮加 busy 门控——此前可连点并发 */}
+                <button disabled={busy !== null} onClick={() => void run(`genbeats-${v.id}`, () => novelApi.beatsGenerate(novelId, v.id))}>
                   {busy === `genbeats-${v.id}` ? '生成中…' : '生成节奏板'}
                 </button>
-                <button onClick={() => void run(`critique-${v.id}`, () => novelApi.volumeCritique(novelId, v.id))}>
+                <button disabled={busy !== null} onClick={() => void run(`critique-${v.id}`, () => novelApi.volumeCritique(novelId, v.id))}>
                   {busy === `critique-${v.id}` ? '评审中…' : '评审卷战略'}
                 </button>
-                <button onClick={() => void run(`genchapters-${v.id}`, () => novelApi.chaptersGenerate(novelId, v.id))}>
+                <button disabled={busy !== null} onClick={() => void run(`genchapters-${v.id}`, () => novelApi.chaptersGenerate(novelId, v.id))}>
                   {busy === `genchapters-${v.id}` ? '生成中…' : '生成章节清单'}
                 </button>
                 <button
                   className="danger"
+                  disabled={busy !== null}
                   onClick={() => {
                     if (window.confirm(`确定删除卷「${v.title || `第 ${v.id} 卷`}」？卷下章节与节奏板将被移除，该操作不可恢复。`)) {
                       void run(`delvol-${v.id}`, () => novelApi.volumeDelete(novelId, v.id))
@@ -263,6 +270,8 @@ function ChapterRow({
 }): React.JSX.Element {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(chapter.title)
+  // v0.17.0（审查 A10）：Enter 提交后 blur 双发去重（参考 ChapterExecutionPage titleSubmittedRef 模式）
+  const titleSubmittedRef = useRef(false)
   const statusLabel: Record<string, string> = {
     planned: '已规划',
     refined: '已细化',
@@ -282,11 +291,19 @@ function ChapterRow({
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={() => {
+              // v0.17.0（审查 A10）：Enter 已提交则跳过 blur 双发
+              if (titleSubmittedRef.current) {
+                titleSubmittedRef.current = false
+                return
+              }
               onPatch({ title: titleDraft })
               setEditingTitle(false)
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
+                // v0.17.0（审查 A10）：先置位再 blur——blur 同步触发 onBlur 时靠标记跳过双发
+                titleSubmittedRef.current = true
+                e.currentTarget.blur()
                 onPatch({ title: titleDraft })
                 setEditingTitle(false)
               }

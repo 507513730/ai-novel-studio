@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, Plus, Pencil, Trash2, Sparkles, Power } from 'lucide-react'
 import { agentsApi, studioApi, apiFetch } from '../api'
@@ -19,6 +19,7 @@ interface AgentRow {
   bodyMd: string
   skills: string[]
   skillCount: number
+  skillIds: number[]
   enabled: boolean
   custom: boolean
 }
@@ -36,11 +37,32 @@ export function AgentsLibraryPage(): React.JSX.Element {
   const skillList = (skills.data?.skills ?? []) as Array<{ id: number; name: string; description: string }>
   const [selectedSkills, setSelectedSkills] = useState<Record<number, Set<number>>>({})
 
+  // v0.17.0（审查 H11）：从服务端 skillIds 初始化挂载态（此前恒空 → 技能恒显"未附加"）
+  useEffect(() => {
+    const list = agents.data?.agents ?? []
+    if (list.length === 0) return
+    const init: Record<number, Set<number>> = {}
+    for (const a of list as AgentRow[]) {
+      init[a.id] = new Set(a.skillIds ?? [])
+    }
+    setSelectedSkills(init)
+  }, [agents.data])
+
   const inval = (): void => void queryClient.invalidateQueries({ queryKey: ['agents'] })
 
   const patch = async (id: number, body: Record<string, unknown>): Promise<void> => {
-    await agentsApi.patch(id, body)
-    inval()
+    // v0.17.0（审查 A17）：patch 设 busy——此前无门控，连点启停可并发；失败上抛由调用方区分提示
+    setBusy(true)
+    setError(null)
+    try {
+      await agentsApi.patch(id, body)
+      inval()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      throw err
+    } finally {
+      setBusy(false)
+    }
   }
 
   const toggleSkill = async (agentId: number, skillId: number, on: boolean): Promise<void> => {
@@ -93,10 +115,13 @@ export function AgentsLibraryPage(): React.JSX.Element {
           text: `${name}：请根据其角色定位起草结构化定义（核心职责/质量标准/创作原则）。`,
           title: name
         })
-      }).catch(() => null)
+      })
       toast('info', 'AI 起草需要更精确的输入——请手动编辑 body_md（参考内置智能体格式）')
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      // v0.17.0（审查 A17）：此前 `.catch(() => null)` 吞掉真实错误并恒弹固定文案
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg)
+      toast('error', `AI 起草失败：${msg}`)
     } finally {
       setBusy(false)
     }
@@ -133,7 +158,7 @@ export function AgentsLibraryPage(): React.JSX.Element {
                   <button
                     className="sm"
                     disabled={busy}
-                    onClick={() => void patch(a.id, { enabled: !a.enabled }).then(() => toast('ok', a.enabled ? '已停用' : '已启用'))}
+                    onClick={() => void patch(a.id, { enabled: !a.enabled }).then(() => toast('ok', a.enabled ? '已停用' : '已启用')).catch(() => undefined)}
                   >
                     <Power size={12} className="icon-gap" />{a.enabled ? '停用' : '启用'}
                   </button>

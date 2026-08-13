@@ -44,12 +44,19 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
     }
   }
 
+  // v0.17.0（审查 A11）：启停 busy 门控——防连点重复 patch
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+
   const toggleAgent = async (id: number, enabled: boolean): Promise<void> => {
+    if (togglingId !== null) return
+    setTogglingId(id)
     try {
       await agentsApi.patch(id, { enabled: !enabled })
       await agents.refetch()
     } catch (e) {
       setError(err(e))
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -197,8 +204,8 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
                   {a.systemPrompt}
                 </p>
                 <div className="row mt-2">
-                  <button className='sm' onClick={() => void toggleAgent(a.id, a.enabled)}>
-                    {a.enabled ? '停用' : '启用'}
+                  <button className='sm' disabled={togglingId !== null} onClick={() => void toggleAgent(a.id, a.enabled)}>
+                    {togglingId === a.id ? '切换中…' : a.enabled ? '停用' : '启用'}
                   </button>
                   <button className='sm' onClick={() => setExpandedPrompt(expandedPrompt === a.id ? null : a.id)}>
                     {expandedPrompt === a.id ? '收起' : '展开提示词'}

@@ -21,12 +21,16 @@ export function ConstraintPanel({ novelId }: Props): React.JSX.Element {
   const [text, setText] = useState('')
   const [level, setLevel] = useState<'must' | 'should'>('must')
   const [canonName, setCanonName] = useState('')
+  // v0.17.0（审查 A13）：保存失败提示（此前 mutateAsync 无 catch → unhandledrejection）
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const save = useMutation({
     mutationFn: (list: NovelConstraint[]) => novelApi.patch(novelId, { constraints: list }),
     onSuccess: () => {
+      setSaveError(null)
       void qc.invalidateQueries({ queryKey: ['novel', novelId] })
-    }
+    },
+    onError: (err) => setSaveError(err instanceof Error ? err.message : String(err))
   })
 
   const list: NovelConstraint[] = novel?.novel?.constraints ?? []
@@ -51,11 +55,14 @@ export function ConstraintPanel({ novelId }: Props): React.JSX.Element {
   }
 
   const update = (c: NovelConstraint, patch: Partial<NovelConstraint>): void => {
-    void save.mutateAsync(list.map((x) => (x.id === c.id ? { ...x, ...patch } : x)))
+    // v0.17.0（审查 A13）：pending 守卫——进行中不再追加并发请求
+    if (pending) return
+    void save.mutateAsync(list.map((x) => (x.id === c.id ? { ...x, ...patch } : x))).catch(() => undefined)
   }
 
   const remove = (id: string): void => {
-    void save.mutateAsync(list.filter((x) => x.id !== id))
+    if (pending) return
+    void save.mutateAsync(list.filter((x) => x.id !== id)).catch(() => undefined)
   }
 
   return (
@@ -68,6 +75,11 @@ export function ConstraintPanel({ novelId }: Props): React.JSX.Element {
         这里维护你强调的创作事项——主角名、叙事红线、禁写内容等。硬约束会注入导演 / 方案 / 章节生成 / 自动修复全链路，
         并在产出后自动校验修正（吸取教训：主角名曾漂移成 3 个名字）。
       </p>
+      {saveError && (
+        <p className="muted t-small" style={{ color: 'var(--danger)', margin: '0 0 8px' }}>
+          保存失败：{saveError}
+        </p>
+      )}
 
       {/* 新增 */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>

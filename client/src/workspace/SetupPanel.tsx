@@ -73,6 +73,8 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
   }
 
   const genTitles = async (direction: unknown): Promise<void> => {
+    // v0.17.0（审查 A14）：已有任务进行中则跳过——此前无条件 setBusy('titles') 会覆盖并发的 directions 任务
+    if (busy) return
     setBusy('titles')
     setError(null)
     try {
@@ -109,7 +111,10 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
                 style={{
                   background: 'var(--bg-card)',
                   borderColor: selectedDirection === d.id ? 'var(--accent)' : 'var(--border)',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  // v0.17.0（审查 A14）：进行中禁点方向卡（防并发 titles 覆盖 busy）
+                  opacity: busy !== null ? 0.6 : 1,
+                  pointerEvents: busy !== null ? 'none' : 'auto'
                 }}
                 onClick={() => {
                   setSelectedDirection(d.id)

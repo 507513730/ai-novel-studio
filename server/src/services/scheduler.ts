@@ -197,6 +197,10 @@ export function startScheduler(db: DatabaseSync, intervalMs = 1500): void {
   db.prepare(
     "UPDATE job SET status = 'queued', updated_at = datetime('now') WHERE status = 'running'"
   ).run()
+  // v0.17.0（审查 H3）：遗留 generating 章节同样重置（此前只重置 job——章节永久拒生成）
+  db.prepare(
+    "UPDATE chapter SET status = 'planned', updated_at = datetime('now') WHERE status = 'generating'"
+  ).run()
   if (timer) clearInterval(timer)
   timer = setInterval(tick, intervalMs)
   // 立即跑一次，处理遗留 queued 任务（重启恢复）

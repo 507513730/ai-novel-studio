@@ -26,10 +26,32 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
   const [extTitle, setExtTitle] = useState('')
   const [extContent, setExtContent] = useState('')
 
-  const assets = useQuery({
+  const assets = useQuery<{ assets: Array<{ id: number; name: string; features: Feature[]; antiAiWords: string[]; createdAt: string }> }>({
     queryKey: ['style', novelId],
-    queryFn: () => styleApi.list(novelId)
+    // v0.17.0（审查 A32）：查询泛型给 Feature[]，并在边界做字段归一（消除双转型 + 形状校验）
+    queryFn: async () => {
+      const r = await styleApi.list(novelId)
+      return {
+        assets: r.assets.map((a) => ({
+          id: a.id,
+          name: a.name,
+          antiAiWords: a.antiAiWords,
+          createdAt: a.createdAt,
+          features: (a.features ?? []).map((f) => ({
+            id: String(f.id),
+            name: String(f.name),
+            description: String(f.description ?? ''),
+            enabled: Boolean(f.enabled),
+            category: String(f.category ?? '')
+          }))
+        }))
+      }
+    }
   })
+
+  // v0.17.0（审查 A12）：检测/注入各自 busy 门控（参考 extract/trial 模式）
+  const [checkBusy, setCheckBusy] = useState(false)
+  const [extBusy, setExtBusy] = useState(false)
 
   const err = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -106,12 +128,16 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
   }
 
   const check = async (): Promise<void> => {
-    if (!checkText.trim()) return
+    if (!checkText.trim() || checkBusy) return
+    setCheckBusy(true)
+    setError(null)
     try {
       const r = await styleApi.antiAiCheck(novelId, checkText)
       setCheckResult(r)
     } catch (e) {
       setError(err(e))
+    } finally {
+      setCheckBusy(false)
     }
   }
 
@@ -120,6 +146,9 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
       setError('外部资料标题必填，内容至少 50 字')
       return
     }
+    if (extBusy) return
+    setExtBusy(true)
+    setError(null)
     try {
       const r = await styleApi.external(novelId, extTitle.trim(), extContent.trim())
       setMsg(`外部资料已注入（kbDocId=${r.kbDocId}），下次生成正文时直塞生效`)
@@ -127,6 +156,8 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
       setExtContent('')
     } catch (e) {
       setError(err(e))
+    } finally {
+      setExtBusy(false)
     }
   }
 
@@ -169,7 +200,8 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
                 <span className="muted t-small">{a.createdAt}</span>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {(a.features as unknown as Feature[]).map((f) => (
+                {/* v0.17.0（审查 A32）：查询泛型直接给 Feature[]——消除双重转型 */}
+                {a.features.map((f) => (
                   <button
                     key={f.id}
                     title={f.description}
@@ -180,7 +212,7 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
                       borderColor: f.enabled ? 'var(--accent)' : 'var(--border)',
                       color: f.enabled ? 'var(--accent)' : 'var(--text-dim)'
                     }}
-                    onClick={() => void toggleFeature(a.id, a.features as unknown as Feature[], f.id)}
+                    onClick={() => void toggleFeature(a.id, a.features, f.id)}
                   >
                     {f.enabled ? '✓ ' : ''}{f.name}
                   </button>
@@ -226,7 +258,7 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
             value={checkText}
             onChange={(e) => setCheckText(e.target.value)}
           />
-          <button onClick={() => void check()}>检测</button>
+          <button disabled={checkBusy} onClick={() => void check()}>{checkBusy ? '检测中…' : '检测'}</button>
         </div>
         {checkResult && (
           <div className="t-small">
@@ -252,7 +284,7 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
             value={extTitle}
             onChange={(e) => setExtTitle(e.target.value)}
           />
-          <button className="primary" onClick={() => void addExternal()}>注入资料</button>
+          <button className="primary" disabled={extBusy} onClick={() => void addExternal()}>{extBusy ? '注入中…' : '注入资料'}</button>
         </div>
         <textarea
           style={{ width: '100%', minHeight: 80, background: 'var(--bg-card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, fontFamily: 'inherit', fontSize: 13 }}

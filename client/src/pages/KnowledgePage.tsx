@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, Trash2 } from 'lucide-react'
 import { resourcesApi, assetsApi } from '../api'
@@ -13,14 +14,21 @@ export function KnowledgePage(): React.JSX.Element {
 
   const docs = useQuery({ queryKey: ['knowledge'], queryFn: resourcesApi.knowledge })
 
+  // v0.17.0（审查 A37）：确认后加 busy——防连点重复删除
+  const [busy, setBusy] = useState(false)
+
   const remove = async (id: number): Promise<void> => {
     if (!window.confirm('删除该文档？')) return
+    if (busy) return
+    setBusy(true)
     try {
       await resourcesApi.knowledgeDelete(id)
       toast('ok', '已删除')
       void queryClient.invalidateQueries({ queryKey: ['knowledge'] })
     } catch (err) {
       toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -66,7 +74,7 @@ export function KnowledgePage(): React.JSX.Element {
                   {statusLabel[d.status] ?? d.status}
                 </span>
                 <button className="sm" onClick={() => d.novelId > 0 && navigate(`/novels/${d.novelId}`)}>去书</button>
-                <button className="sm danger" onClick={() => void remove(d.id)}><Trash2 size={12} /></button>
+                <button className="sm danger" disabled={busy} onClick={() => void remove(d.id)}><Trash2 size={12} /></button>
               </div>
             </div>
           </div>

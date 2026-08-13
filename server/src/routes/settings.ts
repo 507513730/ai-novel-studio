@@ -290,9 +290,9 @@ export function createSettingsRouter(db: DatabaseSync): Router {
     const from = req.query.from ? String(req.query.from) : null
     const to = req.query.to ? String(req.query.to) : null
 
-    let sql = `SELECT task_type, provider, model, COUNT(*) AS calls,
-                      SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens,
-                      SUM(cache_hit) AS cache_hit, SUM(cache_miss) AS cache_miss,
+    let sql = `SELECT task_type AS taskType, provider, model, COUNT(*) AS calls,
+                      SUM(input_tokens) AS inputTokens, SUM(output_tokens) AS outputTokens,
+                      SUM(cache_hit) AS cacheHits, SUM(cache_miss) AS cacheMisses,
                       SUM(cost_estimate) AS cost, SUM(degraded) AS degraded
                FROM usage_log WHERE 1=1`
     const params: Array<number | string> = []
@@ -315,6 +315,7 @@ export function createSettingsRouter(db: DatabaseSync): Router {
     sql += ' GROUP BY task_type, provider, model ORDER BY cost DESC'
 
     // v0.16.0：成本统一人民币显示（内部 USD，按汇率换算输出 CNY）
+    // v0.17.0（审查 M3/M4）：DAO 边界统一 camelCase（此前 snake_case 直出违反 #20）
     const rate = getExchangeRate(db)
     const groups = (db.prepare(sql).all(...params) as Array<Record<string, number>>).map((g) => ({
       ...g,
@@ -323,10 +324,10 @@ export function createSettingsRouter(db: DatabaseSync): Router {
     const total = db
       .prepare(
         `SELECT COUNT(*) AS calls,
-                COALESCE(SUM(input_tokens),0) AS input_tokens,
-                COALESCE(SUM(output_tokens),0) AS output_tokens,
-                COALESCE(SUM(cache_hit),0) AS cache_hit,
-                COALESCE(SUM(cache_miss),0) AS cache_miss,
+                COALESCE(SUM(input_tokens),0) AS inputTokens,
+                COALESCE(SUM(output_tokens),0) AS outputTokens,
+                COALESCE(SUM(cache_hit),0) AS cacheHits,
+                COALESCE(SUM(cache_miss),0) AS cacheMisses,
                 COALESCE(SUM(cost_estimate),0) AS cost
          FROM usage_log`
       )

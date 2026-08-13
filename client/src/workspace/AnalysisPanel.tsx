@@ -57,7 +57,10 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
     setError(null)
     try {
       const r = await analysisApi.run(novelId, depth)
-      setReport(r.report as AnalysisResult)
+      // v0.17.0（审查 A31）：未校验 cast——先验对象形状再落地，形状异常报错而非渲染炸裂
+      const rep = r.report as AnalysisResult | null
+      if (!rep || typeof rep !== 'object') throw new Error('拆书结果格式异常')
+      setReport(rep)
       setMsg(`拆书完成（${depth} 档）`)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -114,7 +117,8 @@ export function AnalysisPanel({ novelId }: { novelId: number }): React.JSX.Eleme
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setBusy(false)
+      // v0.17.0（审查 H10）：此前误调 setBusy → mergeBusy 永不清零 → 按钮永久禁用
+      setMergeBusy(false)
     }
   }
 

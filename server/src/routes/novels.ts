@@ -16,29 +16,12 @@ interface DirectionScheme {
   readerFeeling: string
 }
 
-function parseDirections(obj: unknown): Array<{ id: string; scheme: DirectionScheme }> | null {
-  if (!obj || typeof obj !== 'object') return null
-  const arr = (obj as { directions?: unknown }).directions
-  if (!Array.isArray(arr) || arr.length === 0) return null
-  const out: Array<{ id: string; scheme: DirectionScheme }> = []
-  for (let i = 0; i < arr.length; i++) {
-    const d = arr[i] as Partial<DirectionScheme>
-    if (!d.title || !d.sellingPoint || !d.genre) return null
-    out.push({
-      id: `d${i + 1}`,
-      scheme: {
-        title: String(d.title),
-        sellingPoint: String(d.sellingPoint),
-        genre: String(d.genre ?? ''),
-        coreSetting: String(d.coreSetting ?? ''),
-        mainline: String(d.mainline ?? ''),
-        first30: String(d.first30 ?? ''),
-        readerFeeling: String(d.readerFeeling ?? '')
-      }
-    })
-  }
-  return out
-}
+// v0.17.0（审查 M7）：解析统一使用 planner.ts（此前本地副本与 planner 漂移：≥1 vs ≥2）
+// 类型适配：planner 返回 scheme 为 Record，按 DirectionScheme 消费
+import { parseDirections as plannerParseDirections } from '../services/planner'
+const parseDirections = plannerParseDirections as unknown as (
+  obj: unknown
+) => Array<{ id: string; scheme: DirectionScheme }> | null
 
 function parseTitles(obj: unknown): string[] | null {
   if (!obj || typeof obj !== 'object') return null
@@ -46,6 +29,15 @@ function parseTitles(obj: unknown): string[] | null {
   if (!Array.isArray(arr) || arr.length === 0) return null
   const titles = arr.map((t) => String((t as { title?: unknown }).title ?? '')).filter(Boolean)
   return titles.length > 0 ? titles : null
+}
+
+export // v0.17.0（LOW）：安全 JSON 解析（损坏数据兜底返回默认形状）
+function safeParseJson(v: unknown, fallback: unknown = null): unknown {
+  try {
+    return JSON.parse(String(v ?? ''))
+  } catch {
+    return fallback
+  }
 }
 
 export function createNovelsRouter(db: DatabaseSync): Router {
@@ -120,14 +112,16 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         inspiration: row.inspiration,
         status: row.status,
         genre: row.genre,
-        direction: JSON.parse(String(row.direction_json ?? '[]')),
-        titleGroup: JSON.parse(String(row.title_group_json ?? '[]')),
-        framing: JSON.parse(String(row.framing_json ?? '{}')),
+        // v0.17.0（LOW）：safeParseJson 兜底（损坏 JSON 不炸详情页）
+        direction: safeParseJson(row.direction_json),
+        titleGroup: safeParseJson(row.title_group_json),
+        framing: safeParseJson(row.framing_json),
         guidance: String(row.guidance ?? ''),
         // v0.9.0（审查 #13）：绑定值回传（此前 GET 不回传，UI 无法回显绑定状态）
         currentSolutionId: row.current_solution_id ?? null,
         // v0.15.0：创作约束回传（工作区「创作约束」tab 维护）
-        constraints: JSON.parse(String(row.constraints_json ?? '[]')),
+        // v0.17.0（LOW）：safeParseJson 兜底（损坏 JSON 不炸详情页）
+        constraints: safeParseJson(row.constraints_json),
         charactersCount: counts.characters,
         volumesCount: counts.volumes,
         chaptersCount: counts.chapters,

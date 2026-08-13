@@ -14,11 +14,14 @@ export function StoryModesPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
+  // v0.17.0（审查 A20）：创建 busy 门控——防连点重复创建
+  const [busy, setBusy] = useState(false)
 
   const modes = useQuery({ queryKey: ['story-modes'], queryFn: resourcesApi.storyModes })
 
   const create = async (): Promise<void> => {
-    if (!name.trim()) return
+    if (!name.trim() || busy) return
+    setBusy(true)
     setError(null)
     try {
       await resourcesApi.storyModeCreate(name.trim(), desc.trim(), {
@@ -33,6 +36,8 @@ export function StoryModesPage(): React.JSX.Element {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
       toast('error', msg)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -76,8 +81,8 @@ export function StoryModesPage(): React.JSX.Element {
         <div className="row">
           <input style={{ flex: 2 }} placeholder="模式名（如：无限升级流）" value={name} onChange={(e) => setName(e.target.value)} />
           <input style={{ flex: 3 }} placeholder="描述（可选）" value={desc} onChange={(e) => setDesc(e.target.value)} />
-          <button className="primary" disabled={!name.trim()} onClick={() => void create()}>
-            <Plus size={14} className="icon-gap" />创建
+          <button className="primary" disabled={busy || !name.trim()} onClick={() => void create()}>
+            <Plus size={14} className="icon-gap" />{busy ? '创建中…' : '创建'}
           </button>
         </div>
       </div>

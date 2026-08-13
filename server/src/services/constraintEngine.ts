@@ -116,20 +116,31 @@ export function replaceProtagonistName(db: DatabaseSync, novelId: number, text: 
   const list = getConstraints(db, novelId)
   const pc = list.find((c) => c.keyword && c.replaceWith && c.text.includes('主角'))
   if (!pc || !pc.keyword) return text
-  // 角色表主角当前名（profile 标注主角）
+  // 角色表主角当前名（v0.17.0 审查 M11：解析 profile_json.role 精确匹配——此前 LIKE '%主角%'
+  // 误匹配 relation/其他字段含"主角"的角色）
   const rows = db
-    .prepare("SELECT name FROM character WHERE novel_id = ? AND profile_json LIKE '%主角%' LIMIT 5")
-    .all(novelId) as Array<{ name: string }>
+    .prepare('SELECT name, profile_json FROM character WHERE novel_id = ?')
+    .all(novelId) as Array<{ name: string; profile_json: string }>
+  const protagonistNames = rows
+    .filter((r) => {
+      try {
+        const p = JSON.parse(r.profile_json ?? '{}') as { role?: string }
+        return String(p.role ?? '').includes('主角')
+      } catch {
+        return false
+      }
+    })
+    .map((r) => String(r.name ?? '').trim())
+    .filter(Boolean)
   let out = text
   let replaced = 0
-  for (const r of rows) {
-    const n = String(r.name ?? '').trim()
+  for (const n of protagonistNames) {
     if (!n || n === pc.keyword) continue
     const before = out
     out = out.split(n).join(pc.keyword)
     if (out !== before) replaced++
   }
-  if (replaced > 0) console.warn(`[constraint] 主角名替换：${rows.map((r) => r.name).join('、')} → ${pc.keyword}`)
+  if (replaced > 0) console.warn(`[constraint] 主角名替换：${protagonistNames.join('、')} → ${pc.keyword}`)
   return out
 }
 

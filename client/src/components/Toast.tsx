@@ -25,19 +25,26 @@ export function useToast(): { toast: (type: ToastType, text: string) => void } {
 export function ToastProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [toasts, setToasts] = useState<Toast[]>([])
   const seq = useRef(0)
+  // v0.17.0（审查 C34）：记录定时器，卸载时清理（此前 setTimeout 无 cleanup）
+  const timersRef = useRef<number[]>([])
 
   const toast = useCallback((type: ToastType, text: string): void => {
     const id = ++seq.current
     // P22-C6：堆叠上限 3 条（连发不铺满屏幕）
     setToasts((t) => [...t, { id, type, text }].slice(-3))
-    setTimeout(() => {
+    const timer = window.setTimeout(() => {
+      timersRef.current = timersRef.current.filter((x) => x !== timer)
       setToasts((t) => t.filter((x) => x.id !== id))
     }, 3000)
+    timersRef.current.push(timer)
   }, [])
 
   useEffect(() => {
     globalListener = toast
     return () => {
+      // v0.17.0（审查 C34）：卸载时清掉未到期的消失定时器
+      for (const t of timersRef.current) clearTimeout(t)
+      timersRef.current = []
       globalListener = null
     }
   }, [toast])
@@ -46,6 +53,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
     <ToastContext.Provider value={{ toast }}>
       {children}
       <div
+        // v0.17.0（审查 C34）：aria-live 让读屏器播报 toast
+        role="status"
+        aria-live="polite"
         style={{
           position: 'fixed',
           bottom: 24,

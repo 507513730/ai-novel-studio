@@ -50,13 +50,32 @@ ipcMain.handle('theme-set', (_e, theme: string) => {
   return true
 })
 
+// v0.17.0（审查 M19）：破坏性 IPC 只接受主窗口顶层 frame（XSS 注入 iframe 无法绕过）
+function assertTrustedSender(event: Electron.IpcMainInvokeEvent): void {
+  const w = mainWindow
+  const fromMain = w !== null && event.sender === w.webContents
+  const topFrame = !event.senderFrame || event.senderFrame.top === w?.webContents.mainFrame
+  if (!fromMain || !topFrame) {
+    throw new Error('untrusted sender')
+  }
+}
+
 // P16 P0：数据管理（打开数据目录 / 清除全部数据）——P20 统一便携版目录
 ipcMain.handle('open-data-dir', () => {
   void shell.openPath(getDataDir())
   return true
 })
-ipcMain.handle('wipe-data', () => {
+ipcMain.handle('wipe-data', async (event) => {
   try {
+    assertTrustedSender(event)
+  } catch (e) {
+    console.error('[main] wipe-data rejected:', e)
+    return false
+  }
+  try {
+    // v0.17.0（审查 H6）：先优雅关闭 server（释放 db/WAL 句柄）再删——此前直接 app.exit 不触发
+    // before-quit → Windows 上 EBUSY 静默失败 + 孤儿进程
+    await shutdownServer()
     const dataDir = getDataDir()
     if (dataDir) {
       rmSync(dataDir, { recursive: true, force: true })
@@ -72,7 +91,74 @@ ipcMain.handle('wipe-data', () => {
 // v0.9.2（O4）：自动备份——每日 checkpoint 后复制主库到 backups/auto-*（轮转保留 N 份）
 // 复用 export-backup 的原子语义；启动后延迟首备（等 server ready），之后每 24h
 const AUTO_BACKUP_KEEP = 7
-function runAutoBackup(): void {
+
+/** 请求 server 执行 WAL checkpoint（等待应答或超时兜底）——v0.17.0（审查 M15）自动备份同样 await */
+function requestCheckpoint(timeoutMs = 5000): Promise<void> {
+  const sp = serverProcess
+  if (!sp) return Promise.resolve()
+  const spRef: Electron.UtilityProcess = sp
+  return new Promise<void>((resolve) => {
+    const id = `cp-${Date.now()}`
+    const timer = setTimeout(() => {
+      try {
+        spRef.off('message', onMsg)
+      } catch {
+        /* ignore */
+      }
+      resolve()
+    }, timeoutMs)
+    function onMsg(msg: unknown): void {
+      const m = msg as { type?: string; id?: string }
+      if (m?.id === id && (m.type === 'checkpoint-done' || m.type === 'checkpoint-error')) {
+        clearTimeout(timer)
+        try {
+          spRef.off('message', onMsg)
+        } catch {
+          /* ignore */
+        }
+        resolve()
+      }
+    }
+    spRef.on('message', onMsg)
+    spRef.postMessage({ type: 'checkpoint', id })
+  })
+}
+
+/** v0.17.0（审查 H6/M17/M18）：优雅关闭 server（通知 shutdown → 等退出 → kill 兜底）并清缓存 */
+function shutdownServer(timeoutMs = 3000): Promise<void> {
+  const sp = serverProcess
+  serverProcess = null
+  lastServerUrl = null
+  if (!sp) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      try {
+        sp.kill()
+      } catch {
+        /* ignore */
+      }
+      resolve()
+    }, timeoutMs)
+    try {
+      sp.postMessage({ type: 'shutdown' })
+    } catch {
+      clearTimeout(timer)
+      try {
+        sp.kill()
+      } catch {
+        /* ignore */
+      }
+      resolve()
+      return
+    }
+    sp.once('exit', () => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+}
+
+async function runAutoBackup(): Promise<void> {
   try {
     const dataDir = getDataDir()
     const dbFile = join(dataDir, 'ai-novel-studio.db')
@@ -81,18 +167,8 @@ function runAutoBackup(): void {
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
     const outDir = join(dataDir, 'backups', `auto-${stamp}`)
     if (existsSync(outDir)) return
-    const sp = serverProcess
-    if (sp) {
-      const id = `cp-auto-${Date.now()}`
-      const onMsg = (msg: unknown): void => {
-        const m = msg as { type?: string; id?: string }
-        if (m?.id === id && (m.type === 'checkpoint-done' || m.type === 'checkpoint-error')) {
-          sp.off('message', onMsg)
-        }
-      }
-      sp.on('message', onMsg)
-      sp.postMessage({ type: 'checkpoint', id })
-    }
+    // v0.17.0（审查 M15）：await checkpoint 完成（此前 fire-and-forget → 可能复制陈旧主库）
+    await requestCheckpoint()
     mkdirSync(outDir, { recursive: true })
     copyFileSync(dbFile, join(outDir, 'ai-novel-studio.db'))
     writeFileSync(
@@ -143,7 +219,8 @@ ipcMain.handle('get-auto-backup-info', () => {
 })
 
 // P18 B + P20（S2）：导出备份（先 checkpoint 保证原子，只导出主库文件）
-ipcMain.handle('export-backup', async () => {  try {
+ipcMain.handle('export-backup', async (event) => {  try {
+    assertTrustedSender(event)
     const dataDir = getDataDir()
     const now = new Date()
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
@@ -205,8 +282,9 @@ ipcMain.handle('export-backup', async () => {  try {
 })
 
 // P18 B + P20（S2）：从备份恢复（停服务 → 替换主库 → 清 wal/shm → 重启服务 → 通知刷新）
-ipcMain.handle('restore-backup', async () => {
+ipcMain.handle('restore-backup', async (event) => {
   try {
+    assertTrustedSender(event)
     const dataDir = getDataDir()
     const picked = await dialog.showOpenDialog(mainWindow!, {
       title: '选择备份（目录或其中的 db 文件）',
@@ -245,11 +323,9 @@ ipcMain.handle('restore-backup', async () => {
     }
     // 1) 停服务（Windows 下数据库文件被 server 独占，必须释放）
     const hadServer = serverProcess !== null
-    if (serverProcess) {
-      const proc = serverProcess
-      serverProcess = null
-      proc.kill()
-      await new Promise((r) => setTimeout(r, 800))
+    if (hadServer) {
+      // v0.17.0（审查 M18）：await 进程退出（带超时兜底）替代固定 800ms 启发式——防 SQLITE_BUSY
+      await shutdownServer()
     }
     // 2) 替换主库 + 清除旧 wal/shm（恢复后由 SQLite 按主库重建 WAL）
     copyFileSync(dbFile, join(dataDir, 'ai-novel-studio.db'))
@@ -309,7 +385,15 @@ function startServer(): void {
   })
   serverProcess.on('exit', (code) => {
     console.log(`[main] server process exited with code ${code}`)
+    // v0.17.0（审查 M16）：异常退出清理 URL 并通知 renderer（此前只置 null——renderer 轮询已停 → 静默指向死服务）
+    const wasAlive = serverProcess !== null
     serverProcess = null
+    if (wasAlive && code !== 0 && lastServerUrl) {
+      lastServerUrl = null
+      for (const w of BrowserWindow.getAllWindows()) {
+        w.webContents.send('server-lost', String(code))
+      }
+    }
   })
 }
 
@@ -370,9 +454,10 @@ function handleCrypto(m: { type: 'encrypt' | 'decrypt'; id: string; value?: stri
   try {
     if (m.type === 'encrypt' && m.value !== undefined) {
       if (!safeStorage.isEncryptionAvailable()) {
-        // v0.9.0（审查 #24）：降级标记——API key 明文落库必须有告警（此前静默降级）
-        console.warn('[crypto] safeStorage 不可用——API Key 将以明文存储（degraded）')
-        reply({ value: m.value, degraded: true })
+        // v0.17.0（审查 H7）：fail-closed——拒绝明文落库（此前降级回明文违反 #6；
+        // Windows ready 后恒可用，此路径仅在异常环境触发）
+        console.error('[crypto] safeStorage 不可用——拒绝以明文存储 API Key（请检查系统环境后重试）')
+        reply({ error: 'safeStorage unavailable: refusing to store plaintext key' })
         return
       }
       reply({ value: safeStorage.encryptString(m.value).toString('base64') })
@@ -460,12 +545,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  try {
-    serverProcess?.kill()
-  } catch {
-    /* ignore */
-  }
-  serverProcess = null
+  // v0.17.0（审查 M17）：优雅关闭（shutdown 消息 → server.close + stopScheduler → exit 兜底 kill）
+  void shutdownServer()
 })
 
 // ---------- v0.16.0：应用更新（electron-updater；仅打包态启用） ----------

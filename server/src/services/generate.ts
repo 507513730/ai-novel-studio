@@ -50,6 +50,8 @@ export async function generateChapter(
     throw new Error('章节正在生成中（或状态不允许），请等待完成')
   }
 
+  // v0.17.0（审查 H2）：抢占后全链路 try/catch——任何异常/空内容都复位状态，杜绝永久卡 'generating'
+  try {
   const route = getRouteConfig(db, 'prose')
   if (!route || !route.apiKeyEncrypted) throw new Error('prose 路由未配置 API Key')
 
@@ -123,6 +125,12 @@ export async function generateChapter(
     db.prepare(
       "UPDATE chapter SET content = ?, word_count = ?, status = 'written', updated_at = datetime('now') WHERE id = ?"
     ).run(content, wordCount, chapterId)
+  } else {
+    // v0.17.0（审查 H2）：空内容显式置 failed（此前跳过 UPDATE → 永久卡 'generating'）
+    db.prepare(
+      "UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'generating'"
+    ).run(chapterId)
+    console.warn(`[generate] 章节 ${chapterId} 产出为空 → 置 failed（可重试）`)
   }
   // v0.15.0：确定性校验——字数区间告警（异常区间记录质量债）
   if (!aborted && wordCount > 0 && (wordCount < 1500 || wordCount > 4500)) {
@@ -201,4 +209,12 @@ export async function generateChapter(
   }
 
   return { content, wordCount, aborted, usage: { input: usageInput, output: usageOutput, cacheHit, cacheMiss } }
+  } catch (err) {
+    // v0.17.0（审查 H2）：异常复位状态（仅复位自己抢占的 generating）
+    db.prepare(
+      "UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'generating'"
+    ).run(chapterId)
+    console.warn(`[generate] 章节 ${chapterId} 生成失败 → 置 failed: ${err instanceof Error ? err.message : String(err)}`)
+    throw err
+  }
 }

@@ -52,11 +52,16 @@ export function WorldsLibraryPage(): React.JSX.Element {
 
   const remove = async (id: number): Promise<void> => {
     if (!window.confirm('删除该世界样本？')) return
+    // v0.17.0（审查 A37）：确认后加 busy——防连点重复删除
+    if (busy) return
+    setBusy(true)
     try {
       await resourcesApi.worldTemplateDelete(id)
       void queryClient.invalidateQueries({ queryKey: ['world-templates'] })
     } catch (err) {
       toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -123,7 +128,7 @@ export function WorldsLibraryPage(): React.JSX.Element {
                   {novels.data?.novels.map((n) => <option key={n.id} value={n.id}>{n.title || `#${n.id}`}</option>)}
                 </select>
                 <button className="sm" title="复制样本 JSON" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ name: t.name, manual: t.manual, factions: t.factions, map: t.map }, null, 2)).then(() => toast('ok', '已复制样本 JSON'))}><Copy size={12} /></button>
-                <button className="sm danger" onClick={() => void remove(t.id)}><Trash2 size={12} /></button>
+                <button className="sm danger" disabled={busy} onClick={() => void remove(t.id)}><Trash2 size={12} /></button>
               </div>
             </div>
           </div>

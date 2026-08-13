@@ -16,6 +16,15 @@ export function NovelGate({ title, desc, target }: { title: string; desc: string
       </div>
       <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>{desc}</p>
       {novels.isLoading && <p className="muted">加载中…</p>}
+      {novels.isError && (
+        // v0.17.0（审查 C36）：补错误态——此前加载失败时页面空白，无任何提示
+        <div className="panel" style={{ padding: 16 }}>
+          <p className="muted" style={{ color: 'var(--danger)', margin: 0 }}>
+            小说列表加载失败：{novels.error instanceof Error ? novels.error.message : String(novels.error)}
+          </p>
+          <button className="sm mt-2" onClick={() => void novels.refetch()}>重试</button>
+        </div>
+      )}
       {novels.data?.novels.length === 0 && (
         <div style={{ textAlign: 'center', padding: '32px 16px' }}>
           <div style={{ fontSize: 34, marginBottom: 10 }}>📚</div>

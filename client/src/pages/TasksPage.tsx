@@ -37,7 +37,8 @@ export function TasksPage(): React.JSX.Element {
   const jobs = useQuery({
     queryKey: ['jobs', 'tasks'],
     queryFn: novelApi.jobs,
-    refetchInterval: 4000
+    // v0.17.0（审查 C38）：页面不可见时暂停轮询——后台标签不再每 4s 空转拉取
+    refetchInterval: () => (document.visibilityState === 'visible' ? 4000 : false)
   })
 
   const act = async (id: number, fn: () => Promise<{ ok: boolean }>, doneMsg: string): Promise<void> => {

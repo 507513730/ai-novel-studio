@@ -42,8 +42,12 @@ if (isUtilityProcess()) {
 
 export async function encryptSecret(plain: string): Promise<string> {
   if (!isUtilityProcess()) {
-    // P2.2 🟡8：非 utilityProcess（独立调试）→ 明文回退 + 告警
-    console.warn('[keyCrypto] 非 utilityProcess 环境，API Key 将以明文存储（仅限独立调试）')
+    // v0.17.0（审查 M2）：fail-closed——非 utility 模式拒绝明文落库（违反 #6）；
+    // 显式调试开关 AI_NOVEL_ALLOW_PLAINTEXT=1 才允许（独立调试/测试用）
+    if (process.env.AI_NOVEL_ALLOW_PLAINTEXT !== '1') {
+      throw new Error('keyCrypto: 非 utilityProcess 环境拒绝明文存储 API Key（调试可设 AI_NOVEL_ALLOW_PLAINTEXT=1）')
+    }
+    console.warn('[keyCrypto] AI_NOVEL_ALLOW_PLAINTEXT=1：API Key 将以明文存储（仅限独立调试）')
     return plain
   }
   return requestCrypto('encrypt', plain)
@@ -51,7 +55,10 @@ export async function encryptSecret(plain: string): Promise<string> {
 
 export async function decryptSecret(encrypted: string): Promise<string> {
   if (!isUtilityProcess()) {
-    console.warn('[keyCrypto] 非 utilityProcess 环境，按明文读取 API Key（仅限独立调试）')
+    if (process.env.AI_NOVEL_ALLOW_PLAINTEXT !== '1') {
+      throw new Error('keyCrypto: 非 utilityProcess 环境拒绝按明文读取（调试可设 AI_NOVEL_ALLOW_PLAINTEXT=1）')
+    }
+    console.warn('[keyCrypto] AI_NOVEL_ALLOW_PLAINTEXT=1：按明文读取 API Key（仅限独立调试）')
     return encrypted
   }
   return requestCrypto('decrypt', encrypted)

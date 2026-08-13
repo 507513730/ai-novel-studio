@@ -61,8 +61,8 @@ export function seedIfEmpty(db: DatabaseSync): void {
 
     const insertRoute = db.prepare(
       `INSERT INTO model_route
-       (task_type, provider_id, model, thinking_enabled, reasoning_effort, temperature, max_tokens, fallback_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       (task_type, provider_id, model, thinking_enabled, reasoning_effort, temperature, max_tokens, fallback_json, reserved)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
 
     for (const r of routes) {
@@ -71,6 +71,7 @@ export function seedIfEmpty(db: DatabaseSync): void {
         { providerId, model: r.model },
         { providerId, model: DEEPSEEK_PRO_MODEL }
       ])
+      // v0.17.0（审查 M10）：reserved 落库（预留路由在 DB 可区分）
       insertRoute.run(
         r.task,
         providerId,
@@ -79,7 +80,8 @@ export function seedIfEmpty(db: DatabaseSync): void {
         r.effort,
         r.temperature,
         r.maxTokens,
-        fallback
+        fallback,
+        r.reserved ? 1 : 0
       )
     }
 

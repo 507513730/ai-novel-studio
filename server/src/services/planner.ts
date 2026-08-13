@@ -21,14 +21,26 @@ export function generateDirectionsPrompt(inspiration: string): string {
   return `${getSystemPrompt('direction')}\n${JSON_FORMAT}\n\n灵感：${inspiration}\n\n请输出 {"directions": [2 套方案]}，每套含 title/sellingPoint/genre/coreSetting/mainline/first30/readerFeeling。`
 }
 
+// v0.17.0（审查 M7）：解析统一于此（此前 novels.ts 本地副本漂移：≥1 vs ≥2 + 缺字段补齐）
 export function parseDirections(obj: unknown): Array<{ id: string; scheme: Record<string, unknown> }> | null {
   const arr = (obj as { directions?: unknown }).directions
-  if (!Array.isArray(arr) || arr.length < 2) return null
+  if (!Array.isArray(arr) || arr.length === 0) return null
   const out: Array<{ id: string; scheme: Record<string, unknown> }> = []
   for (let i = 0; i < arr.length; i++) {
     const d = arr[i] as Record<string, unknown>
     if (!d.title || !d.sellingPoint || !d.genre) return null
-    out.push({ id: `d${i + 1}`, scheme: d })
+    out.push({
+      id: `d${i + 1}`,
+      scheme: {
+        title: String(d.title),
+        sellingPoint: String(d.sellingPoint),
+        genre: String(d.genre ?? ''),
+        coreSetting: String(d.coreSetting ?? ''),
+        mainline: String(d.mainline ?? ''),
+        first30: String(d.first30 ?? ''),
+        readerFeeling: String(d.readerFeeling ?? '')
+      }
+    })
   }
   return out
 }
