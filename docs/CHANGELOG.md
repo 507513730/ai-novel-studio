@@ -1,5 +1,36 @@
 # AI-Novel-Studio 发布说明
 
+## v0.21.0（2026-08-13）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.21.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.21.0-portable-x64.exe`
+
+### 变更
+
+#### 第二轮全量审查修复批（v0.20.0 基线：新功能 2 HIGH/3 MEDIUM + 第一轮残留收敛 + P3 全量）
+
+**P0 · 已发布功能核心正确性**
+- **N1 字数分离语义修正（累计）**：AI 产出改**服务端记账**（生成/方案流水线/质量债修复落库时 `ai_words += wordCount`——此前 SSE 生成直接落库不经客户端 delta → 计数器恒 0）；客户端流式 onDelta 停止本地累计（消除双计）；顶部 tooltip 明确「本书累计」语义；版本恢复不重复计
+- **N2 光标续写跨章 race**：suggestContinue 持 AbortController + seq 校验 + 切章 abort——旧章响应不再串入新章
+
+**P1**
+- N3 Tab 仅在编辑器聚焦且有建议时 preventDefault 插入（不再全局吞 Tab）
+- N4 记忆面操作 busy 锁（ref + disabled）
+- H1 删除 ApiError 死代码类；M11 主角名替换改**冲突保护前缀**（≥2 字 + 其他角色名以该名结尾时保护——「林惊蛰」内不误伤「惊蛰」）；M8 本地 JSON_FORMAT 改 import
+
+**P2**
+- N5 NovelMemory/RunTrace 契约类型入 shared；M10 reserved 回传 + 模型路由页「预留」徽标禁编辑；M17/M20 信号防御（SIGINT/SIGBREAK/SIGTERM，查证确认 Windows 上 SIGTERM 不触发）；A32 步骤列表键盘路径（Alt+↑/↓）+ ARIA；5 页 6 处 window.confirm → themed 确认统一
+
+**P3 全量**
+- shared 实体类型补全（Agent/Skill/Solution/Genre/StyleAsset/PromptAsset/ChapterDetail/Asset）；mojibake 重编码（shared/types.ts + AGENTS.md）；依赖精确锁定（epub-gen-memory/openai）；migrate 数组物理排序；analysis 死 fetch 清理；webSearch catch 细化（zh 失败不误降级 en）；记忆面势力读改写加事务；ledger states 上限 100；JobTrace 渲染切片；WebSearchToggle 加载失败态；CSP 补 object-src/base-uri
+
+- 测试 143/143（+5：M11 边界/1 字保护/嵌套保护/ledger 上限/N1 记账语义）
+
+- 419e510 feat: 第二轮审查修复批（N1 字数记账/N2 续写 race/N3-N5 + 残留收敛 + P3 全量：实体类型补全/confirm 统一/事务/上限/CSP）（v0.21.0）
+
+## v0.21.0
+
 ## v0.20.0（2026-08-13）
 
 ### 安装方式
