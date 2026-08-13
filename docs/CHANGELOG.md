@@ -1,5 +1,20 @@
 # AI-Novel-Studio 发布说明
 
+## [Unreleased]
+
+## v0.16.3（2026-08-13）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.16.3.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.16.3-portable-x64.exe`
+
+### 变更
+- **修复**：更新页「当前版本」不显示（v—）——updater 状态广播与 IPC 返回统一携带版本号，renderer 增加编译期版本兜底（`__APP_VERSION__`）
+
+- 8eb21c9 fix: 更新页版本号显示——broadcast 统一带 currentVersion + renderer 用 __APP_VERSION__ 兜底（v0.16.3）
+
+## v0.16.3
+
 ## v0.16.2（2026-08-13）
 
 ### 安装方式
