@@ -987,3 +987,8 @@ pnpm --version   # 应 ≥10
 - [x] **汇率**：启动自动获取（免 key open.er-api.com，失败静默降级）+ 手动覆盖/恢复自动（v17 迁移）
 - [x] **人民币显示**：服务端 /settings/app·/usage/stats 返回 CNY + fmtCost 换算 + 预算比较错配修正
 - [x] **验收**：测试 120/120（汇率 7 例 + fmtCost 换算）+ 已发布
+
+### v0.16.1 · 2026-08-13 · 修复：自更新下载 404
+
+- [x] **修复**：nsis artifactName 固定横线命名——产物文件名与 latest.yml 一致（此前产物含空格、updater 元数据横线名，自更新下载 404）
+- [x] **验收**：本地 dist 核对 latest.yml url == 产物名 + 已发布
