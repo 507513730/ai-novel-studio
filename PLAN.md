@@ -1027,3 +1027,11 @@ pnpm --version   # 应 ≥10
 - [x] **知识库接入**：知识库页「联网搜索」→ 结果列表（标题/摘要/URL）→ 一键导入（含摘要正文）
 - [x] **生成注入**：world/generate 开关开启时自动搜索灵感注入「联网资料」块
 - [x] **验收**：131/131（+6）+ lint 0 error + build + 已发布
+
+
+### v0.19.0 · 2026-08-13 · 编辑器续写 + 字数分离（NovelCraft 学习组）
+
+- [x] **光标续写**：Cmd/Ctrl+J → aiAction continue（光标前文 + 书级约束/写法规则）→ 建议浮层（Tab 插入 / Esc 关闭 / ↻ 再生成）
+- [x] **来源标记**：CodeMirror Annotation（aiWrite）——AI 写入（生成/续写/选区工具）与人工输入区分
+- [x] **字数分离**：v20 迁移 ai_words/human_words + PATCH delta 增量累加 + 顶部「我的 X · AI Y」展示
+- [x] **验收**：134/134（+3 迁移/delta 累加/零增量）+ lint 0 error + build + 已发布
