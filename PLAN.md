@@ -977,3 +977,13 @@ pnpm --version   # 应 ≥10
 - [x] **方案包**：suggestedConstraints 导出/导入透传 + 约束遵守率统计（quality-debt 消费）
 - [x] **写书修复**：设定简报（导演注入）/ 全局知识库 v15 / framing 覆盖修复 / world INSERT / 书25 主角名对齐 Jing
 - [x] **规范**：versioning 1.0 判据修订（稳定承诺三条件）+ 测试 110/110 + 已发布
+
+### v0.16.0 · 2026-08-13 · 检查更新 + 成本人民币显示
+
+- [x] **自更新**：electron-updater + build.publish（GitHub provider）+ CI 上传 latest.yml
+- [x] **主进程**：打包态启用（开发模式跳过）/ 启动 5s 静默检查 / IPC 检查·下载·重启安装 / 进度转发
+- [x] **UI**：设置页「更新」tab（当前版本/检查/下载进度/重启安装）+ 便携版手动下载提示
+- [x] **定价查证**：DeepSeek 官方定价页确认为 USD 基准（v4-flash $0.0028/$0.14/$0.28）——内部统一 USD 正确
+- [x] **汇率**：启动自动获取（免 key open.er-api.com，失败静默降级）+ 手动覆盖/恢复自动（v17 迁移）
+- [x] **人民币显示**：服务端 /settings/app·/usage/stats 返回 CNY + fmtCost 换算 + 预算比较错配修正
+- [x] **验收**：测试 120/120（汇率 7 例 + fmtCost 换算）+ 已发布
