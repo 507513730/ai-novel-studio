@@ -87,6 +87,7 @@ jobs:
           path: |
             release/*.exe
             release/*.blockmap
+            release/*.yml
           if-no-files-found: error
 
       - name: Create Release
@@ -96,4 +97,5 @@ jobs:
           files: |
             release/*.exe
             release/*.blockmap
+            release/*.yml
           generate_release_notes: true

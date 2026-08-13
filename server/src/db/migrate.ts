@@ -425,6 +425,16 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     ]
   },
   {
+    // v0.16.0：汇率设置（USD→CNY：默认 7.2；source=auto 时启动自动联网更新，manual 时手动覆盖优先）
+    version: 17,
+    statements: [
+      `INSERT OR IGNORE INTO app_settings (key, value) VALUES
+        ('cny_usd_rate', '7.2'),
+        ('cny_usd_rate_source', 'auto'),
+        ('cny_usd_rate_at', '')`
+    ]
+  },
+  {
     // 写书修复（2026-08-12）：全局知识库占位书（novel_id=0）——/knowledge 端点写死 0，
     // 但 novel 表无 id=0 行导致 FK 409（知识库新建功能实际不可用）；全局文档对所有书可见
     version: 15,

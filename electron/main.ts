@@ -443,6 +443,10 @@ app.whenReady().then(() => {
   setTimeout(() => runAutoBackup(), 5 * 60 * 1000)
   setInterval(() => runAutoBackup(), 24 * 60 * 60 * 1000)
 
+  // v0.16.0：应用更新——打包态启用（开发模式禁用）；启动 5s 后静默检查（不打扰）
+  initUpdater()
+  setTimeout(() => checkForUpdatesQuietly(), 5000)
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -460,3 +464,93 @@ app.on('before-quit', () => {
   }
   serverProcess = null
 })
+
+// ---------- v0.16.0：应用更新（electron-updater；仅打包态启用） ----------
+let updaterEnabled = false
+let updaterStatus: Record<string, unknown> = { state: 'idle' }
+
+function initUpdater(): void {
+  if (!app.isPackaged) {
+    console.log('[updater] 开发模式——跳过自动更新初始化')
+    return
+  }
+  // 便携版不支持自更新（electron-updater 限制）——跳过（设置页提示手动下载）
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    console.log('[updater] 便携版——不支持自动更新')
+    return
+  }
+  void import('electron-updater').then(({ autoUpdater }) => {
+    updaterEnabled = true
+    autoUpdater.autoDownload = false // 手动确认后下载（静默检查只发现不下载）
+    autoUpdater.autoInstallOnAppQuit = true
+    autoUpdater.on('checking-for-update', () => {
+      updaterStatus = { state: 'checking' }
+      broadcastUpdater()
+    })
+    autoUpdater.on('update-available', (info) => {
+      updaterStatus = { state: 'available', version: info.version, releaseDate: info.releaseDate, downloaded: false }
+      broadcastUpdater()
+    })
+    autoUpdater.on('update-not-available', () => {
+      updaterStatus = { state: 'up-to-date' }
+      broadcastUpdater()
+    })
+    autoUpdater.on('download-progress', (p) => {
+      updaterStatus = { state: 'downloading', percent: Math.round(p.percent), transferred: p.transferred, total: p.total }
+      broadcastUpdater()
+    })
+    autoUpdater.on('update-downloaded', (info) => {
+      updaterStatus = { state: 'downloaded', version: info.version, downloaded: true }
+      broadcastUpdater()
+    })
+    autoUpdater.on('error', (err) => {
+      updaterStatus = { state: 'error', message: String(err?.message ?? err) }
+      broadcastUpdater()
+    })
+  })
+}
+
+function broadcastUpdater(): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.webContents.send('updater-status', updaterStatus)
+  }
+}
+
+function checkForUpdatesQuietly(): void {
+  if (!updaterEnabled) return
+  void import('electron-updater').then(({ autoUpdater }) => {
+    autoUpdater.checkForUpdates().catch(() => {
+      /* 静默失败 */
+    })
+  })
+}
+
+// IPC：手动检查 / 下载 / 重启安装 / 当前状态
+ipcMain.handle('updater-check', () => {
+  if (!updaterEnabled) return { ok: false, reason: 'unsupported', state: updaterStatus }
+  updaterStatus = { state: 'checking' }
+  broadcastUpdater()
+  void import('electron-updater')
+    .then(({ autoUpdater }) => autoUpdater.checkForUpdates())
+    .catch((err) => {
+      updaterStatus = { state: 'error', message: String(err?.message ?? err) }
+      broadcastUpdater()
+    })
+  return { ok: true }
+})
+ipcMain.handle('updater-download', () => {
+  if (!updaterEnabled) return { ok: false, reason: 'unsupported' }
+  void import('electron-updater').then(({ autoUpdater }) => {
+    autoUpdater.downloadUpdate().catch((err) => {
+      updaterStatus = { state: 'error', message: String(err?.message ?? err) }
+      broadcastUpdater()
+    })
+  })
+  return { ok: true }
+})
+ipcMain.handle('updater-install', () => {
+  if (!updaterEnabled) return { ok: false, reason: 'unsupported' }
+  void import('electron-updater').then(({ autoUpdater }) => autoUpdater.quitAndInstall())
+  return { ok: true }
+})
+ipcMain.handle('updater-status', () => ({ ...updaterStatus, currentVersion: app.getVersion() }))

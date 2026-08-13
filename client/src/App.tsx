@@ -9,6 +9,7 @@ import { NovelGate } from './components/NovelGate'
 import { AppLayout } from './components/AppLayout'
 import { getApiBaseUrl, setApiBaseUrl, apiFetch } from './api'
 import { initShortcuts } from './utils/shortcuts'
+import { setCnyRate } from './utils/costEstimate'
 import { CommandPalette } from './components/CommandPalette'
 
 // P20（U4）：路由懒加载（22 页面分包，首屏只载当前页）
@@ -123,6 +124,17 @@ export function App(): React.JSX.Element {
       'command-palette': () => setCommandOpen((v) => !v)
     })
   }, [])
+
+  // v0.16.0：启动拉取汇率 → fmtCost 人民币显示（服务端已换算/回传汇率）
+  useEffect(() => {
+    if (!baseUrl) return
+    void fetch(`${baseUrl}/api/settings/app`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { cnyUsdRate?: number } | null) => {
+        if (d?.cnyUsdRate) setCnyRate(d.cnyUsdRate)
+      })
+      .catch(() => undefined)
+  }, [baseUrl])
 
   // P27 2-7：命令面板（搜小说 + 跳页面）
   const [commandOpen, setCommandOpen] = useState(false)

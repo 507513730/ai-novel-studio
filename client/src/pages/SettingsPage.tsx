@@ -388,11 +388,25 @@ function UsagePanel(): React.JSX.Element {
     queryKey: ['usage'],
     queryFn: async () => (await apiFetch('/settings/usage/stats')) as { total: UsageTotal; groups: UsageGroup[] }
   })
-  // v0.10.0（批B/O5）：月度预算预警
-  const app = useQuery<{ costMonthlyBudget: number; autoFixDebts: boolean; monthlyCost: number }>({
+  // v0.10.0（批B/O5）：月度预算预警；v0.16.0：汇率（自动/手动）
+  const app = useQuery<{
+    costMonthlyBudget: number
+    autoFixDebts: boolean
+    monthlyCost: number
+    cnyUsdRate: number
+    cnyUsdRateSource: 'auto' | 'manual'
+    cnyUsdRateAt: string
+  }>({
     queryKey: ['app-settings'],
     queryFn: async () =>
-      (await apiFetch('/settings/app')) as { costMonthlyBudget: number; autoFixDebts: boolean; monthlyCost: number }
+      (await apiFetch('/settings/app')) as {
+        costMonthlyBudget: number
+        autoFixDebts: boolean
+        monthlyCost: number
+        cnyUsdRate: number
+        cnyUsdRateSource: 'auto' | 'manual'
+        cnyUsdRateAt: string
+      }
   })
   const [budgetInput, setBudgetInput] = useState('')
   const saveBudget = async (): Promise<void> => {
@@ -426,13 +440,30 @@ function UsagePanel(): React.JSX.Element {
   const budget = app.data?.costMonthlyBudget ?? 0
   const monthlyCost = app.data?.monthlyCost ?? 0
   const overBudget = budget > 0 && monthlyCost > budget
+  // v0.16.0：汇率（自动获取/手动覆盖）
+  const [rateInput, setRateInput] = useState('')
+  const saveRate = async (): Promise<void> => {
+    const v = Number(rateInput)
+    if (Number.isNaN(v) || v <= 0) {
+      toast('error', '请输入合法的汇率（USD→CNY，如 7.2）')
+      return
+    }
+    await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ cnyUsdRate: v }) })
+    toast('ok', `汇率已手动设为 ${v}（后续自动获取不再覆盖）`)
+    void app.refetch()
+  }
+  const resetRate = async (): Promise<void> => {
+    await apiFetch('/settings/app', { method: 'PATCH', body: JSON.stringify({ cnyUsdRateReset: true }) })
+    toast('ok', '已恢复自动获取汇率')
+    void app.refetch()
+  }
 
   return (
     <div className="panel col">
       <h2>成本仪表盘</h2>
       <div className="row flex-wrap">
         <div className="panel" style={{ background: 'var(--bg-card)', minWidth: 150 }}>
-          <div className="muted">预估成本 (USD)</div>
+          <div className="muted">预估成本 (CNY)</div>
           <strong style={{ fontSize: 20 }}>{total ? total.cost.toFixed(4) : '—'}</strong>
         </div>
         <div className="panel" style={{ background: 'var(--bg-card)', minWidth: 150 }}>
@@ -472,6 +503,37 @@ function UsagePanel(): React.JSX.Element {
         ) : (
           <span className="muted t-small">本月已用 ¥{monthlyCost.toFixed(2)}（未设预算）</span>
         )}
+      </div>
+
+      {/* v0.16.0：汇率（自动获取/手动覆盖）——成本显示人民币的基础 */}
+      <div className="row flex-wrap" style={{ marginTop: 10, gap: 12, alignItems: 'center' }}>
+        <span className="muted t-small">汇率 USD→CNY：</span>
+        <strong style={{ fontSize: 14 }}>{app.data?.cnyUsdRate?.toFixed(4) ?? '—'}</strong>
+        <span className="muted t-small">
+          {app.data?.cnyUsdRateSource === 'manual'
+            ? '手动设置（自动获取已暂停）'
+            : `自动获取${app.data?.cnyUsdRateAt ? `（${new Date(app.data.cnyUsdRateAt).toLocaleString('zh-CN')}）` : '中…'}`}
+        </span>
+        <input
+          type="number"
+          min={0.5}
+          max={50}
+          step={0.01}
+          style={{ width: 90, fontSize: 13, padding: '4px 8px' }}
+          placeholder="手动汇率"
+          value={rateInput}
+          onChange={(e) => setRateInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void saveRate()
+          }}
+        />
+        <button className="sm" onClick={() => void saveRate()}>手动设置</button>
+        {app.data?.cnyUsdRateSource === 'manual' && (
+          <button className="sm" onClick={() => void resetRate()}>恢复自动</button>
+        )}
+        <span className="muted t-small" style={{ maxWidth: 360 }}>
+          成本内部按美元计价，此处汇率仅用于人民币显示；启动时自动联网获取实时汇率，手动设置后不再被覆盖。
+        </span>
       </div>
 
       {/* v0.10.0（批B/I2）：质量债自动修复开关（默认开启——低分章节将自动排队修复） */}
@@ -578,8 +640,8 @@ function QualityDebtPanel(): React.JSX.Element {
   )
 }
 
-export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'providers' | 'routes' | 'usage' | 'appearance' | 'writing' }): React.JSX.Element {
-  const [tab, setTab] = useState<'providers' | 'routes' | 'usage' | 'appearance' | 'writing'>(initialTab)
+export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'providers' | 'routes' | 'usage' | 'appearance' | 'writing' | 'update' }): React.JSX.Element {
+  const [tab, setTab] = useState<'providers' | 'routes' | 'usage' | 'appearance' | 'writing' | 'update'>(initialTab)
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="row justify-between">
@@ -600,6 +662,10 @@ export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'provi
           <button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>
             外观
           </button>
+          {/* v0.16.0：检查更新 */}
+          <button className={tab === 'update' ? 'active' : ''} onClick={() => setTab('update')}>
+            更新
+          </button>
         </div>
       </div>
       {tab === 'providers' && <ProvidersPanel />}
@@ -607,13 +673,103 @@ export function SettingsPage({ initialTab = 'providers' }: { initialTab?: 'provi
       {tab === 'usage' && <UsagePanel />}
       {tab === 'writing' && <WritingPanel />}
       {tab === 'appearance' && <AppearancePanel />}
+      {tab === 'update' && <UpdatePanel />}
+    </div>
+  )
+}
+
+// v0.16.0：检查更新（electron-updater；便携版不支持自更新——手动下载提示）
+type UpdaterState =
+  | { state: 'idle'; currentVersion?: string }
+  | { state: 'checking'; currentVersion?: string }
+  | { state: 'available'; version?: string; currentVersion?: string; downloaded?: boolean }
+  | { state: 'up-to-date'; currentVersion?: string }
+  | { state: 'downloading'; percent?: number; currentVersion?: string }
+  | { state: 'downloaded'; version?: string; currentVersion?: string }
+  | { state: 'error'; message?: string; currentVersion?: string }
+
+function UpdatePanel(): React.JSX.Element {
+  const [status, setStatus] = useState<UpdaterState>({ state: 'idle' })
+  const [unsupported, setUnsupported] = useState(false)
+  const busy = status.state === 'checking' || status.state === 'downloading'
+
+  useEffect(() => {
+    if (!window.novelStudio) return
+    void window.novelStudio
+      .updaterStatus()
+      .then((s) => setStatus(s as UpdaterState))
+      .catch(() => undefined)
+    const unsub = window.novelStudio.onUpdaterStatus((s) => setStatus(s as UpdaterState))
+    return unsub
+  }, [])
+
+  const check = async (): Promise<void> => {
+    const r = await window.novelStudio?.updaterCheck()
+    if (r && !r.ok && r.reason === 'unsupported') setUnsupported(true)
+  }
+  const download = (): void => {
+    void window.novelStudio?.updaterDownload()
+  }
+  const install = (): void => {
+    void window.novelStudio?.updaterInstall()
+  }
+
+  const current = status.currentVersion ?? '—'
+  return (
+    <div className="panel col">
+      <h2>检查更新</h2>
+      <div className="row flex-wrap" style={{ gap: 12, alignItems: 'center' }}>
+        <span className="muted t-small">当前版本：</span>
+        <strong style={{ fontSize: 14 }}>v{current}</strong>
+        <button className="primary" onClick={() => void check()} disabled={busy}>
+          {status.state === 'checking' ? '检查中…' : '检查更新'}
+        </button>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        {unsupported || status.state === 'idle' ? (
+          <p className="muted t-small" style={{ margin: 0 }}>
+            应用启动时会自动静默检查新版本；发现更新后这里会提示。
+          </p>
+        ) : status.state === 'available' ? (
+          <div className="row flex-wrap" style={{ gap: 12, alignItems: 'center' }}>
+            <span className="t-small" style={{ color: 'var(--accent-bright)' }}>
+              发现新版本 v{status.version} —— 点击下载后即可更新（下载完成会提示重启安装）
+            </span>
+            <button className="primary" onClick={download}>下载更新</button>
+          </div>
+        ) : status.state === 'downloading' ? (
+          <div className="row flex-wrap" style={{ gap: 12, alignItems: 'center' }}>
+            <span className="t-small">下载中… {status.percent ?? 0}%</span>
+            <div style={{ flex: 1, maxWidth: 260, height: 6, borderRadius: 3, background: 'var(--border)' }}>
+              <div style={{ height: 6, borderRadius: 3, background: 'var(--accent)', width: `${status.percent ?? 0}%` }} />
+            </div>
+          </div>
+        ) : status.state === 'downloaded' ? (
+          <div className="row flex-wrap" style={{ gap: 12, alignItems: 'center' }}>
+            <span className="t-small" style={{ color: 'var(--ok)' }}>
+              新版本 v{status.version} 已下载 —— 重启应用即完成安装
+            </span>
+            <button className="primary" onClick={install}>立即重启安装</button>
+          </div>
+        ) : status.state === 'up-to-date' ? (
+          <p className="t-small" style={{ margin: 0, color: 'var(--ok)' }}>已是最新版本 ✓</p>
+        ) : status.state === 'error' ? (
+          <p className="t-small" style={{ margin: 0, color: 'var(--danger)' }}>
+            检查更新失败：{String(status.message ?? '未知错误')}（请确认网络可用后重试）
+          </p>
+        ) : null}
+        {unsupported && (
+          <p className="muted t-small" style={{ margin: '8px 0 0' }}>
+            当前为便携版，不支持自动更新——请到 GitHub Releases 手动下载最新安装包。
+          </p>
+        )}
+      </div>
     </div>
   )
 }
 
 // P19 ②⑤：写作偏好（语言 / 格式 / 写作模式）+ P22-B 正文排版
-function WritingPanel(): React.JSX.Element {
-  const { toast } = useToast()
+function WritingPanel(): React.JSX.Element {  const { toast } = useToast()
   const [settings, setSettings] = useState<{ lang: string; format: string; writingMode: string } | null>(null)
   // P22-B：排版状态（同步 fonts 工具，即时生效）
   const [typeIndent, setTypeIndent] = useState(getStoredFonts().indent)

@@ -22,6 +22,7 @@ import { createSolutionsRouter } from './routes/solutions'
 import { createAssetsRouter } from './routes/assets'                         
 import { initPromptDb } from './prompts/promptAsset'
 import { startScheduler } from './services/scheduler'
+import { refreshAutoRate } from './services/currency'
 import { originGuard } from './services/security'
 
 // v0.9.0（审查 #9）：错误中间件独立模块（createApp 使用 + 测试可挂载；index 模块加载有副作用，不可被测试导入）
@@ -83,6 +84,8 @@ function start(): void {
   seedIfEmpty(db)
   initPromptDb(db)
   startScheduler(db)
+  // v0.16.0：汇率启动自动获取（免 key，失败静默降级保留现值；fire-and-forget 不阻塞启动）
+  void refreshAutoRate(db)
   const app = createApp(db)
 
   const port = Number(process.env.AI_NOVEL_PORT ?? 0)

@@ -31,6 +31,19 @@ const api = {
     ipcRenderer.on('data-restored', listener)
     return () => ipcRenderer.removeListener('data-restored', listener)
   },
+  // v0.16.0：应用更新（仅打包态可用；便携版返回 unsupported）
+  updaterCheck: (): Promise<{ ok: boolean; reason?: string; state?: unknown }> =>
+    ipcRenderer.invoke('updater-check') as Promise<{ ok: boolean; reason?: string; state?: unknown }>,
+  updaterDownload: (): Promise<{ ok: boolean; reason?: string }> =>
+    ipcRenderer.invoke('updater-download') as Promise<{ ok: boolean; reason?: string }>,
+  updaterInstall: (): Promise<{ ok: boolean; reason?: string }> =>
+    ipcRenderer.invoke('updater-install') as Promise<{ ok: boolean; reason?: string }>,
+  updaterStatus: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('updater-status') as Promise<Record<string, unknown>>,
+  onUpdaterStatus: (callback: (status: Record<string, unknown>) => void): (() => void) => {
+    const listener = (_event: unknown, status: Record<string, unknown>): void => callback(status)
+    ipcRenderer.on('updater-status', listener)
+    return () => ipcRenderer.removeListener('updater-status', listener)
+  },
   platform: process.platform
 }
 

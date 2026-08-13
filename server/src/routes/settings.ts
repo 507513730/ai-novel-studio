@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { getAppSetting, setAppSetting, getMonthlyCost } from '../services/appSettings'
+import { getExchangeRate, getRateSource, getRateUpdatedAt, setRateManual, clearRateManual, refreshAutoRate } from '../services/currency'
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -313,7 +314,12 @@ export function createSettingsRouter(db: DatabaseSync): Router {
     }
     sql += ' GROUP BY task_type, provider, model ORDER BY cost DESC'
 
-    const groups = db.prepare(sql).all(...params)
+    // v0.16.0：成本统一人民币显示（内部 USD，按汇率换算输出 CNY）
+    const rate = getExchangeRate(db)
+    const groups = (db.prepare(sql).all(...params) as Array<Record<string, number>>).map((g) => ({
+      ...g,
+      cost: Number(((Number(g.cost) || 0) * rate).toFixed(4))
+    }))
     const total = db
       .prepare(
         `SELECT COUNT(*) AS calls,
@@ -325,16 +331,21 @@ export function createSettingsRouter(db: DatabaseSync): Router {
          FROM usage_log`
       )
       .get() as Record<string, number>
+    total.cost = Number(((Number(total.cost) || 0) * rate).toFixed(4))
     res.json({ total, groups })
   })
 
-  // ---------- v0.10.0（批B）：成本预警 + 质量债自动修复开关 ----------
+  // ---------- v0.10.0（批B）：成本预警 + 质量债自动修复开关；v0.16.0：汇率 ----------
   router.get('/app', (_req, res) => {
     const budget = Number(getAppSetting(db, 'cost_monthly_budget')) || 0
     res.json({
       costMonthlyBudget: budget,
       autoFixDebts: getAppSetting(db, 'auto_fix_debts') === '1',
-      monthlyCost: Number(getMonthlyCost(db).toFixed(2))
+      // v0.16.0：月度成本统一人民币（内部 USD × 汇率）
+      monthlyCost: Number((getMonthlyCost(db) * getExchangeRate(db)).toFixed(2)),
+      cnyUsdRate: getExchangeRate(db),
+      cnyUsdRateSource: getRateSource(db),
+      cnyUsdRateAt: getRateUpdatedAt(db)
     })
   })
 
@@ -343,7 +354,10 @@ export function createSettingsRouter(db: DatabaseSync): Router {
       const input = z
         .object({
           costMonthlyBudget: z.number().min(0).max(100000).optional(),
-          autoFixDebts: z.boolean().optional()
+          autoFixDebts: z.boolean().optional(),
+          // v0.16.0：手动设置汇率（>0 生效）或恢复自动获取
+          cnyUsdRate: z.number().min(0.5).max(50).optional(),
+          cnyUsdRateReset: z.boolean().optional()
         })
         .parse(req.body)
       if (input.costMonthlyBudget !== undefined) {
@@ -351,6 +365,14 @@ export function createSettingsRouter(db: DatabaseSync): Router {
       }
       if (input.autoFixDebts !== undefined) {
         setAppSetting(db, 'auto_fix_debts', input.autoFixDebts ? '1' : '0')
+      }
+      if (input.cnyUsdRate !== undefined && input.cnyUsdRate > 0) {
+        setRateManual(db, input.cnyUsdRate)
+      }
+      if (input.cnyUsdRateReset) {
+        clearRateManual(db)
+        // 恢复自动：立即联网拉取一次（失败静默，下次启动重试）
+        void refreshAutoRate(db)
       }
       res.json({ ok: true })
     } catch (err) {
