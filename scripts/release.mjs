@@ -438,7 +438,9 @@ if (PUSH) {
         ...process.env,
         BASE: 'http://127.0.0.1:39999/api',
         TOKEN: 'release-verify-token',
-        UDATA: join(ROOT, 'release', '.verify-tmp')
+        UDATA: join(ROOT, 'release', '.verify-tmp'),
+        // v0.17.0（M2 配套）：验收跑独立 server（非 utilityProcess）——显式允许明文密钥（调试场景开关）
+        AI_NOVEL_ALLOW_PLAINTEXT: '1'
       }
     })
     if (/PASS/.test(out)) ok('打包态等价验收 PASS（SSE/导出/鉴权）')
