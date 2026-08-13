@@ -99,7 +99,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AI 小说创作工作台"
+      "shortcutName": "AI 小说创作工作台",
+      "artifactName": "AI-Novel-Studio-Setup-${version}.${ext}"
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
