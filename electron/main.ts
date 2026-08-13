@@ -2,6 +2,9 @@ import { app, BrowserWindow, utilityProcess, shell, safeStorage, Menu, ipcMain, 
 import { join } from 'node:path'
 import { mkdirSync, rmSync, copyFileSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
+// v0.16.2：静态导入（动态 import() 对 CJS 包命名导出检测失败 → autoUpdater undefined → 检查更新报错）
+// 打包时 external，运行时从 asar node_modules 正常 require；开发模式仅加载不初始化
+import { autoUpdater } from 'electron-updater'
 
 let mainWindow: BrowserWindow | null = null
 let serverProcess: Electron.UtilityProcess | null = null
@@ -479,34 +482,33 @@ function initUpdater(): void {
     console.log('[updater] 便携版——不支持自动更新')
     return
   }
-  void import('electron-updater').then(({ autoUpdater }) => {
-    updaterEnabled = true
-    autoUpdater.autoDownload = false // 手动确认后下载（静默检查只发现不下载）
-    autoUpdater.autoInstallOnAppQuit = true
-    autoUpdater.on('checking-for-update', () => {
-      updaterStatus = { state: 'checking' }
-      broadcastUpdater()
-    })
-    autoUpdater.on('update-available', (info) => {
-      updaterStatus = { state: 'available', version: info.version, releaseDate: info.releaseDate, downloaded: false }
-      broadcastUpdater()
-    })
-    autoUpdater.on('update-not-available', () => {
-      updaterStatus = { state: 'up-to-date' }
-      broadcastUpdater()
-    })
-    autoUpdater.on('download-progress', (p) => {
-      updaterStatus = { state: 'downloading', percent: Math.round(p.percent), transferred: p.transferred, total: p.total }
-      broadcastUpdater()
-    })
-    autoUpdater.on('update-downloaded', (info) => {
-      updaterStatus = { state: 'downloaded', version: info.version, downloaded: true }
-      broadcastUpdater()
-    })
-    autoUpdater.on('error', (err) => {
-      updaterStatus = { state: 'error', message: String(err?.message ?? err) }
-      broadcastUpdater()
-    })
+  // v0.16.2：静态导入后直接初始化（无动态 import 竞态）
+  updaterEnabled = true
+  autoUpdater.autoDownload = false // 手动确认后下载（静默检查只发现不下载）
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.on('checking-for-update', () => {
+    updaterStatus = { state: 'checking' }
+    broadcastUpdater()
+  })
+  autoUpdater.on('update-available', (info) => {
+    updaterStatus = { state: 'available', version: info.version, releaseDate: info.releaseDate, downloaded: false }
+    broadcastUpdater()
+  })
+  autoUpdater.on('update-not-available', () => {
+    updaterStatus = { state: 'up-to-date' }
+    broadcastUpdater()
+  })
+  autoUpdater.on('download-progress', (p) => {
+    updaterStatus = { state: 'downloading', percent: Math.round(p.percent), transferred: p.transferred, total: p.total }
+    broadcastUpdater()
+  })
+  autoUpdater.on('update-downloaded', (info) => {
+    updaterStatus = { state: 'downloaded', version: info.version, downloaded: true }
+    broadcastUpdater()
+  })
+  autoUpdater.on('error', (err) => {
+    updaterStatus = { state: 'error', message: String(err?.message ?? err) }
+    broadcastUpdater()
   })
 }
 
@@ -517,21 +519,28 @@ function broadcastUpdater(): void {
 }
 
 function checkForUpdatesQuietly(): void {
-  if (!updaterEnabled) return
-  void import('electron-updater').then(({ autoUpdater }) => {
-    autoUpdater.checkForUpdates().catch(() => {
-      /* 静默失败 */
-    })
+  if (!updaterEnabled || typeof autoUpdater?.checkForUpdates !== 'function') return
+  autoUpdater.checkForUpdates().catch(() => {
+    /* 静默失败 */
   })
+}
+
+/** v0.16.2：防御兜底——更新模块不可用时返回明确错误（不再裸抛 undefined 读取） */
+function updaterBusy(message = '更新模块不可用（当前环境不支持自动更新）'): Record<string, unknown> {
+  updaterStatus = { state: 'error', message }
+  broadcastUpdater()
+  return { ok: false, reason: 'unavailable' }
 }
 
 // IPC：手动检查 / 下载 / 重启安装 / 当前状态
 ipcMain.handle('updater-check', () => {
-  if (!updaterEnabled) return { ok: false, reason: 'unsupported', state: updaterStatus }
+  if (!updaterEnabled || typeof autoUpdater?.checkForUpdates !== 'function') {
+    return updaterBusy()
+  }
   updaterStatus = { state: 'checking' }
   broadcastUpdater()
-  void import('electron-updater')
-    .then(({ autoUpdater }) => autoUpdater.checkForUpdates())
+  autoUpdater
+    .checkForUpdates()
     .catch((err) => {
       updaterStatus = { state: 'error', message: String(err?.message ?? err) }
       broadcastUpdater()
@@ -539,18 +548,20 @@ ipcMain.handle('updater-check', () => {
   return { ok: true }
 })
 ipcMain.handle('updater-download', () => {
-  if (!updaterEnabled) return { ok: false, reason: 'unsupported' }
-  void import('electron-updater').then(({ autoUpdater }) => {
-    autoUpdater.downloadUpdate().catch((err) => {
-      updaterStatus = { state: 'error', message: String(err?.message ?? err) }
-      broadcastUpdater()
-    })
+  if (!updaterEnabled || typeof autoUpdater?.downloadUpdate !== 'function') {
+    return updaterBusy()
+  }
+  autoUpdater.downloadUpdate().catch((err) => {
+    updaterStatus = { state: 'error', message: String(err?.message ?? err) }
+    broadcastUpdater()
   })
   return { ok: true }
 })
 ipcMain.handle('updater-install', () => {
-  if (!updaterEnabled) return { ok: false, reason: 'unsupported' }
-  void import('electron-updater').then(({ autoUpdater }) => autoUpdater.quitAndInstall())
+  if (!updaterEnabled || typeof autoUpdater?.quitAndInstall !== 'function') {
+    return updaterBusy()
+  }
+  autoUpdater.quitAndInstall()
   return { ok: true }
 })
 ipcMain.handle('updater-status', () => ({ ...updaterStatus, currentVersion: app.getVersion() }))
