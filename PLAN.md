@@ -1005,3 +1005,15 @@ pnpm --version   # 应 ≥10
 - [x] **根因**：updater 状态广播不含 currentVersion（仅 IPC 返回带）——广播晚到时覆盖状态 → 显示 v—
 - [x] **修复**：broadcast 统一带 currentVersion + renderer 用 __APP_VERSION__ 兜底（双保险）
 - [x] **验收**：typecheck/120/120/lint/build + 已发布
+
+
+### v0.17.0 · 2026-08-13 · 全量审查修复批
+
+- [x] **查证**：Electron app.exit 不触发 before-quit（H6 成立）/ safeStorage Windows ready 后恒可用（H7 降防御性）/ utilityProcess exit 事件（M18 方案可行）/ H8 双 /api 代码级确认
+- [x] **状态机自愈**：H2 generate try/catch 复位 + 空内容置 failed、H3 重启重置 generating、H4 hub 失败复位 + AbortSignal 真中断
+- [x] **安全**：H6 wipe-data 优雅关闭、H7 fail-closed、M1 null-origin 403、M2 keyCrypto 调试开关、M19 CSP + sender 校验
+- [x] **HIGH 正确性**：H1 ApiError 路由、H5 is_custom、H8 汇率 apiFetch、H9 select、H10 mergeBusy、H11 skillIds 回显
+- [x] **契约**：M3-M6 camelCase 全链、M7 planner 统一、M10 reserved 落库（v18）、M12 死占位/if.field 消费
+- [x] **主进程**：M15 checkpoint await、M16 失联通知、M17/M20 优雅关闭、M18 exit 事件、M21 npmrc.local
+- [x] **前端**：M22-M43 并发纪律（ref/disabled/try-catch 约 15 面板）+ P3 LOW 25 条（子代理 39 项）
+- [x] **验收**：125/125（+5 新测试）+ lint 0 error + build + 已发布
