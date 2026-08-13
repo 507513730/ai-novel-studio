@@ -1,5 +1,16 @@
 # AI-Novel-Studio 发布说明
 
+## [Unreleased]
+
+## v0.16.1（2026-08-13）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.16.1.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.16.1-portable-x64.exe`
+
+### 变更
+- **修复**：nsis artifactName 固定横线命名——产物文件名与 latest.yml 一致（此前产物含空格而 updater 元数据用横线名，自更新下载会 404）
+
 ## v0.16.0（2026-08-13）
 
 ### 安装方式
