@@ -1,5 +1,46 @@
 # AI-Novel-Studio 发布说明
 
+## v0.17.0（2026-08-13）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.17.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.17.0-portable-x64.exe`
+
+### 变更
+
+#### 全量源码审查修复批（0 CRITICAL / 11 HIGH / 45 MEDIUM / 25 LOW 全量收敛）
+
+**章节状态机自愈**（H2/H3/H4）
+- 生成链路抢占后 try/catch 复位（空内容/异常 → `failed`，不再永久卡 `generating`）；重启重置遗留 generating 章节
+- 创作中枢生成工具超时改 AbortSignal 真实中断（不再僵尸请求烧 token）
+
+**安全加固**（H6/H7/M1/M2/M19）
+- wipe-data 先优雅关闭 server（释放 db 句柄）再删除，杜绝 EBUSY/孤儿进程
+- safeStorage 不可用时**拒绝明文落库**（fail-closed，不再降级回明文）；keyCrypto 非 utility 模式同样 fail-closed（显式调试开关）
+- null Origin 无 token 一律 403（不再裸奔）；破坏性 IPC 校验 sender frame
+- 打包态 CSP（script-src 'self'）
+
+**正确性 HIGH**（H1/H5/H8/H9/H10/H11）
+- 汇率修复：`/api` 双拼路径改 apiFetch（汇率不再恒 7.2）
+- 用户创建智能体 `is_custom=1` 落库（可删除）；技能挂载状态从服务端真实回显（不再恒"未附加"）
+- mergeBusy/select 结构/ApiError 状态码路由等
+
+**契约与约束合规**
+- REST 统一 camelCase（usage stats / pending / version / skills——前端全链同步）
+- planner prompt/解析统一（routes 不再本地重复漂移）；预留路由 reserved 落库（v18 迁移）；if.field 条件分支真正消费
+
+**主进程健壮性**
+- 自动备份 await checkpoint（不再复制陈旧主库）；restore await 进程退出（替代固定延时）；优雅关闭链路（shutdown 消息 → server.close + stopScheduler）；server 失联清理并通知渲染端；.npmrc 机器相关配置移至 .npmrc.local
+
+**前端并发纪律与质量（40+ 处）**
+- 约 15 个面板统一 ref 守卫/disabled/try-catch（双击/重叠提交/吞错收敛）；a11y（资源树键盘、命令面板 dialog、Toast aria-live）；性能（快捷键 effect、localStorage 解析缓存、轮询条件化）；死代码/双转型/非空断言清理
+
+**测试**：125/125（+状态机重置/is_custom/reserved/camelCase 契约/fail-closed 5 例）
+
+- df96f00 feat: 全量审查修复批（0 CRITICAL/11 HIGH/45 MEDIUM/25 LOW 收敛——状态机自愈/安全加固/snake_case 契约/并发纪律/代码质量）（v0.17.0）
+
+## v0.17.0
+
 ## [Unreleased]
 
 ## v0.16.3（2026-08-13）
