@@ -17,6 +17,8 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
   // P12 A4：批量细化范围
   const [rangeFrom, setRangeFrom] = useState(0)
   const [rangeTo, setRangeTo] = useState(0)
+  // v0.20.0：故事板视图（卷章卡片化）
+  const [view, setView] = useState<'list' | 'storyboard'>('list')
 
   const volumes = useQuery({
     queryKey: ['volumes', novelId],
@@ -172,11 +174,18 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
         ))}
       </div>
 
-      {/* 全书章节一览 */}
+      {/* 全书章节一览（v0.20.0：列表 / 故事板卡片视图切换） */}
       <div className="panel">
         <div className="row justify-between flex-wrap gap-2">
           <h2>全书章节（{allChapters.length}）</h2>
           <div className="row flex-wrap">
+            <button
+              className="sm"
+              onClick={() => setView(view === 'storyboard' ? 'list' : 'storyboard')}
+              title="故事板：卷章卡片化可视化脉络"
+            >
+              {view === 'storyboard' ? '列表视图' : '故事板视图'}
+            </button>
             <input
               type="number"
               min={1}
@@ -195,8 +204,8 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
               onChange={(e) => setRangeTo(e.target.value === '' ? 0 : Number(e.target.value))}
             />
             <button
-              className="primary"
-              disabled={busy !== null || rangeFrom <= 0 || rangeTo < rangeFrom}
+              className="sm"
+              disabled={busy !== null || rangeFrom <= 0 || rangeTo <= 0 || rangeFrom > rangeTo}
               onClick={() => {
                 const from = Math.max(1, Math.min(rangeFrom, allChapters.length))
                 const to = Math.max(from, Math.min(rangeTo, allChapters.length))
@@ -215,21 +224,77 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
             批量细化中（已细化的章节自动跳过，中断后可重跑续接）…
           </p>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {allChapters.map((c) => (
-            <ChapterRow
-              key={c.id}
-              chapter={c}
-              busy={busy === `refine-${c.id}`}
-              onRefine={() => void refineChapter(c.id)}
-              onPatch={(patch) => void patchChapter(c.id, patch)}
-            />
-          ))}
-        </div>
+        {view === 'storyboard' ? (
+          // v0.20.0（NovelClaw 学习组）：故事板——按卷分组的章节卡片网格
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+            {(volumes.data?.volumes ?? []).map((v) => {
+              const chapters = allChapters.filter((c) => c.volumeId === v.id)
+              if (chapters.length === 0) return null
+              return (
+                <div key={v.id}>
+                  <div className="t3" style={{ marginBottom: 6 }}>
+                    第 {v.orderIndex + 1} 卷 · {v.title}（{chapters.length} 章）
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                    {chapters.map((c) => (
+                      <div
+                        key={c.id}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: 'var(--radius-m)',
+                          background: 'var(--bg-card)',
+                          border: `1px solid ${c.status === 'written' || c.status === 'reviewed' || c.status === 'done' ? 'rgba(52, 211, 153, 0.35)' : c.status === 'failed' ? 'rgba(248, 113, 113, 0.35)' : 'var(--border)'}`
+                        }}
+                      >
+                        <div className="muted t-small">{c.id}</div>
+                        <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>{c.title}</div>
+                        <div className="t-small" style={{ marginTop: 4 }}>
+                          <span className="badge" style={{ fontSize: 10 }}>
+                            {statusLabelOf(c.status)}
+                          </span>
+                          <span className="muted" style={{ fontSize: 10, marginLeft: 6 }}>
+                            {c.wordCount ? `${c.wordCount} 字` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+            {allChapters.length === 0 && <p className="muted t-small">暂无章节——先生成卷规划与章节清单。</p>}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {allChapters.map((c) => (
+              <ChapterRow
+                key={c.id}
+                chapter={c}
+                busy={busy === `refine-${c.id}`}
+                onRefine={() => void refineChapter(c.id)}
+                onPatch={(patch) => void patchChapter(c.id, patch)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
     </>
   )
+}
+
+// v0.20.0：故事板卡片状态文案（与 ChapterRow 一致）
+const STORY_STATUS: Record<string, string> = {
+  planned: '已规划',
+  refined: '已细化',
+  generating: '生成中',
+  written: '已写正文',
+  reviewed: '已审核',
+  failed: '失败',
+  done: '完成'
+}
+function statusLabelOf(s: string): string {
+  return STORY_STATUS[s] ?? s
 }
 
 function VolumeDetail({ novelId, volId }: { novelId: number; volId: number }): React.JSX.Element {

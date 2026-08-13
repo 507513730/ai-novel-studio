@@ -31,6 +31,50 @@ function extractProtagonistNameFromDraft(text: string): string {
   return m ? m[1] : ''
 }
 
+// v0.20.0：记忆面小组件——角色状态追加（Enter 提交）
+function CharStateAdd({ name, onAdd }: { name: string; onAdd: (s: string) => void }): React.JSX.Element {
+  const [draft, setDraft] = useState('')
+  return (
+    <input
+      style={{ width: 140, fontSize: 11, padding: '2px 6px' }}
+      placeholder={`给 ${name} 加状态…`}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && draft.trim()) {
+          onAdd(draft.trim())
+          setDraft('')
+        }
+      }}
+    />
+  )
+}
+
+// v0.20.0：记忆面小组件——势力当前状态修正（Enter 保存）
+function FactionStateEdit({
+  current,
+  onSave
+}: {
+  current: string
+  onSave: (s: string) => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState('')
+  return (
+    <input
+      style={{ width: 160, fontSize: 11, padding: '2px 6px' }}
+      placeholder={current ? `当前：${current}` : '设置势力状态…'}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && draft.trim()) {
+          onSave(draft.trim())
+          setDraft('')
+        }
+      }}
+    />
+  )
+}
+
 // v0.10.0（批B/I2）：质量债待修复徽标——整本生产后自动修复队列的显性入口
 // 用户必须"看得明白"：徽标显示待修复章节数，点击后任务入队（任务中心可见），修复上限由服务端保证
 function DebtFixBadge({ novelId }: { novelId: number }): React.JSX.Element | null {
@@ -722,6 +766,43 @@ export function ChapterExecutionPage(): React.JSX.Element {
       const r = await novelApi.pending(id)
       setPending(r)
       setShowPending(true)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // v0.20.0：记忆面（角色状态/势力状态/待确认事实——显式查看与手动修正）
+  const [memory, setMemory] = useState<{
+    characters: Array<{ name: string; states: string[] }>
+    factions: Array<{ name: string; currentState: string }>
+    pendingFacts: Array<{ id: number; content: string }>
+  } | null>(null)
+  const [showMemory, setShowMemory] = useState(false)
+  const [memoryBusy, setMemoryBusy] = useState(false)
+  const loadMemory = async (): Promise<void> => {
+    setMemoryBusy(true)
+    try {
+      const r = await novelApi.memory(id)
+      setMemory(r)
+      setShowMemory(true)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setMemoryBusy(false)
+    }
+  }
+  const patchCharState = async (name: string, state: string, remove: boolean): Promise<void> => {
+    try {
+      await novelApi.memoryCharacter(id, { name, state, remove })
+      await loadMemory()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    }
+  }
+  const patchFactionState = async (name: string, state: string): Promise<void> => {
+    try {
+      await novelApi.memoryFaction(id, { name, state })
+      await loadMemory()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
     }
@@ -1435,6 +1516,10 @@ export function ChapterExecutionPage(): React.JSX.Element {
           <button onClick={() => void withBusy('pending', () => loadPending())} disabled={actionBusy !== null}>
             {actionBusy === 'pending' ? '加载中…' : '待确认区'}
           </button>
+          {/* v0.20.0：记忆面（状态机显式查看/修正） */}
+          <button onClick={() => void loadMemory()} disabled={actionBusy !== null || memoryBusy}>
+            {memoryBusy ? '加载中…' : '记忆面'}
+          </button>
         </div>
 
         {/* 分区：快照与上下文 */}
@@ -1572,6 +1657,67 @@ export function ChapterExecutionPage(): React.JSX.Element {
             )}
             {pending && pending.pendingFacts.length === 0 && pending.pendingCharacters.length === 0 && (
               <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>暂无待确认项</p>
+            )}
+          </div>
+        )}
+
+        {/* v0.20.0：记忆面面板（角色状态/势力状态/待确认事实——可手动修正） */}
+        {showMemory && (
+          <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
+            <div className="row justify-between">
+              <strong>记忆面</strong>
+              <button onClick={() => setShowMemory(false)} style={{ fontSize: 12, padding: '2px 6px' }}>关闭</button>
+            </div>
+            <div className="muted" style={{ fontSize: 11, margin: '6px 0' }}>
+              状态机显式视图——AI 回灌与手动修正共用同一账本；可增删角色状态、修正势力状态。
+            </div>
+            {memory && (
+              <>
+                <div style={{ fontSize: 12, marginTop: 8 }}>
+                  <span className="muted">角色状态：</span>
+                  {memory.characters.filter((c) => c.states.length > 0).length === 0 && (
+                    <span className="muted">（暂无——运行「状态回灌提取」后生成）</span>
+                  )}
+                  {memory.characters
+                    .filter((c) => c.states.length > 0)
+                    .map((c) => (
+                      <div key={c.name} className="row" style={{ gap: 6, flexWrap: 'wrap', padding: '3px 0', alignItems: 'center' }}>
+                        <strong style={{ minWidth: 90 }}>{c.name}</strong>
+                        {c.states.map((s) => (
+                          <span key={s} className="badge" style={{ background: 'var(--accent-soft)', color: 'var(--accent-bright)' }}>
+                            {s}
+                            <button
+                              style={{ marginLeft: 4, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}
+                              onClick={() => void patchCharState(c.name, s, true)}
+                              title="删除此状态"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                        <CharStateAdd name={c.name} onAdd={(s) => void patchCharState(c.name, s, false)} />
+                      </div>
+                    ))}
+                </div>
+                <div style={{ fontSize: 12, marginTop: 10 }}>
+                  <span className="muted">势力状态：</span>
+                  {memory.factions.length === 0 && <span className="muted">（世界观未生成势力）</span>}
+                  {memory.factions.map((f) => (
+                    <div key={f.name} className="row" style={{ gap: 6, flexWrap: 'wrap', padding: '3px 0', alignItems: 'center' }}>
+                      <strong style={{ minWidth: 90 }}>{f.name}</strong>
+                      <span className="muted">{f.currentState || '（无）'}</span>
+                      <FactionStateEdit
+                        current={f.currentState}
+                        onSave={(s) => void patchFactionState(f.name, s)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, marginTop: 10 }}>
+                  <span className="muted">待确认事实（{memory.pendingFacts.length}）：</span>
+                  {memory.pendingFacts.map((f) => <div key={f.id}>• {f.content}</div>)}
+                </div>
+              </>
             )}
           </div>
         )}

@@ -1,11 +1,66 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ListChecks, RotateCcw, XCircle, RefreshCw, Trash2, Inbox } from 'lucide-react'
+import { ListChecks, RotateCcw, XCircle, RefreshCw, Trash2, Inbox, History } from 'lucide-react'
 import { novelApi, automationApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { EmptyState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
+
+// v0.20.0（NovelClaw 学习组）：运行轨迹——job.result_json.trace 时间线（生产/修复任务的阶段轨迹）
+interface JobTraceEntry {
+  at: string
+  chapter: string
+  action: string
+  done: number
+  total: number
+}
+
+function JobTrace({ result }: { result: unknown }): React.JSX.Element | null {
+  const [open, setOpen] = useState(false)
+  const r = (result ?? {}) as { trace?: JobTraceEntry[]; current?: string; action?: string; done?: number; total?: number; failed?: number }
+  const trace = r.trace ?? []
+  if (trace.length === 0 && !r.current) return null
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button className="sm" onClick={() => setOpen((v) => !v)}>
+        <History size={12} className="icon-gap" />
+        {open ? '收起轨迹' : `运行轨迹（${trace.length} 步）`}
+        {r.current ? ` · 当前：${r.current}${r.action ? ` — ${r.action}` : ''}` : ''}
+      </button>
+      {open && (
+        <div
+          style={{
+            marginTop: 8,
+            maxHeight: 220,
+            overflow: 'auto',
+            fontSize: 12,
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-m)',
+            background: 'var(--bg-input)',
+            padding: '8px 10px'
+          }}
+        >
+          <div className="muted" style={{ marginBottom: 6 }}>
+            完成 {r.done ?? 0}/{r.total ?? 0}
+            {typeof r.failed === 'number' && r.failed > 0 ? ` · 失败 ${r.failed}` : ''}
+          </div>
+          {trace.map((t, i) => (
+            <div key={i} className="row" style={{ gap: 8, alignItems: 'baseline', padding: '2px 0' }}>
+              <span className="muted" style={{ minWidth: 52, fontVariantNumeric: 'tabular-nums' }}>{t.at}</span>
+              <span className="muted" style={{ minWidth: 40 }}>{t.done}/{t.total}</span>
+              <span style={{ color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                {t.chapter || '—'}
+              </span>
+              <span className="muted" style={{ flexShrink: 0 }}>{t.action}</span>
+            </div>
+          ))}
+          {trace.length === 0 && <span className="muted">任务已结束（无阶段轨迹）</span>}
+        </div>
+      )}
+    </div>
+  )
+}
 
 
 // P12 A1：任务中心（jobs 统一状态：queued/running/failed/cancelled + 重试/取消）
@@ -192,6 +247,8 @@ export function TasksPage(): React.JSX.Element {
                   </button>
                 </div>
               )}
+              {/* v0.20.0：运行轨迹时间线（生产/修复任务的阶段轨迹） */}
+              <JobTrace result={j.result} />
             </div>
           )
         })}

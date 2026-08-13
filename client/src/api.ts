@@ -174,7 +174,17 @@ export const novelApi = {
   confirmState: (id: number, characterStates: Array<{ name: string; state: string }>): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/confirm-state`, { method: 'POST', body: JSON.stringify({ characterStates }) }),
   pending: (id: number): Promise<{ pendingFacts: Array<{ id: number; content: string; chapter_id: number }>; pendingCharacters: Array<{ id: number; name: string; profile: Record<string, string> }> }> =>
-    j(`/novels/${id}/pending`)
+    j(`/novels/${id}/pending`),
+  // v0.20.0：记忆面（状态机显式查看/修正）
+  memory: (id: number): Promise<{
+    characters: Array<{ name: string; states: string[] }>
+    factions: Array<{ name: string; currentState: string }>
+    pendingFacts: Array<{ id: number; content: string }>
+  }> => j(`/novels/${id}/memory`),
+  memoryCharacter: (id: number, body: { name: string; state?: string; remove?: boolean }): Promise<{ ok: boolean; states: string[] }> =>
+    js(`/novels/${id}/memory/character`, { method: 'POST', body: JSON.stringify(body) }),
+  memoryFaction: (id: number, body: { name: string; state: string }): Promise<{ ok: boolean }> =>
+    js(`/novels/${id}/memory/faction`, { method: 'POST', body: JSON.stringify(body) })
 }
 
 export const automationApi = {

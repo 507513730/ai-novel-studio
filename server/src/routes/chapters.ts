@@ -425,6 +425,97 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
     })
   })
 
+  // ---------- v0.20.0（NovelClaw 学习组）：记忆面——状态机显式查看与手动修正 ----------
+  router.get('/:novelId/memory', (req, res) => {
+    const novelId = Number(req.params.novelId)
+    const chars = db
+      .prepare('SELECT name, ledger_json FROM character WHERE novel_id = ? ORDER BY id')
+      .all(novelId) as Array<{ name: string; ledger_json: string }>
+    const world = db.prepare('SELECT factions_json FROM world WHERE novel_id = ?').get(novelId) as
+      | { factions_json: string }
+      | undefined
+    const facts = db
+      .prepare('SELECT id, content FROM fact WHERE novel_id = ? AND confirmed = 0')
+      .all(novelId) as Array<{ id: number; content: string }>
+    let factions: Array<{ name: string; currentState?: string }> = []
+    try {
+      factions = JSON.parse(world?.factions_json || '[]') as Array<{ name: string; currentState?: string }>
+    } catch {
+      factions = []
+    }
+    res.json({
+      characters: chars.map((c) => {
+        try {
+          const ledger = JSON.parse(c.ledger_json || '{}') as { states?: string[] }
+          return { name: c.name, states: ledger.states ?? [] }
+        } catch {
+          return { name: c.name, states: [] }
+        }
+      }),
+      factions: factions.map((f) => ({ name: f.name, currentState: f.currentState ?? '' })),
+      pendingFacts: facts
+    })
+  })
+
+  router.post('/:novelId/memory/character', (req, res, next) => {
+    try {
+      const novelId = Number(req.params.novelId)
+      const input = z
+        .object({ name: z.string().min(1), state: z.string().optional(), remove: z.boolean().optional() })
+        .parse(req.body)
+      const char = db
+        .prepare('SELECT id, ledger_json FROM character WHERE novel_id = ? AND name = ?')
+        .get(novelId, input.name) as { id: number; ledger_json: string } | undefined
+      if (!char) {
+        res.status(404).json({ error: '角色不存在' })
+        return
+      }
+      const ledger = JSON.parse(char.ledger_json || '{}') as { states?: string[] }
+      const states = ledger.states ?? []
+      if (input.remove && input.state) {
+        const idx = states.indexOf(input.state)
+        if (idx >= 0) states.splice(idx, 1)
+      } else if (input.state && !states.includes(input.state)) {
+        states.push(input.state.slice(0, 120))
+      }
+      db.prepare('UPDATE character SET ledger_json = ? WHERE id = ?').run(
+        JSON.stringify({ ...ledger, states }),
+        char.id
+      )
+      res.json({ ok: true, states })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  router.post('/:novelId/memory/faction', (req, res, next) => {
+    try {
+      const novelId = Number(req.params.novelId)
+      const input = z.object({ name: z.string().min(1), state: z.string().max(120) }).parse(req.body)
+      const world = db.prepare('SELECT factions_json FROM world WHERE novel_id = ?').get(novelId) as
+        | { factions_json: string }
+        | undefined
+      if (!world) {
+        res.status(404).json({ error: '世界观未生成' })
+        return
+      }
+      const factions = JSON.parse(world.factions_json || '[]') as Array<Record<string, unknown>>
+      const target = factions.find((f) => f.name === input.name)
+      if (!target) {
+        res.status(404).json({ error: '势力不存在' })
+        return
+      }
+      target.currentState = input.state
+      db.prepare("UPDATE world SET factions_json = ?, updated_at = datetime('now') WHERE novel_id = ?").run(
+        JSON.stringify(factions),
+        novelId
+      )
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // ---------- B1 上下文预览（写作上下文可视化） ----------
   router.get('/:novelId/chapters/:chapterId/context-preview', (req, res) => {
     const novelId = Number(req.params.novelId)

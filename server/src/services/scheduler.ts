@@ -36,6 +36,36 @@ interface JobPayload {
   to?: number
 }
 
+// v0.20.0（NovelClaw 学习组）：运行轨迹——每次进度回调追加时间线（保留最新 300 条）
+const TRACE_LIMIT = 300
+
+function traceAppend(db: DatabaseSync, jobId: number, state: Record<string, unknown>): Record<string, unknown> {
+  const row = db.prepare('SELECT result_json FROM job WHERE id = ?').get(jobId) as
+    | { result_json: string }
+    | undefined
+  let prev: { trace?: Array<{ at: string; done: number; total: number; chapter: string; action: string }> } = {}
+  try {
+    prev = row ? JSON.parse(row.result_json || '{}') : {}
+  } catch {
+    prev = {}
+  }
+  const trace = prev.trace ?? []
+  const last = trace[trace.length - 1]
+  // 去重：同章节同动作不重复追加（防高频刷屏）
+  if (last && last.chapter === String(state.current ?? '') && last.action === String(state.action ?? '')) {
+    return { ...state, trace }
+  }
+  trace.push({
+    at: new Date().toISOString().slice(11, 19),
+    chapter: String(state.current ?? ''),
+    action: String(state.action ?? ''),
+    done: Number(state.done ?? 0),
+    total: Number(state.total ?? 0)
+  })
+  if (trace.length > TRACE_LIMIT) trace.splice(0, trace.length - TRACE_LIMIT)
+  return { ...state, trace }
+}
+
 let running = false
 let timer: ReturnType<typeof setInterval> | null = null
 
@@ -122,14 +152,14 @@ async function processJob(db: DatabaseSync, job: JobRecord): Promise<void> {
           const ratio = p.total > 0 ? Math.round(((p.done + p.failed) / p.total) * 100) : 100
           updateJob(db, job.id, {
             progress: ratio,
-            resultJson: JSON.stringify({
+            resultJson: JSON.stringify(traceAppend(db, job.id, {
               current: p.currentChapter,
               action: p.currentAction,
               done: p.done,
               total: p.total,
               failed: p.failed,
               qualityDebts: p.qualityDebts
-            })
+            }))
           })
         },
         { from: payload.from, to: payload.to, jobId: job.id }
@@ -144,7 +174,7 @@ async function processJob(db: DatabaseSync, job: JobRecord): Promise<void> {
           const ratio = total > 0 ? Math.round((done / total) * 100) : 100
           updateJob(db, job.id, {
             progress: ratio,
-            resultJson: JSON.stringify({ current, action, done, total })
+            resultJson: JSON.stringify(traceAppend(db, job.id, { current, action, done, total }))
           })
         }
       )
