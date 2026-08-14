@@ -377,6 +377,12 @@ const selectedChapterRef = useRef<number | null>(null)
   })
   const list = chapters.data?.chapters ?? []
   const chapter = list.find((c) => c.id === selectedChapter)
+  // v0.22.2：正文进度轻提示（剩余/失败章——"点进来不知道该干嘛"的场景引导）
+  const chapterStats = useMemo(() => {
+    const written = list.filter((c) => c.status === 'written' || c.status === 'reviewed' || c.status === 'done').length
+    const failed = list.filter((c) => c.status === 'failed').length
+    return { total: list.length, written, failed, remaining: Math.max(0, list.length - written) }
+  }, [list])
   // v0.19.0：字数分离展示（服务端累计 + 会话增量）
   const statsShow = chapter
     ? { ai: (chapter.aiWords ?? 0) + wordStats.ai, human: (chapter.humanWords ?? 0) + wordStats.human }
@@ -1265,6 +1271,14 @@ const selectedChapterRef = useRef<number | null>(null)
             <button onClick={() => void generate()} disabled={streaming || !selectedChapter || contentLoading}>
               {streaming ? '生成中…' : 'AI 生成正文'}
             </button>
+            {/* v0.22.2：正文进度轻提示——剩余/失败章一目了然 */}
+            {chapterStats.total > 0 && (chapterStats.remaining > 0 || chapterStats.failed > 0) && (
+              <span className="muted t-small" style={{ alignSelf: 'center' }}>
+                进度 {chapterStats.written}/{chapterStats.total} 章
+                {chapterStats.remaining > 0 ? ` · 剩 ${chapterStats.remaining} 章待生产` : ''}
+                {chapterStats.failed > 0 ? ` · ⚠ ${chapterStats.failed} 章失败可重试` : ''}
+              </span>
+            )}
             <input
               style={{ flex: '1 1 200px', minWidth: 180 }}
               placeholder="可选：对本次生成的额外要求（如：本章要引入新反派伏笔、节奏放慢写细节）…"

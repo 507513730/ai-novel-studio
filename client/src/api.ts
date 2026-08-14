@@ -200,7 +200,16 @@ export const automationApi = {
     j(`/novels/${id}/director/status`),
   produce: (id: number, range?: { from?: number; to?: number }): Promise<{ jobId: number; pending: number }> =>
     js(`/novels/${id}/produce`, { method: 'POST', body: JSON.stringify(range ?? {}) }),
-  novelStatus: (id: number): Promise<Record<string, unknown>> => j(`/novels/${id}/status`),
+  novelStatus: (id: number): Promise<{
+    novelId: number
+    chapters: number
+    written: number
+    failed: number
+    activeJob: { id: number; type: string; status: string; progress: number; detail: Record<string, unknown> } | null
+    director: { status: string; displayStatus: string; blockingReason: string | null } | null
+    // v0.22.2：下一步引导
+    nextSteps: { title: string; description: string; action?: { label: string; to: string } }
+  }> => j(`/novels/${id}/status`),
   jobs: (): Promise<{ jobs: Array<Record<string, unknown>> }> => j('/jobs'),
   // P19 ③：清理已完成任务（保留 running）
   jobsClearDone: (): Promise<{ deleted: number }> => j('/jobs/done', { method: 'DELETE' }),

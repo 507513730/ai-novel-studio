@@ -325,11 +325,48 @@ export function createAutomationRouter(db: DatabaseSync): Router {
       .get(novelId) as
       | { id: number; type: string; status: string; progress: number; result_json: string }
       | undefined
+    // v0.22.2：下一步引导（书级"不知道该干什么"问题）——规则优先级：
+    // ① 生产进行中 ② 正文未写完（含失败章） ③ 写完有质量债 ④ 全部完成
+    const written = chapters.written ?? 0
+    const total = chapters.c
+    const failed = chapters.failed ?? 0
+    const remaining = Math.max(0, total - written)
+    const debts = db
+      .prepare(
+        'SELECT COUNT(DISTINCT chapter_id) AS c FROM quality_debt WHERE resolved = 0 AND chapter_id IN (SELECT id FROM chapter WHERE novel_id = ?)'
+      )
+      .get(novelId) as { c: number }
+    let nextSteps: Record<string, unknown>
+    if (activeJob) {
+      nextSteps = {
+        title: '生产进行中',
+        description: `${activeJob.type === 'production' ? '正文生产' : '任务执行'}中：已完成 ${written}/${total} 章${failed > 0 ? `，${failed} 章失败待重试` : ''}——可到任务中心查看进度`,
+        action: { label: '查看任务中心', to: '/tasks' }
+      }
+    } else if (remaining > 0) {
+      nextSteps = {
+        title: '继续生产正文',
+        description: `本书已完成 ${written}/${total} 章（${failed > 0 ? `${failed} 章失败待重试，` : ''}剩余 ${remaining} 章待生产）——进入章节执行页开始生产`,
+        action: { label: '进入章节执行', to: `/novels/${novelId}/chapters` }
+      }
+    } else if (debts.c > 0) {
+      nextSteps = {
+        title: '收尾：修复质量债',
+        description: `正文已全部完成，还有 ${debts.c} 个章节有待修复项——建议先清理质量债再导出`,
+        action: { label: '查看质量债', to: '/settings' }
+      }
+    } else {
+      nextSteps = {
+        title: '本书已完成',
+        description: `全部 ${total} 章已写完且无待修复项——可导出全书或开启新书`,
+        action: { label: '导出章节', to: `/novels/${novelId}/chapters` }
+      }
+    }
     res.json({
       novelId,
-      chapters: chapters.c,
-      written: chapters.written ?? 0,
-      failed: chapters.failed ?? 0,
+      chapters: total,
+      written,
+      failed,
       director: director
         ? {
             status: director.status,
@@ -345,7 +382,8 @@ export function createAutomationRouter(db: DatabaseSync): Router {
             progress: activeJob.progress,
             detail: JSON.parse(activeJob.result_json || '{}')
           }
-        : null
+        : null,
+      nextSteps
     })
   })
 

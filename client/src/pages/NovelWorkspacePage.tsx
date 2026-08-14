@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { novelApi } from '../api'
+import { novelApi, automationApi } from '../api'
+import { ArrowRight } from 'lucide-react'
 import { useConfirm } from '../components/ConfirmDialog'
 import { SetupPanel } from '../workspace/SetupPanel'
 import { ConstraintPanel } from '../workspace/ConstraintPanel'
@@ -38,6 +39,47 @@ const STEPS: StepDef[] = [
 ]
 
 type StepStatus = 'done' | 'current' | 'todo'
+
+// v0.22.2：书级"下一步"引导卡——从 /status 取 nextSteps（服务端规则引擎），
+// 解决"点进书本不知道该干什么"（书 25 命中：正文未写完 → 继续生产）
+function NextStepCard({ novelId }: { novelId: number }): React.JSX.Element | null {
+  const navigate = useNavigate()
+  const status = useQuery({
+    queryKey: ['novel-status', novelId],
+    queryFn: () => automationApi.novelStatus(novelId),
+    refetchInterval: 15000
+  })
+  const next = (status.data?.nextSteps as
+    | { title: string; description: string; action?: { label: string; to: string } }
+    | undefined)
+  if (!next) return null
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 14px',
+        marginBottom: 16,
+        borderRadius: 'var(--radius-m)',
+        border: '1px solid var(--accent)',
+        background: 'var(--accent-soft)'
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <strong style={{ fontSize: 13 }}>{next.title}</strong>
+        <span className="muted t-small" style={{ display: 'block', marginTop: 2 }}>
+          {next.description}
+        </span>
+      </div>
+      {next.action && (
+        <button className="primary sm" onClick={() => navigate(next.action!.to)}>
+          {next.action.label} <ArrowRight size={12} />
+        </button>
+      )}
+    </div>
+  )
+}
 
 // P19 ⑦：卡片化创作向导（横排卡片；全部完成后自动折叠，可手动展开）
 function GuideStrip({
@@ -288,6 +330,9 @@ export function NovelWorkspacePage(): React.JSX.Element {
             onPick={switchTab}
           />
         )}
+
+        {/* v0.22.2：书级"下一步"引导卡（用户进书不知道该干什么——指向当前最该做的动作） */}
+        {n && <NextStepCard novelId={id} />}
 
         {tab === 'setup' && <SetupPanel novelId={id} onDirtyChange={setDirty} />}
         {tab === 'constraints' && <ConstraintPanel novelId={id} />}

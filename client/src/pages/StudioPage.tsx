@@ -109,6 +109,8 @@ export function StudioPage(): React.JSX.Element {
 
   const agentOptions = (agents.data?.agents ?? []) as Array<{ id: number; name: string; role: string; description?: string }>
   const agentName = (id: number): string => agentOptions.find((a) => a.id === id)?.name ?? `#${id}`
+  // v0.22.2：agent 职责说明（名称现代化后——"连续性检查"等需职责小字辅助理解）
+  const agentDesc = (id: number): string => agentOptions.find((a) => a.id === id)?.description ?? ''
 
   const patchDraft = (p: Partial<SolutionView>): void => {
     setDraft((prev) => (prev ? { ...prev, ...p } : prev))
@@ -590,7 +592,8 @@ export function StudioPage(): React.JSX.Element {
                       </button>
                     </div>
                     <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                      智能体：{agentName(step.agentId)} · {STAGE_LABEL[step.stage] ?? step.stage}
+                      智能体：{agentName(step.agentId)}
+                      {agentDesc(step.agentId) ? `（${agentDesc(step.agentId)}）` : ''} · {STAGE_LABEL[step.stage] ?? step.stage}
                       {step.maxTokens ? ` · max ${step.maxTokens} tokens` : ''}
                     </div>
                   </div>
