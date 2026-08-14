@@ -577,3 +577,10 @@
 - **Agent 改名（真实库，10 行）**：定策阁主→总策划 / 命途执笔→主线编剧 / 棋局推手→节奏策划 / 丹青妙笔→场景描摹 / 声韵师→对白编剧 / 鼓点手→爽点调度 / 青史主编→内容审校 / 红尘读者→读者视角 / 因果司→连续性检查 / 天命合卷→终审合稿；description 由 4-11 字补全为职责说明。安全性已验证：方案 steps 按 agentId 引用、prompt 走 body_md 不含 name——改名零影响产出。UI：方案详情步骤列表展示「名称（职责）」。
 - **验收**：155/155（+4 nextSteps 四态）+ 已发布 v0.22.2。
 
+### D96 · 2026-08-14 · 应用单实例修复（多开问题）
+
+- **背景（用户反馈）**：应用已打开时再次点击快捷方式会再开一个窗口——main.ts 无 `requestSingleInstanceLock`（grep 确认零实现），Electron 默认允许多实例。
+- **查证**：Electron 官方文档（app 模块）——`requestSingleInstanceLock()` 返回 false = 已有实例，进程应立即退出；`second-instance` 事件在第二实例调用锁时于主实例触发，官方建议用于"make primary window focused"。
+- **修复（v0.22.3）**：main.ts 顶部（ready 前）`if (!app.requestSingleInstanceLock()) app.quit()`；`whenReady` 内 `app.on('second-instance')` → 最小化则 restore + show + focus。未获得锁的实例不建窗口/不起 server——顺带杜绝双 server 抢真实库隐患。
+- **验收**：typecheck/build 通过 + 发布后用户真机验证（开应用 → 再点快捷方式 → 不新开、原窗口唤起）。
+

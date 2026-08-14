@@ -1067,3 +1067,9 @@ pnpm --version   # 应 ≥10
 - [x] **引导 UI**：书工作区顶部常驻引导卡（15s 轮询 + 主按钮跳转）+ 章节执行页进度轻提示
 - [x] **Agent 改名**：帝路十章 10 个（定策阁主→总策划 … 因果司→连续性检查 …）+ description 职责补全；方案详情步骤列表展示「名称（职责）」
 - [x] **验收**：155/155（+4 nextSteps 四态）+ lint 0 error + 已发布 v0.22.2
+
+### v0.22.3 · 2026-08-14 · 修复：应用单实例（多开唤出已有窗口）
+
+- [x] **根因**：main.ts 无 requestSingleInstanceLock（grep 确认）——Electron 默认允许多实例
+- [x] **修复**：ready 前获取锁（未获得 → quit）+ second-instance 唤出主窗口（restore/show/focus）；杜绝双 server 抢库隐患
+- [x] **验收**：typecheck/build + 已发布 v0.22.3（真机多开验证待用户）

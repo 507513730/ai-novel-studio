@@ -6,6 +6,13 @@ import { randomBytes } from 'node:crypto'
 // 打包时 external，运行时从 asar node_modules 正常 require；开发模式仅加载不初始化
 import { autoUpdater } from 'electron-updater'
 
+// v0.22.3：单实例锁——再次点击快捷方式不新开窗口，而是唤出已有实例（Electron 官方 API：
+// requestSingleInstanceLock 须在 ready 前调用；未获得锁 = 已有实例在跑 → 本实例立即退出，
+// 由主实例 second-instance 事件处理聚焦。另杜绝"双 server 抢真实库"隐患）
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+}
+
 let mainWindow: BrowserWindow | null = null
 let serverProcess: Electron.UtilityProcess | null = null
 // P11-1.2：缓存 server URL（防 server-ready 早于 renderer 监听导致消息丢失）
@@ -526,6 +533,15 @@ app.whenReady().then(() => {
   createMenu()
   startServer()
   createWindow()
+
+  // v0.22.3：第二实例触发 → 唤出主窗口（最小化则恢复，未聚焦则聚焦）
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
 
   // v0.9.2（O4）：每日自动备份——启动 5 分钟后首备（等 server 就绪），之后每 24h
   setTimeout(() => runAutoBackup(), 5 * 60 * 1000)

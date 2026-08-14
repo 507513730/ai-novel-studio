@@ -2,7 +2,14 @@
 
 ## [Unreleased]
 
-## v0.22.2（2026-08-14）
+## v0.22.3（2026-08-14）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.22.3.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.22.3-portable-x64.exe`
+
+### 变更
+- **修复**：应用单实例——再次点击快捷方式不再新开窗口，改为唤出已有实例（`requestSingleInstanceLock` + `second-instance` 聚焦；未获得锁的实例立即退出）；顺带杜绝多实例双 server 抢真实库的隐患
 
 ### 安装方式
 - **安装版**：`AI-Novel-Studio Setup 0.22.2.exe`（NSIS 向导版）
