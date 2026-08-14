@@ -89,6 +89,15 @@ try {
     process.exit(1)
   }
   ok('git 工作区干净')
+  // v0.22.0（完成即推送纪律 #60b）：检查未推送提交（提示但不阻断——发布会自动带上）
+  try {
+    const ahead = Number(run('git rev-list --count origin/main..main').trim() || 0)
+    if (ahead > 0) {
+      console.log(`  ⚠ 本地领先远程 ${ahead} 个提交——完成即推送纪律（AGENTS #60b）要求门禁通过即 push；本发布将一并带上，建议日常即时推送`)
+    }
+  } catch {
+    /* 无远程/离线时忽略 */
+  }
 } catch {
   fail('无法执行 git')
   process.exit(1)
@@ -355,9 +364,10 @@ if (PUSH) {
   }
 } else {
   console.log('  （未加 --push，请手动执行）')
-  console.log('  1. git add -A && git commit -m "chore: release v' + version + '"')
+  // v0.22.0：手操指引 PS 5.1 兼容（PowerShell 5.1 不支持 &&——用 ; 分隔；PS 7+ 两者皆可）
+  console.log('  1. git add -A; git commit -m "chore: release v' + version + '"')
   console.log('  2. git push origin main')
-  console.log('  3. git tag v' + version + ' && git push origin v' + version)
+  console.log('  3. git tag v' + version + '; git push origin v' + version)
 }
 
 // ---------- 7) 发布后确认（P26：--push 后自动验证 CI + Release） ----------

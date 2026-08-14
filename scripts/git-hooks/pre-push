@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+// pre-push hook —— 完成即推送纪律（AGENTS #60b）强制门禁
+// push 前本地跑 typecheck + lint + test 三绿，任一失败拦截推送（所有 agent 与手操均无法绕过）
+// 安装（一次性）：git config core.hooksPath scripts/git-hooks
+import { execSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+
+const STEPS = [
+  ['typecheck', 'pnpm typecheck'],
+  ['lint', 'pnpm lint'],
+  ['test', 'pnpm test']
+]
+
+// 安全护栏：必须在仓库根执行（hook 可能被 cwd 意外调用）
+if (!existsSync('package.json') || !existsSync('scripts/git-hooks/pre-push')) {
+  console.error('[pre-push] 未在仓库根运行，已拦截推送')
+  process.exit(1)
+}
+
+console.log('[pre-push] 门禁检查（AGENTS #60b 完成即推送）…')
+for (const [name, cmd] of STEPS) {
+  try {
+    execSync(cmd, { stdio: 'inherit', cwd: process.cwd(), timeout: 10 * 60 * 1000 })
+    console.log(`[pre-push] ✓ ${name} 通过`)
+  } catch {
+    console.error(`\n[pre-push] ✗ ${name} 未通过——门禁未绿，禁止推送（AGENTS #60b）。修复后重新 push。`)
+    process.exit(1)
+  }
+}
+console.log('[pre-push] ✓ 三绿，放行推送')

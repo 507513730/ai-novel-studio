@@ -30,8 +30,9 @@
 ### 阶段 0 · 进场（首次）
 1. 读完本文档 → `AGENTS.md` → `PLAN.md` 当前阶段章节 → `docs/decision-log.md` 最近 10 条
 2. `pnpm install`（依赖已锁定——勿随意升级，见 AGENTS 纪律 #2）
-3. `pnpm dev` 跑通（Electron 三进程；dev 固定端口 3000，浏览器可直连调试）
-4. 自验证（文档保鲜锚点）：`pnpm test` 全过、`pnpm typecheck` 0 error——若本文档的基线数字与实际不符，按 §17 规则更新
+3. **安装 pre-push 门禁钩子（一次性）**：`git config core.hooksPath scripts/git-hooks`——push 前自动跑三绿，未过拦截（AGENTS #60b 强制层；新 clone 必须执行）
+4. `pnpm dev` 跑通（Electron 三进程；dev 固定端口 3000，浏览器可直连调试）
+5. 自验证（文档保鲜锚点）：`pnpm test` 全过、`pnpm typecheck` 0 error——若本文档的基线数字与实际不符，按 §17 规则更新
 
 ### 阶段 1 · 理解任务
 - 明确需求性质：功能 / 修复 / 审查 / 查证 / 文档 / 写书支持
@@ -54,6 +55,8 @@
 | `pnpm build` | 三端构建通过 |
 | `pnpm db:smoke` | checks passed（数据层改动时） |
 | `pnpm dist` | **任何代码改动后**（AGENTS #35/#36：release 产物时间戳更新；发版时会重跑 dist，两者不冲突） |
+
+> **push 由 pre-push hook 强制门禁**（阶段 0 安装）：`git push` 前自动跑 typecheck/lint/test 三绿，未过拦截——所有 agent 与手操均无法绕过（AGENTS #60b）。
 
 ### 阶段 5 · 台账（写时更新）
 - `PLAN.md` 对应阶段勾选 `[x]` + 新版本记录

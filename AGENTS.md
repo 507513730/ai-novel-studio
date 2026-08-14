@@ -106,7 +106,7 @@ docs/          校准报告 + P9 体验修复明细
 59. **默认模型纪律**：默认主模型为 **deepseek-v4-flash**；新模型必须先校准对比（k3/pro/glm/gpt 等）再启用；e2e/校准/演示链路统一用 flash。
 
 60. **提交规范（开放仓库）**：commit 遵循 Conventional Commits——feat/fix/docs/refactor/test/chore/ci 等类型 + scope 可选（如 feat(p30)）；破坏性变更必须标注 BREAKING CHANGE 页脚；PR 由 CI 检查（.github/workflows/commitlint.yml），本地不装钩子；commit 是公开历史，禁止空描述、禁止裸 commit 内容。
-60b. **完成即推送纪律（v0.21.0，全体协作者统一）**：任务完成即提交（一个 commit = 一个逻辑单元）；**本地门禁通过（typecheck + lint + test 三绿，数据层改动加 db-smoke）后立即 `git push origin main`**——远程是全体协作者与用户的共享工作面，禁止改动滞留本地（反例：曾攒 4 个提交未推）。push 前检查 `git status`（不覆盖他人未提交工作）与 `git log origin/main..HEAD`（无密钥/临时文件/未经授权内容）；push 被拒（远程有新提交）→ `git pull --rebase` 保留双方意图再推。**例外（不推）**：发布类（bump/tag/release 产物，走 release.mjs 用户批准）、本地实验/中间态（门禁未过一律不推）；不建 WIP 分支、不推未验证代码。**CI 红 → push 者本人优先修复**（本人不在场才轮到下一位协作者，AGENTS #58）。
+60b. **完成即推送纪律（v0.21.0，全体协作者统一）**：任务完成即提交（一个 commit = 一个逻辑单元）；**本地门禁通过（typecheck + lint + test 三绿，数据层改动加 db-smoke）后立即 `git push origin main`**——远程是全体协作者与用户的共享工作面，禁止改动滞留本地（反例：曾攒 4 个提交未推）。push 前检查 `git status`（不覆盖他人未提交工作）与 `git log origin/main..HEAD`（无密钥/临时文件/未经授权内容）；push 被拒（远程有新提交）→ `git pull --rebase` 保留双方意图再推。**例外（不推）**：发布类（bump/tag/release 产物，走 release.mjs 用户批准）、本地实验/中间态（门禁未过一律不推）；不建 WIP 分支、不推未验证代码。**CI 红 → push 者本人优先修复**（本人不在场才轮到下一位协作者，AGENTS #58）。**v0.22.0 起由 `scripts/git-hooks/pre-push` 强制执行**（`git config core.hooksPath scripts/git-hooks` 安装，一次性；push 前自动跑三绿，未过拦截——所有 agent 与手操均无法绕过；新 clone 后必须先安装，见 onboarding 阶段 0）。
 
 61. **每批开工前查证纪律**：每个批次开工前，对涉及的外部依赖/API/框架行为先上网查证（官方文档优先），查证结论与来源记入 decision-log；无外部依据的本地设计决策也要显式标注「本地设计」。禁止凭印象实现关键机制（历史教训：Node close 语义、SDK 重试叠加均为查证发现的认知修正）。
 
