@@ -47,32 +47,32 @@ describe('P29 智能体资产化', () => {
   })
 })
 
-describe('P30 ?????????????', () => {
-  it('step ???production.output ????', () => {
+describe('P30 章节生产流水线（方案接力）', () => {
+  it('解析步骤：非法 production.output 剔除，无 production 步骤保留', () => {
     const steps = parseSolutionSteps(JSON.stringify([
       { agentId: 1, role: 'a', stage: 'whole_book', production: { output: 'outline' } },
       { agentId: 1, role: 'b', stage: 'whole_book', production: { output: 'final' } },
       { agentId: 1, role: 'c', stage: 'whole_book', production: { output: 'BAD' } },
       { agentId: 1, role: 'd', stage: 'whole_book' }
     ]))
-    expect(steps.length).toBe(3) // BAD ???
+    expect(steps.length).toBe(3) // BAD 被剔除，剩 3 步
     expect(steps.filter((s) => s.production?.output === 'final').length).toBe(1)
-    expect(steps.filter((s) => !s.production).length).toBe(1) // ? production ????? draft?
+    expect(steps.filter((s) => !s.production).length).toBe(1) // 无 production 的步骤保留（非流水线步骤）
   })
 
-  it('???????????? ? ??????????????', () => {
+  it('createSolution 保留 production 步骤（whole_book）', () => {
     const db = makeDb()
     const editor = db.prepare("SELECT id FROM agent WHERE role = 'editor'").get() as { id: number }
     const id = createSolution(db, {
-      name: '????',
+      name: 'P30 测试方案',
       description: '',
       steps: [
-        { agentId: editor.id, role: '??', stage: 'whole_book', production: { output: 'draft' } },
-        { agentId: editor.id, role: '??', stage: 'post_generate' }
+        { agentId: editor.id, role: '大纲', stage: 'whole_book', production: { output: 'draft' } },
+        { agentId: editor.id, role: '审校', stage: 'post_generate' }
       ]
     })
     const sol = loadSolution(db, id)
-    // ???? runProductionChapter ????????????????????
+    // production 步骤完整保留，供 runProductionChapter 消费
     expect(sol?.steps.length).toBe(2)
     expect(sol?.steps[0].stage).toBe('whole_book')
     db.close()

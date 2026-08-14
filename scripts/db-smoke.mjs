@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-const { applyMigrations, getSchemaVersion } = await import('../server/src/db/migrate.ts')
+const { applyMigrations, getSchemaVersion, SCHEMA_VERSION } = await import('../server/src/db/migrate.ts')
 const { seedIfEmpty } = await import('../server/src/db/seed.ts')
 
 const dir = mkdtempSync(join(tmpdir(), 'ai-novel-db-smoke-'))
@@ -34,10 +34,10 @@ try {
     if (mode && mode.journal_mode !== 'wal') throw new Error(`mode=${mode?.journal_mode}`)
   })
 
-  check('迁移应用（schema version=3）', () => {
+  check(`迁移应用（schema version=${SCHEMA_VERSION}）`, () => {
     applyMigrations(db)
     const v = getSchemaVersion(db)
-    if (v !== 5) throw new Error(`schema version=${v}`)
+    if (v !== SCHEMA_VERSION) throw new Error(`schema version=${v}`)
   })
 
   check('seed 幂等（重复调用不重复插入）', () => {
@@ -66,12 +66,13 @@ try {
 
   check('写读 + 事务回滚', () => {
     const db2 = new DatabaseSync(dbPath, { timeout: 5000 })
+    const before = db2.prepare('SELECT COUNT(*) AS c FROM novel').get().c // seed 含 __global__ 占位行（id=0）
     db2.exec('BEGIN')
     db2.prepare('INSERT INTO novel (title, inspiration) VALUES (?, ?)').run('测试书', '一段灵感')
     db2.exec('ROLLBACK')
     const c = db2.prepare('SELECT COUNT(*) AS c FROM novel').get().c
     db2.close()
-    if (c !== 0) throw new Error('rollback failed, novel count=' + c)
+    if (c !== before) throw new Error(`rollback failed, novel count ${before} -> ${c}`)
   })
 
   check('外键约束生效', () => {

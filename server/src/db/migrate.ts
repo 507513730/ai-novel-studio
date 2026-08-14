@@ -475,6 +475,8 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
   }
 ]
 
+export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
+
 export function applyMigrations(db: DatabaseSync): void {
   db.exec(`CREATE TABLE IF NOT EXISTS _migrations (
     version INTEGER PRIMARY KEY,
