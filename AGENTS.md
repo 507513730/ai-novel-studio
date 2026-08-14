@@ -34,7 +34,7 @@
 19. **服务安全边界**：本地 Express 只监听 `127.0.0.1` + 随机端口（`port: 0`），禁止固定端口（dev 模式除外，AI_NOVEL_PORT=3000）；**CORS 必须用 services/security.ts 的 originGuard 白名单（P2.2 #1/D20）**：允许 `null`(file://) + localhost/127.0.0.1 任意端口 + dev 5173，其他 Origin 403；禁止全开 cors()；app 退出钩子必须 server.close + kill utilityProcess，禁止 Windows 孤儿进程。
 20. **API 字段命名**：所有 REST API 返回统一 camelCase，与 shared/types 对齐；禁止 snake_case 直出（参考 D5 教训）。新增路由时必须核对客户端类型。
 21. **结构化输出任务路由纪律**（D9）：所有要求 JSON 输出的任务（方向/世界/角色/卷/章节/细化/审核/修复/回灌）统一用 **extraction 路由**（thinking off + jsonMode 生效）；禁止用 thinking 路由跑 JSON 任务（D9 实测空输出/截断）。大 JSON 必须拆步（世界观 3 步、角色 2 批）。
-22. **PowerShell 编码陷阱**（D10）：禁止用 PowerShell `Set-Content` 重写含中文的源码文件（会破坏 UTF-8）；一律用 Write/Edit 工具或 node 脚本（显式 UTF-8）。
+22. **PowerShell 编码陷阱**（D10 + D90 反例）：**禁止 PowerShell 任何文本写入 cmdlet（`Set-Content`/`Add-Content`/`Out-File`/here-string 追加）写含中文的文档与源码**（破坏 UTF-8，D90 曾产生 0x07 控制符损坏）；一律用 Write/Edit 工具或 node 脚本（显式 UTF-8）。
 23. **执行面隔离纪律**（P2/D16）：重型链路（导演/整本生产）只经 job 表 + scheduler 执行；API 只下发命令；scheduler 启动时必须重置遗留 running→queued（重启幂等）；阶段幂等以"产物落库判定"为准，不以状态字段。
 24. **Creative Hub 工具调用**（D15）：chat 路由必须 thinking off（工具+thinking 会空 content）；assistant 消息回传必须含 tool_calls 字段（否则 400）；reasoning_content 同步回传；agent_session.agent_id 可空。
 25. **P2.1 新增纪律**：

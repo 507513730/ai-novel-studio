@@ -69,6 +69,31 @@ if (existsSync(onboardingPath)) {
   check('AI-AGENT-ONBOARDING.md 存在', false, '缺失 onboarding 文档（AI 协作者手册）')
 }
 
+// ---------- v0.21.0：文档健康检查（防控制字符损坏——D90 教训：PowerShell 写入产生 0x07） ----------
+const DOC_FILES = [
+  'docs/CHANGELOG.md',
+  'PLAN.md',
+  'docs/AI-AGENT-ONBOARDING.md',
+  'docs/decision-log.md',
+  'docs/versioning.md',
+  'README.md',
+  'AGENTS.md'
+]
+const damaged = []
+for (const f of DOC_FILES) {
+  const p = join(ROOT, f)
+  if (!existsSync(p)) continue
+  const buf = readFileSync(p)
+  // ASCII 控制字符（0x00-0x1F，允许 \n \r \t）
+  for (let i = 0; i < buf.length; i++) {
+    const c = buf[i]
+    if (c < 0x20 && c !== 0x0a && c !== 0x0d && c !== 0x09) {
+      damaged.push(`${f}@字节${i}（0x${c.toString(16).padStart(2, '0')}）`)
+    }
+  }
+}
+check('核心文档无 ASCII 控制字符', damaged.length === 0, damaged.slice(0, 5).join(', ') + (damaged.length > 5 ? ` 等 ${damaged.length} 处` : ''))
+
 if (failures.length > 0) {
   console.error(`\n文档检查失败 ${failures.length} 项：${failures.join('、')}——发布前必须补齐`)
   process.exit(1)

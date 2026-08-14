@@ -6,7 +6,8 @@
 
 ## 1. 角色与总览
 
-- **你是什么**：本仓库（AI-Novel-Studio，Electron 桌面 AI 小说创作工作台）的 AI 协作者。你负责代码/测试/文档/查证；发布与真实用户库操作需明确授权（见 §2 协作边界）。
+- **你是什么**：本仓库（AI-Novel-Studio，Electron 桌面 AI 小说创作工作台）的 AI 协作者。你负责代码/测试/文档/查证。
+- **等级平权（重要）**：**所有 AI 协作者等级相同**——包括当前会话的你与任何其他 agent 实例，都是用户使用的工作代理、直接服务用户，无主次之分。§2 协作边界是**全体统一纪律**（发布/真实库/硬约束等需用户明确授权），不是等级差异；多 agent 协作模式见 §15。
 - **项目一句话**：把"灵感 → 长篇小说"做成可检视的工作空间——导演规划、方案流水线生产、审核修复闭环、状态回灌、创作约束、风格引擎、成本记账，全部本地运行（127.0.0.1 + 随机端口 + 零云端依赖）。
 - **当前版本**：`v0.21.0`（以 package.json 为准；发布经 GitHub Release + 应用内自更新）。
 - **里程碑**：O1-O5 + I1-I5 全量完成（v0.9.2→v0.14.0）；学习组收官（联网查找/续写+字数分离/运行轨迹+记忆面+故事板，v0.18-0.20）；两轮全量审查修复（v0.17/v0.21）；**30 万字真实写书进行中**（书 #25，应用内生产）。
@@ -68,8 +69,8 @@
 ### 阶段 7 · 收尾
 - git 干净、tag 确认；汇报：完成内容 / 验证结果 / 需用户真机验证项
 
-### 协作边界
-| 允许 | 禁止（需明确授权） |
+### 协作边界（全体协作者统一适用——任一 agent 实例均遵守同一授权门槛）
+| 允许 | 禁止（需用户明确授权） |
 |---|---|
 | 代码 / 测试 / 文档 / 查证 / 调试 | 发布（release / tag / CI 操作） |
 | 内存库与临时 UDATA 实验 | 真实用户库任何写操作 |
@@ -175,7 +176,7 @@ node out/main/server.js
 ## 11. 实战教训（务必知道——全部来自真实事故）
 
 1. **真实用户库禁令**：`AppData\Roaming\ai-novel-studio\ai-novel-studio.db` 被用户应用独占；独立 node server 写库会以**明文 key 落库** → 用户应用 safeStorage 解密失败 → 全部 LLM 调用挂掉。生产/导演一律应用内执行；独立操作只读或临时库。
-2. **PowerShell 中文编码**：`Set-Content`/`node -e` 内联中文会破坏 UTF-8（乱码/`?`）；中文输入经 Write 工具或 UTF-8 脚本文件；仓库已有 mojibake 痕迹（shared/types.ts 注释曾乱码，已重编码）。
+2. **PowerShell 中文编码**：**禁止 PowerShell 任何文本写入 cmdlet（`Set-Content` / `Add-Content` / `Out-File` / here-string 追加）写含中文的文档与源码**——统一用 Write/Edit 工具或 UTF-8 node 脚本（教训来源含真实反例：D90 曾用 Add-Content 追加产生 0x07 控制符损坏，verify-docs 现自动拦截此类损坏）。
 3. **Express 5 挂载坑**：`app.use('/api', router)` + router 内以 `/:param` 开头的路由**不匹配**（404）——真实应用挂具体前缀（`/api/novels` 等）；测试挂载须对齐。
 4. **动态 import CJS interop**：`import('electron-updater')` 解构 `{ autoUpdater }` 得 undefined（cjs-module-lexer 检测失败）→ 报"checkForUpdates undefined"——静态导入解决。
 5. **Windows 信号**：`SIGTERM` 在 Windows 不触发（Node 官方文档确认）；SIGINT/SIGBREAK 可用；正常关闭走 shutdown 消息。
@@ -212,6 +213,14 @@ node out/main/server.js
 - 提交遵循 Conventional Commits（feat/fix/chore/docs/refactor/test）；提交是公开历史
 - 不做超出任务范围的事；发现文档/代码不一致时回报并修正
 
+### 多 agent 协作模式（等级相同，无主次）
+
+- 用户可能同时运行多个 agent 会话（如：其他协作者与本会话并行/接力）——每个会话独立工作，经 git 提交与文档协作。
+- **提交前先 `git status`**：避免覆盖其他协作者未提交的工作；冲突时保留双方意图、向用户说明。
+- **发现其他协作者的错误** → 如实回报用户并修复（范例：协作者指出 D90 写入损坏并修复 + 标注 D80-D89 不可恢复）。
+- **被指出错误** → 承认、确认修复、**补机制防再犯**（范例：D90 损坏 → 教训②措辞升级 + verify-docs 控制字符检查，发布自动拦截）。
+- **共享工作面**：docs/（onboarding/decision-log/CHANGELOG/versioning）、PLAN.md、AGENTS.md——谁改谁回写，§17 保鲜纪律适用全体。
+
 ## 16. 文档索引（何时读哪份）
 
 | 文档 | 何时读 |
@@ -225,11 +234,11 @@ node out/main/server.js
 | docs/CHANGELOG.md | 各版本发布说明；发版时更新 |
 | docs/getting-started.md / README.md | 用户向内容 |
 
-## 17. 本文档维护规范（防过时机制——请严格遵守）
+## 17. 本文档维护规范（防过时机制——**适用全体协作者**，请严格遵守）
 
 1. **单一事实源**：版本/命令/测试数以 package.json/scripts/实际输出为准——本文档只写"意图与上下文"，易变数字一律标注来源（如 `（以 pnpm test 为准）`）。
 2. **变更驱动**：任何功能/机制/纪律变更，若触及本文档章节 → 同批回写（与 AGENTS #56 文档同步纪律一致）。
 3. **新教训回填**：新的实战教训 → decision-log（D 系列）+ 本文档 §11（通用则入）。
 4. **自验证锚点**：进场阶段 0 跑门禁时对照 §2/§3——数字不符即按上两条更新。
-5. **发布守护**：verify-docs.mjs 含「onboarding 一致性」检查组（本文档存在、内部引用路径存在、`pnpm <cmd>` 均真实、`当前版本：vX.Y.Z` 与 package.json 一致、AGENTS.md 含指引行）——发布时自动断言。
-6. **更新责任**：任何 agent 在任务中改动机制/数字/纪律时，负责同步本清单。
+5. **发布守护**：verify-docs.mjs 含「onboarding 一致性」+「文档健康」（控制字符）检查组——发布时自动断言。
+6. **更新责任**：任何 agent 在任务中改动机制/数字/纪律时，负责同步本清单（§15 多 agent 协作：谁改谁回写）。

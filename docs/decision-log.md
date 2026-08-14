@@ -622,6 +622,7 @@ P31 ???????????chapterRole ?? + ?? prompt ??????????? mc-good2.0 ?????? 3 ??????
 - **⑧ CSP 对 file:// 无效**：webRequest.onHeadersReceived 不拦 file 协议 → 打包态 CSP 必须用 index.html <meta http-equiv="Content-Security-Policy">。
 - **⑨ 产物名与 latest.yml 一致**：nsis 默认 artifactName 含空格 vs latest.yml 元数据横线名 → updater 404；固定 artifactName: "AI-Novel-Studio-Setup-."。
 - **⑩ 零 key 端点实测**：汇率 open.er-api.com（rates.CNY）✓、联网 Wikipedia action API（zh 优先）✓；DuckDuckGo Instant Answer 空结果弃用；百度 403 / Bing HTML 被关键词淹没不可用。
+- **⑪ 教训② 升级（D90 自身反例，2026-08-14）**：本条目最初用 PowerShell `Add-Content` + here-string 追加写入 → 产生 0x07 控制符损坏（`app.use`/`artifactName` 首字符被破坏）+ `node -e` 丢字（由协作者发现并修复）。**结论：PowerShell 任何文本写入 cmdlet（Set-Content/Add-Content/Out-File/here-string）写含中文内容一律禁止**——统一 Write/Edit 工具或 UTF-8 node 脚本；verify-docs 已加「核心文档无 ASCII 控制字符」检查（发布自动拦截同类损坏）。
 
 
 ### D91 · 2026-08-13 · 进场验证：db-smoke 过期期望 + 乱码不可恢复结论（AI 协作者）

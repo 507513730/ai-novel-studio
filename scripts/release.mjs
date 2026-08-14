@@ -198,7 +198,11 @@ try {
   }
 } catch (err) {
   const out = String(err.stdout ?? '')
-  if (/checks passed/.test(out)) {
+  // v0.21.0（防假 PASS）：db-smoke 的 check 失败仅置 exitCode=1 不中断，结尾仍打印
+  // "[db-smoke] N checks passed"（N=成功数）——此前仅匹配 stdout 字样 → 部分失败被误判通过
+  // （历史实例：schema 版本断言过期时发布一路"通过"）。修复：必须退出码 0 且含通过标记。
+  const exitOk = err.status === 0
+  if (exitOk && /checks passed/.test(out)) {
     ok('db-smoke 通过（checks passed；Node24 warning 不影响）')
   } else {
     fail('db-smoke 失败')
