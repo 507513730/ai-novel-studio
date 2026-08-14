@@ -2,7 +2,7 @@
 
 <!-- 仓库整理（2026-08-12）：shields badge——版本/测试/License/平台 -->
 ![Release](https://img.shields.io/github/v/release/507513730/ai-novel-studio?label=Release)
-![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-143%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-8A2BE2)
 
@@ -44,8 +44,8 @@ pnpm install
 pnpm dev            # 开发（electron-vite 三端）
 pnpm typecheck      # 类型检查
 pnpm lint           # ESLint
-pnpm test           # vitest 单测（73 项）
-pnpm db:smoke       # 数据库冒烟（6 项）
+pnpm test           # vitest 单测（143 项）
+pnpm db:smoke       # 数据库冒烟（7 项）
 pnpm release        # 发布流程（文档检查/验证/本地构建/推送，--push 半自动）
 pnpm dist           # 打包 NSIS 安装版 + portable
 ```
@@ -78,7 +78,7 @@ docs/          架构 / 变更日志 / 决策日志 / 版本规范 / 审查追�
 
 ## 测试
 
-- `pnpm test`：73 项单测（补丁修复/导演/SSE 取消/成本估算/模型覆盖/世界渲染/方案资产/分章解析/安全鉴权）
+- `pnpm test`：143 项单测（补丁修复/导演/SSE 取消/成本估算/模型覆盖/世界渲染/方案资产/引导系统/创作约束/记忆面/审查回归）
 - `node scripts/e2e/round.mjs <n>`：全功能 e2e（T1 配置/T2 创作链/T3 资产/T4 导演）
 
 ## 贡献
