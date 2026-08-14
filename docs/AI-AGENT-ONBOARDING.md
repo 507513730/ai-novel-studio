@@ -9,7 +9,7 @@
 - **你是什么**：本仓库（AI-Novel-Studio，Electron 桌面 AI 小说创作工作台）的 AI 协作者。你负责代码/测试/文档/查证。
 - **等级平权（重要）**：**所有 AI 协作者等级相同**——包括当前会话的你与任何其他 agent 实例，都是用户使用的工作代理、直接服务用户，无主次之分。§2 协作边界是**全体统一纪律**（发布/真实库/硬约束等需用户明确授权），不是等级差异；多 agent 协作模式见 §15。
 - **项目一句话**：把"灵感 → 长篇小说"做成可检视的工作空间——导演规划、方案流水线生产、审核修复闭环、状态回灌、创作约束、风格引擎、成本记账，全部本地运行（127.0.0.1 + 随机端口 + 零云端依赖）。
-- **当前版本**：`v0.22.3`（以 package.json 为准；发布经 GitHub Release + 应用内自更新）。
+- **当前版本**：`v0.23.0`（以 package.json 为准；发布经 GitHub Release + 应用内自更新）。
 - **里程碑**：O1-O5 + I1-I5 全量完成（v0.9.2→v0.14.0）；学习组收官（联网查找/续写+字数分离/运行轨迹+记忆面+故事板，v0.18-0.20）；两轮全量审查修复（v0.17/v0.21）；**30 万字真实写书进行中**（书 #25，应用内生产）。
 - **1.0 判据**（docs/versioning.md §1.1）：真实写书完成 + 核心链 1-2 版无 P0/P1 + 数据格式冻结。
 
@@ -201,6 +201,18 @@ node out/main/server.js
 
 ## 13. 发布流程速查
 
+### 发布类型分层（v0.22.3 决议，AGENTS #57 / D97——消除"其他 agent 被 #57 拦住"的困惑）
+| 类型 | 触发 | 处理 |
+|---|---|---|
+| **PATCH 修复** | `client/src\|server/src\|electron\|shared/src` 改动 → **CI release-readiness 强制 bump + 发布** | 合规路径：bump PATCH + CHANGELOG 段 → `pnpm release --push`（非"乱发版"） |
+| **MINOR 功能批** | 功能批次完成 | bump minor → release --push（正常流程） |
+| **MAJOR** | 1.0 判据达成 | 稳定承诺 |
+| **免发版** | 仅 docs/scripts/tests 改动（CI 不拦） | 按 #60b 完成即提交推送，**不 bump** |
+
+- **禁止**：无 CI 依据的 bump / 重复发版 / 仅文档改动 bump——这些才是 #57 要挡的"乱发版"
+- **优先级**：CI release-readiness 硬约束 > 字面纪律（src 改了就必须发版，不要被"改动即发版不可取"拦住——那是过时语义）
+
+### 流程
 1. `pnpm release --bump=minor|patch --push`（或先手工 bump 后 `--push`）
 2. 若 [3/7] verify-docs 失败 → 补台账：CHANGELOG 当前版本段 + `[Unreleased]` 占位、versioning §7 行、PLAN 记录 → 提交 → 重跑
 3. [5/7] 本地 dist；[6/7] 提交 + tag 推送；[7/7] CI 构建 Release（等 5-10 分钟）→ `node scripts/release.mjs --release-notes-only` 补 Release body

@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## v0.23.0（2026-08-14）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.23.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.23.0-portable-x64.exe`
+
+### 变更
+
+#### UI 美化（修订版计划，对齐当前代码）
+- **新增 sepia 主题**（暖色文学 Bear 风：#f4ecd8 底 / #a06a2c accent）——第 7 套主题；utils/theme.ts THEMES + main.ts nativeTheme（dark 判断）+ THEME_OVERLAY 联动。
+- **修复 --bg-input 潜伏 bug**：被 9 处使用但从未在 `:root` 定义 → 补 `--bg-input: var(--bg-elevated)`（CSS 惰性求值，各主题自动跟随，无需 6 处重复）。
+- **.prose 排印类就绪**：CJK 悬垂标点（hanging-punctuation: first last allow-end）+ font-feature-settings("palt" 1, "kern" 1)；用已有 --prose-*/--sp-*/--fs-* token。待章节阅读视图/导出预览应用（CodeMirror 编辑器已由 editor/theme.ts 全 var() 覆盖）。
+- **未做（冗余/无场景）**：原计划任务 C/E（color-mix）——theme.ts 选中态已用 `var(--accent-soft-strong)`、活跃行 `var(--bg-elevated)`，全动态随主题变，color-mix 是冗余重构；任务 D（通用 Button 原语）——无新 UI 应用场景，建即死代码。
+- 测试 155/155、typecheck/lint 0 error。
+
 ## v0.22.3（2026-08-14）
 
 ### 安装方式

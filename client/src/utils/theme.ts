@@ -1,4 +1,4 @@
-// P13 F0：主题管理（多主题：deepblue 默认 / feelfish-green / purple-night / ocean / amber / paper）
+// P13 F0：主题管理（多主题：deepblue 默认 / feelfish-green / purple-night / ocean / amber / paper / sepia）
 
 export const THEMES = [
   { key: 'deepblue', label: '墨蓝', preview: ['#0e0f13', '#4f7cff'] },
@@ -6,7 +6,8 @@ export const THEMES = [
   { key: 'purple-night', label: '紫夜', preview: ['#14121e', '#8b7cf6'] },
   { key: 'ocean', label: '深海青', preview: ['#0e1720', '#4db9d8'] },
   { key: 'amber', label: '琥珀', preview: ['#1a1410', '#ffb86c'] },
-  { key: 'paper', label: '纸张·亮', preview: ['#f6f8f5', '#008c52'] }
+  { key: 'paper', label: '纸张·亮', preview: ['#f6f8f5', '#008c52'] },
+  { key: 'sepia', label: '暖色文学', preview: ['#f4ecd8', '#a06a2c'] }
 ] as const
 
 export type ThemeKey = (typeof THEMES)[number]['key']

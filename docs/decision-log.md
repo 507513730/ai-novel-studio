@@ -584,3 +584,11 @@
 - **修复（v0.22.3）**：main.ts 顶部（ready 前）`if (!app.requestSingleInstanceLock()) app.quit()`；`whenReady` 内 `app.on('second-instance')` → 最小化则 restore + show + focus。未获得锁的实例不建窗口/不起 server——顺带杜绝双 server 抢真实库隐患。
 - **验收**：typecheck/build 通过 + 发布后用户真机验证（开应用 → 再点快捷方式 → 不新开、原窗口唤起）。
 
+### D97 · 2026-08-14 · 发版纪律分层决议（消除 #57 与 CI 机制冲突）
+
+- **背景（用户提问）**：本会话对 PATCH 修复直接 `pnpm release --push`，而其他 AI 协作者被 AGENTS #57（"仅正式发布/里程碑发版，改动即发版不可取"）拦住——行为不一致暴露纪律矛盾。
+- **根因（机制冲突）**：#57 诞生于 CI release-readiness 之前；现有三层机制互相冲突：① #57 字面禁止小改发版；② AGENTS #35/#36 要求任何代码改动必须 dist（产物=正式交付）；③ CI release-readiness 对 `client/src|server/src|electron|shared/src` 改动强制 bump（"src changed but version not bumped" 拦截，已查证 workflow 判定范围）。PATCH 修复实际被硬约束逼着发版——#57 语义过时。
+- **决议（本地设计决策）**：发布类型分层——**PATCH 修复**（src 改动 → CI 强制 bump 发布，合规路径）；**MINOR 功能批**（批次完成即发布）；**MAJOR**（1.0 判据）；**免发版**（仅 docs/scripts/tests 改动，CI 不拦，按 #60b 即时推送不 bump）。#57 的"禁止改动即发版"限定为：无 CI 依据的 bump / 重复发版 / 仅文档 bump。**优先级：CI 硬约束 > 字面纪律**。
+- **落点**：AGENTS #57 改写；onboarding §13 发布类型分层表；本条目。
+- **效果**：其他 agent 不再被 #57 拦住——修复类改动按 PATCH 正常发版，语义清晰。
+

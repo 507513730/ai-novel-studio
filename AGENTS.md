@@ -100,7 +100,7 @@ docs/          校准报告 + P9 体验修复明细
 55. **发布流程纪律**：版本发布必须走 `pnpm release`（scripts/release.mjs，含 versioning.md §3 校验），禁止手动改版本/tag；发布前必须执行 `pnpm dist`（产物在 release/），发布走 GitHub Release。
 56. **文档同步纪律**：功能/修复/版本变更同步更新 docs/README.md；重大变更记入 CHANGELOG.md / PLAN.md / decision-log.md；发版必须同步 CHANGELOG。**v0.21.0 起：机制/纪律/教训变更若触及 `docs/AI-AGENT-ONBOARDING.md` 章节（§6/§8/§11/§14）必须同批回写**（onboarding 保鲜纪律，verify-docs 守护存在性与锚点）。
 
-57. **发版纪律**：仅正式发布/里程碑在 main 上 bump 并执行 `pnpm release --push`；"改动即发版"不可取——release/ 产物 = 正式交付，变更必须记入 PLAN/decision-log。
+57. **发版纪律（v0.22.3 分层决议，D97）**：发布类型分层——**PATCH 修复**：src 改动被 CI release-readiness 强制 bump + 发布（合规路径，非"乱发版"——禁止绕过 CI 或制造空版本）；**MINOR 功能批**：批次完成即 `pnpm release --push`；**MAJOR**：1.0 判据达成。**免发版**：仅 docs/scripts/tests 改动（CI 不拦）——按 #60b 完成即推送，无需 bump。"改动即发版不可取"限定为：无 CI 依据的 bump、重复发版、仅文档改动 bump。release/ 产物 = 正式交付，变更必须记入 PLAN/decision-log。优先级：CI 硬约束（release-readiness）> 字面纪律。
 58. **CI 纪律**：CI 失败必须本地复现修复，禁止用 if: false 跳过流程或静默吞错。
 
 59. **默认模型纪律**：默认主模型为 **deepseek-v4-flash**；新模型必须先校准对比（k3/pro/glm/gpt 等）再启用；e2e/校准/演示链路统一用 flash。

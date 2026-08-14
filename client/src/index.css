@@ -8,6 +8,7 @@
   --bg-panel: #15171d;
   --bg-card: #1b1e26;
   --bg-elevated: #23262f;
+  --bg-input: var(--bg-elevated);
 
   /* ---- 边框（低透明度白） ---- */
   --border: rgba(255, 255, 255, 0.06);
@@ -80,6 +81,25 @@
   --prose-indent: 2em;
   --prose-max-width: 720px;
 }
+
+/* v0.23 UI 美化：.prose 排印类——正文阅读面（章节阅读视图/版本预览/导出预览）
+   CJK 悬垂标点 + 间距优化；用已有 --prose-* / --sp-* / --fs-* token。
+   CodeMirror 编辑器由 editor/theme.ts 覆盖，本类用于非编辑器的正文展示。 */
+.prose {
+  max-width: var(--prose-max-width);
+  margin-inline: auto;
+  font-family: var(--font-editor);
+  font-size: var(--prose-font-size);
+  line-height: var(--prose-line-height);
+  text-indent: var(--prose-indent);
+  color: var(--text);
+  hanging-punctuation: first last allow-end;
+  font-feature-settings: "palt" 1, "kern" 1;
+}
+.prose p { margin: 0 0 var(--sp-2); text-indent: var(--prose-indent); }
+.prose h1 { font-size: var(--fs-24); font-weight: 600; line-height: 1.3; margin: var(--sp-6) 0 var(--sp-3); }
+.prose h2 { font-size: var(--fs-20); font-weight: 600; line-height: 1.35; margin: var(--sp-5) 0 var(--sp-3); }
+.prose h3 { font-size: var(--fs-18); font-weight: 600; margin: var(--sp-4) 0 var(--sp-2); }
 
 /* P22-A：打包开源字体（OFL）——霞鹜文楷 / 思源宋体 / 思源黑体 */
 @font-face {
@@ -229,6 +249,33 @@
   --warn-soft: rgba(217, 119, 6, 0.12);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* 暖色文学·sepia（Bear 风——沉静排印 + 暖棕，写作 app 阅读面气质，v0.23 UI 美化） */
+:root[data-theme='sepia'] {
+  --bg: #f4ecd8;
+  --bg-panel: #faf3e0;
+  --bg-card: #efe6cf;
+  --bg-elevated: #e8ddc2;
+  --border: rgba(74, 63, 47, 0.14);
+  --border-hover: rgba(74, 63, 47, 0.24);
+  --border-strong: rgba(74, 63, 47, 0.36);
+  --text: #4a3f2f;
+  --text-dim: #6b5e48;
+  --text-faint: #8a7a5f;
+  --accent: #a06a2c;
+  --accent-bright: #b87d3a;
+  --accent-soft: rgba(160, 106, 44, 0.12);
+  --accent-soft-strong: rgba(160, 106, 44, 0.24);
+  --danger: #b94a3c;
+  --danger-soft: rgba(185, 74, 60, 0.1);
+  --ok: #5a7d3a;
+  --ok-soft: rgba(90, 125, 58, 0.12);
+  --warn: #b07a1f;
+  --warn-soft: rgba(176, 122, 31, 0.12);
+  --shadow-md: 0 4px 16px rgba(74, 63, 47, 0.1);
+  --shadow-lg: 0 8px 24px rgba(74, 63, 47, 0.16);
+  --font-editor: var(--font-serif);
 }
 
 * {

@@ -47,10 +47,11 @@ const THEME_OVERLAY: Record<string, { color: string; symbolColor: string }> = {
   'purple-night': { color: '#1a1726', symbolColor: '#c3bfd8' },
   ocean: { color: '#13202c', symbolColor: '#b8cdd8' },
   amber: { color: '#211a13', symbolColor: '#cdbfae' },
-  paper: { color: '#ffffff', symbolColor: '#4c554f' }
+  paper: { color: '#ffffff', symbolColor: '#4c554f' },
+  sepia: { color: '#faf3e0', symbolColor: '#4a3f2f' }
 }
 ipcMain.handle('theme-set', (_e, theme: string) => {
-  const dark = theme !== 'paper'
+  const dark = theme !== 'paper' && theme !== 'sepia'
   nativeTheme.themeSource = dark ? 'dark' : 'light'
   const overlay = THEME_OVERLAY[theme] ?? THEME_OVERLAY.deepblue
   mainWindow?.setTitleBarOverlay({ color: overlay.color, symbolColor: overlay.symbolColor, height: 40 })
