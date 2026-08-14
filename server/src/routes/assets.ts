@@ -90,9 +90,16 @@ export function createAssetsRouter(db: DatabaseSync): Router {
           status: z.enum(['direct', 'indexed', 'draft']).default('indexed')
         })
         .parse(req.body ?? {})
+      // v0.22.0（kb_doc 标题 ? 前缀事故防再犯）：标题清洗——trim + 去除首部孤立 ? 序列
+      // （历史事故：6 篇全局文档标题带字面 ????? 前缀，0x3F 有损不可恢复，已由 fix-kb-titles.mjs 修复）
+      const title = input.title.trim().replace(/^\?+/, '').trim()
+      if (!title) {
+        res.status(400).json({ error: '标题无效（含首部问号序列时请提供有效标题）' })
+        return
+      }
       const rid = db
         .prepare('INSERT INTO kb_doc (novel_id, title, content, source, status) VALUES (0, ?, ?, ?, ?)')
-        .run(input.title, input.content, 'imported', input.status)
+        .run(title, input.content, 'imported', input.status)
       res.status(201).json({ id: Number(rid.lastInsertRowid) })
     } catch (err) {
       next(err)
