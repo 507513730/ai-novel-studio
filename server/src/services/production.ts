@@ -224,11 +224,12 @@ export async function runProductionPipeline(
         }
       }
 
-      // 4. 写回修复后的正文（如有）
+      // 4. 写回修复后的正文（如有）—— v0.22.0（审查 N1）：整章 AI 内容→覆盖 ai_words
       if (finalContent !== gen.content) {
+        const fc = (finalContent.match(/[\u4e00-\u9fff]/g) ?? []).length
         db.prepare(
-          "UPDATE chapter SET content = ?, word_count = ?, status = 'reviewed', updated_at = datetime('now') WHERE id = ?"
-        ).run(finalContent, (finalContent.match(/[\u4e00-\u9fff]/g) ?? []).length, ch.id)
+          "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, status = 'reviewed', updated_at = datetime('now') WHERE id = ?"
+        ).run(finalContent, fc, fc, ch.id)
       } else {
         db.prepare(
           "UPDATE chapter SET status = 'reviewed', updated_at = datetime('now') WHERE id = ?"

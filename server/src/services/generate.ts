@@ -122,10 +122,12 @@ export async function generateChapter(
       content,
       aborted ? 'AI 生成（中止）' : 'AI 生成'
     )
-    // v0.21.0（审查 N1）：AI 产出记账（累计语义）——生成直接落库不经过客户端 PATCH delta，
-    // 此前不记账 → 字数分离恒 0/脱节。abort 部分内容同样计入（已产出即 AI 贡献）。
+    // v0.22.0（审查 N1·本地设计决策）：整章替换→覆盖语义（非累加，防重生膨胀）。
+    // 累计语义只在 PATCH 增量编辑（volumes.ts delta）有效；整章替换后旧内容已被物理覆盖，
+    // 旧字数不再存在于 content，累加无意义且重生必膨胀（3000+3500=6500 而当前内容仅 3500）。
+    // 覆盖使 ai_words==当前内容 AI 字数；human_words=0（整章替换丢弃先前人工编辑）。
     db.prepare(
-      "UPDATE chapter SET content = ?, word_count = ?, status = 'written', ai_words = ai_words + ?, updated_at = datetime('now') WHERE id = ?"
+      "UPDATE chapter SET content = ?, word_count = ?, status = 'written', ai_words = ?, human_words = 0, updated_at = datetime('now') WHERE id = ?"
     ).run(content, wordCount, wordCount, chapterId)
   } else {
     // v0.17.0（审查 H2）：空内容显式置 failed（此前跳过 UPDATE → 永久卡 'generating'）
@@ -174,9 +176,10 @@ export async function generateChapter(
           if (rewritten && rewritten.content.length >= content.length * 0.5) {
             content = rewritten.content
             wordCount = (content.match(/[\u4e00-\u9fff]/g) ?? []).length
+            // v0.22.0（审查 N1）：反 AI 重写仍为整章 AI 内容→同步覆盖 ai_words
             db.prepare(
-              "UPDATE chapter SET content = ?, word_count = ?, updated_at = datetime('now') WHERE id = ?"
-            ).run(content, wordCount, chapterId)
+              "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, updated_at = datetime('now') WHERE id = ?"
+            ).run(content, wordCount, wordCount, chapterId)
           }
         } catch (err) {
           console.warn('[anti-ai] 重写失败，保留原文:', err instanceof Error ? err.message : String(err))

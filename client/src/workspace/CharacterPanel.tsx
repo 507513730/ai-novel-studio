@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { novelApi } from '../api'
+import { useConfirm } from '../components/ConfirmDialog'
 
 export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Element {
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
+  // v0.22.0（审查 ALOW）：themed confirm 统一
+  const [confirmFn, confirmDialog] = useConfirm()
 
   const chars = useQuery({
     queryKey: ['characters', novelId],
@@ -139,9 +142,7 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
                   className="danger"
                   disabled={charBusy !== null}
                   onClick={() => {
-                    if (window.confirm(`确定删除角色「${c.name || '未命名'}」？该操作不可恢复。`)) {
-                      void removeCharacter(c.id)
-                    }
+                    confirmFn({ title: '删除角色', message: `确定删除角色「${c.name || '未命名'}」？该操作不可恢复。`, confirmText: '删除', danger: true, action: () => void removeCharacter(c.id) })
                   }}
                 >
                   {charBusy === c.id ? '删除中…' : '删除'}
@@ -151,6 +152,7 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
           ))}
         </div>
       </div>
+      {confirmDialog}
     </div>
   )
 }

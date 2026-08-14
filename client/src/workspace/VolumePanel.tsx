@@ -4,12 +4,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { novelApi } from '../api'
 import { usePrompt } from '../components/PromptDialog'
+import { useConfirm } from '../components/ConfirmDialog'
 import type { ChapterSummary } from '../types'
 
 export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [busy, setBusy] = useState<string | null>(null)
+  // v0.22.0（审查 ALOW）：themed confirm 统一
+  const [confirmFn, confirmDialog] = useConfirm()
   const [error, setError] = useState<string | null>(null)
   const { prompt: askTitle, element: promptElement } = usePrompt()
   const [chaptersPerVolume, setChaptersPerVolume] = useState(20)
@@ -159,9 +162,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
                   className="danger"
                   disabled={busy !== null}
                   onClick={() => {
-                    if (window.confirm(`确定删除卷「${v.title || `第 ${v.id} 卷`}」？卷下章节与节奏板将被移除，该操作不可恢复。`)) {
-                      void run(`delvol-${v.id}`, () => novelApi.volumeDelete(novelId, v.id))
-                    }
+                    confirmFn({ title: '删除卷', message: `确定删除卷「${v.title || `第 ${v.id} 卷`}」？卷下章节与节奏板将被移除，该操作不可恢复。`, confirmText: '删除', danger: true, action: () => void run(`delvol-${v.id}`, () => novelApi.volumeDelete(novelId, v.id)) })
                   }}
                 >
                   删除
@@ -279,6 +280,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
         )}
       </div>
     </div>
+    {confirmDialog}
     </>
   )
 }

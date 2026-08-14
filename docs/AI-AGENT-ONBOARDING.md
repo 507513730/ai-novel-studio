@@ -9,7 +9,7 @@
 - **你是什么**：本仓库（AI-Novel-Studio，Electron 桌面 AI 小说创作工作台）的 AI 协作者。你负责代码/测试/文档/查证。
 - **等级平权（重要）**：**所有 AI 协作者等级相同**——包括当前会话的你与任何其他 agent 实例，都是用户使用的工作代理、直接服务用户，无主次之分。§2 协作边界是**全体统一纪律**（发布/真实库/硬约束等需用户明确授权），不是等级差异；多 agent 协作模式见 §15。
 - **项目一句话**：把"灵感 → 长篇小说"做成可检视的工作空间——导演规划、方案流水线生产、审核修复闭环、状态回灌、创作约束、风格引擎、成本记账，全部本地运行（127.0.0.1 + 随机端口 + 零云端依赖）。
-- **当前版本**：`v0.21.0`（以 package.json 为准；发布经 GitHub Release + 应用内自更新）。
+- **当前版本**：`v0.22.0`（以 package.json 为准；发布经 GitHub Release + 应用内自更新）。
 - **里程碑**：O1-O5 + I1-I5 全量完成（v0.9.2→v0.14.0）；学习组收官（联网查找/续写+字数分离/运行轨迹+记忆面+故事板，v0.18-0.20）；两轮全量审查修复（v0.17/v0.21）；**30 万字真实写书进行中**（书 #25，应用内生产）。
 - **1.0 判据**（docs/versioning.md §1.1）：真实写书完成 + 核心链 1-2 版无 P0/P1 + 数据格式冻结。
 
@@ -66,8 +66,12 @@
 - 台账三件：CHANGELOG 补 `[Unreleased]` 占位 / versioning §7 行 / PLAN 记录（verify-docs 强制）
 - CI 构建 GitHub Release（exe/blockmap/**latest.yml**）→ 用户应用内自更新（更新页「设置 → 更新」）
 
-### 阶段 7 · 收尾
-- git 干净、tag 确认；汇报：完成内容 / 验证结果 / 需用户真机验证项
+### 阶段 7 · 收尾（完成即推送——AGENTS #60b）
+1. **提交**：门禁全过后立即 `git commit`（一个 commit = 一个逻辑单元，Conventional Commits）
+2. **推送**：`git push origin main`——远程是共享工作面，禁止改动滞留本地（push 前 `git status` + `git log origin/main..HEAD` 预览；被拒则 `git pull --rebase`）
+3. **确认 CI**：push 触发 lint/test/build——CI 红 → push 者本人优先修
+4. 汇报：完成内容 / 验证结果 / 需用户真机验证项
+- **例外（不推）**：发布类 bump/tag/release（走 release.mjs 用户批准）；门禁未过的中间态/本地实验（不建 WIP 分支）
 
 ### 协作边界（全体协作者统一适用——任一 agent 实例均遵守同一授权门槛）
 | 允许 | 禁止（需用户明确授权） |
@@ -82,7 +86,7 @@
 - `pnpm test`（vitest，tests/ 目录，按版本命名 vXXXX.test.ts）
 - `pnpm db:smoke`：数据库冒烟（7 项检查）
 - 打包态等价验收（发版自动）：模拟 file:// Origin:null + token 跑 SSE 生成/导出/鉴权——PASS 才放行
-- CI：build.yml 构建并上传 Release 资产（含 latest.yml）；commitlint 校验 Conventional Commits
+- CI：build.yml 构建并上传 Release 资产（含 latest.yml）；commitlint 校验 Conventional Commits；**push 触发 lint/test/build**（完成即推送纪律的兜底——见 §2 阶段 7）
 
 ## 4. 仓库地图
 
@@ -216,7 +220,9 @@ node out/main/server.js
 ### 多 agent 协作模式（等级相同，无主次）
 
 - 用户可能同时运行多个 agent 会话（如：其他协作者与本会话并行/接力）——每个会话独立工作，经 git 提交与文档协作。
+- **默认推送 main 是协作方式**（AGENTS #60b 完成即推送）：任务完成且门禁通过即 push——其他人基于最新代码工作；push 被拒（远程有新提交）→ `git pull --rebase` 保留双方意图。
 - **提交前先 `git status`**：避免覆盖其他协作者未提交的工作；冲突时保留双方意图、向用户说明。
+- **CI 红**：push 者本人优先修复（AGENTS #58/#60b）。
 - **发现其他协作者的错误** → 如实回报用户并修复（范例：协作者指出 D90 写入损坏并修复 + 标注 D80-D89 不可恢复）。
 - **被指出错误** → 承认、确认修复、**补机制防再犯**（范例：D90 损坏 → 教训②措辞升级 + verify-docs 控制字符检查，发布自动拦截）。
 - **共享工作面**：docs/（onboarding/decision-log/CHANGELOG/versioning）、PLAN.md、AGENTS.md——谁改谁回写，§17 保鲜纪律适用全体。

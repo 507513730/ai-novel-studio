@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { novelApi } from '../api'
+import { useConfirm } from '../components/ConfirmDialog'
 import { SetupPanel } from '../workspace/SetupPanel'
 import { ConstraintPanel } from '../workspace/ConstraintPanel'
 import { WorldPanel } from '../workspace/WorldPanel'
@@ -125,6 +126,8 @@ export function NovelWorkspacePage(): React.JSX.Element {
   const navigate = useNavigate()
   const id = Number(novelId)
   const [tab, setTab] = useState<Tab>('setup')
+  // v0.22.0（审查 ALOW）：themed confirm 统一
+  const [confirmFn, confirmDialog] = useConfirm()
 
   const detail = useQuery({
     queryKey: ['novel', id],
@@ -135,8 +138,8 @@ export function NovelWorkspacePage(): React.JSX.Element {
   const [dirty, setDirty] = useState(false)
   const switchTab = (next: Tab): void => {
     if (dirty && next !== tab) {
-      if (!window.confirm('当前面板有未保存的输入，切换将丢弃。继续？')) return
-      setDirty(false)
+      confirmFn({ title: '切换面板', message: '当前面板有未保存的输入，切换将丢弃。继续？', confirmText: '切换', danger: true, action: () => { setDirty(false); setTab(next) } })
+      return
     }
     setTab(next)
   }
@@ -295,6 +298,7 @@ export function NovelWorkspacePage(): React.JSX.Element {
         {tab === 'style' && <StylePanel novelId={id} />}
         {tab === 'agents' && <AgentPanel novelId={id} />}
       </div>
+      {confirmDialog}
     </div>
   )
 }

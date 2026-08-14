@@ -1,5 +1,29 @@
 # AI-Novel-Studio 发布说明
 
+## v0.22.0（2026-08-14）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.22.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.22.0-portable-x64.exe`
+
+### 变更
+
+#### N1 字数记账语义修正（本地设计决策）
+- **整章替换→覆盖语义**：generate/solutionRunner/debtFix/版本恢复/反AI重写/production 回写 6 处由 `ai_words += wordCount`（累加）改为 `ai_words = wordCount, human_words = 0`（覆盖）；防同章重生膨胀（累加下 3000+3500=6500 而当前内容仅 3500）。
+- PATCH 增量编辑（volumes.ts delta）保留累加不动——区分「整章替换」与「增量编辑」两条路径。
+- tooltip 文案「本书累计」→「当前内容 AI 字数 / 人工输入累计」，避免重生后数字虚高误导。
+- 测试 +5（v0220.test.ts：generate 重生/版本恢复/solutionRunner/debtFix/反AI重写 覆盖语义）。
+
+#### ALOW window.confirm → themed useConfirm 全统一
+- 13 处 `window.confirm` 改 `useConfirm`：ChapterExecutionPage 5 处（generate 两步确认拆 generateContinue / 方案接力 / 采纳建议重写 / 版本恢复）、WorldPanel/CharacterPanel/VolumePanel/TasksPage/NovelWorkspacePage/StudioPage×2/SettingsPage×2（备份恢复+清除数据）。
+- busy 守卫保持：confirm 提到 withBusy 外，run 仍 in withBusy（防连点双提交）。
+
+#### 文档债重建
+- **decision-log D36-D89 重建**：50 条乱码正文按 git 提交信息 + 已发布代码重建（不臆测，无法核实标「待核」）；D40-D56 ID 冲突加 b 后缀（D40b-D51b/D56b）。
+- **banner 纠正**：§0.5 + decision-log + PLAN 各 banner 修正损坏范围（D80-D89→D36-D89、P18-P28→P18-P30+§12、补 5 个未标文件、删「正文见 CHANGELOG」误导——该段 CHANGELOG 亦损坏）。
+
+- 测试 148/148、typecheck/lint 0 error。
+
 ## v0.21.0（2026-08-13）
 
 ### 安装方式

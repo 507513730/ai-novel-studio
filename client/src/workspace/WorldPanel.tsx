@@ -3,6 +3,7 @@ import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { novelApi } from '../api'
 import { flattenWorldValue } from './worldRender'
+import { useConfirm } from '../components/ConfirmDialog'
 
 export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirtyChange?: (dirty: boolean) => void }): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -10,6 +11,8 @@ export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
   const [error, setError] = useState<string | null>(null)
   const [editingManual, setEditingManual] = useState(false)
   const [manualText, setManualText] = useState('')
+  // v0.22.0（审查 ALOW）：themed confirm 统一——取消编辑前确认
+  const [confirmFn, confirmDialog] = useConfirm()
   const savedManualRef = useRef('')
   const notifyDirty = (v: boolean): void => onDirtyChange?.(v)
 
@@ -100,7 +103,8 @@ export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
               <button
                 onClick={() => {
                   if (manualText !== savedManualRef.current) {
-                    if (!window.confirm('世界手册有未保存的改动，取消将丢弃。继续？')) return
+                    confirmFn({ title: '取消编辑', message: '世界手册有未保存的改动，取消将丢弃。继续？', confirmText: '取消编辑', danger: true, action: () => { setEditingManual(false); notifyDirty(false) } })
+                    return
                   }
                   setEditingManual(false)
                   notifyDirty(false)
@@ -152,6 +156,7 @@ export function WorldPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
           </p>
         )}
       </div>
+      {confirmDialog}
     </div>
   )
 }

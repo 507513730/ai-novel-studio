@@ -79,16 +79,17 @@ describe(`${PREFIX} · ledger states 上限`, () => {
   })
 })
 
-describe(`${PREFIX} · N1 记账 SQL 语义（generate 路径 UPDATE 含 ai_words 累加）`, () => {
-  it('模拟 generate 落库语句：ai_words 累加而非覆盖', () => {
+describe(`${PREFIX} · N1 记账 SQL 语义（generate 路径 UPDATE 覆盖非累加）`, () => {
+  it('模拟 generate 落库语句：整章替换 ai_words 覆盖（非累加，防重生膨胀）', () => {
     const db = openDb()
     db.prepare("INSERT INTO novel (id, title, inspiration, status) VALUES (1, '书', '灵感', 'draft')").run()
     db.prepare("INSERT INTO chapter (novel_id, title, status, ai_words) VALUES (1, '第一章', 'written', 100)").run()
-    // 与 generate.ts 相同的 UPDATE 模式（ai_words = ai_words + ?）
+    // 与 generate.ts 相同的 UPDATE 模式（v0.22.0 覆盖语义：ai_words = ?，非 ai_words + ?）
     db.prepare(
-      "UPDATE chapter SET content = ?, word_count = ?, status = 'written', ai_words = ai_words + ?, updated_at = datetime('now') WHERE id = ?"
+      "UPDATE chapter SET content = ?, word_count = ?, status = 'written', ai_words = ?, human_words = 0, updated_at = datetime('now') WHERE id = ?"
     ).run('新内容', 50, 50, 1)
-    const row = db.prepare('SELECT ai_words FROM chapter WHERE id = 1').get() as { ai_words: number }
-    expect(row.ai_words).toBe(150)
+    const row = db.prepare('SELECT ai_words, human_words FROM chapter WHERE id = 1').get() as { ai_words: number; human_words: number }
+    expect(row.ai_words).toBe(50)
+    expect(row.human_words).toBe(0)
   })
 })

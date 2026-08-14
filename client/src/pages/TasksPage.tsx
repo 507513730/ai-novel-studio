@@ -6,6 +6,7 @@ import { novelApi, automationApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { EmptyState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
 
 // v0.20.0（NovelClaw 学习组）：运行轨迹——job.result_json.trace 时间线（生产/修复任务的阶段轨迹）
 interface JobTraceEntry {
@@ -86,6 +87,8 @@ export function TasksPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   // P13 G1：重试换模型
   const [retryModel, setRetryModel] = useState<Record<number, string>>({})
+  // v0.22.0（审查 ALOW）：themed confirm 统一
+  const [confirmFn, confirmDialog] = useConfirm()
 
   const routes = useQuery({
     queryKey: ['model-routes'],
@@ -160,18 +163,19 @@ export function TasksPage(): React.JSX.Element {
               toast('info', '没有已完成的任务')
               return
             }
-            if (!window.confirm(`将删除 ${done} 条已完成任务记录（不影响正文/文档）。继续？`)) return
-            setBusy(-1)
-            void automationApi
-              .jobsClearDone()
-              .then((r: { deleted: number }) => {
-                toast('ok', `已清理 ${r.deleted} 条完成记录`)
-                void queryClient.invalidateQueries({ queryKey: ['jobs', 'tasks'] })
-              })
-              .catch((err: unknown) => {
-                toast('error', err instanceof Error ? err.message : String(err))
-              })
-              .finally(() => setBusy(null))
+            confirmFn({ title: '清理已完成', message: `将删除 ${done} 条已完成任务记录（不影响正文/文档）。继续？`, confirmText: '清理', danger: true, action: () => {
+              setBusy(-1)
+              void automationApi
+                .jobsClearDone()
+                .then((r: { deleted: number }) => {
+                  toast('ok', `已清理 ${r.deleted} 条完成记录`)
+                  void queryClient.invalidateQueries({ queryKey: ['jobs', 'tasks'] })
+                })
+                .catch((err: unknown) => {
+                  toast('error', err instanceof Error ? err.message : String(err))
+                })
+                .finally(() => setBusy(null))
+            } })
           }}
         >
           <Trash2 size={13} className="icon-gap" />清理已完成
@@ -257,6 +261,7 @@ export function TasksPage(): React.JSX.Element {
           )
         })}
       </div>
+      {confirmDialog}
     </div>
   )
 }

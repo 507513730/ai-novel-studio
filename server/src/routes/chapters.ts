@@ -666,10 +666,12 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
           current.content
         )
       }
+      // v0.22.0（审查 N1·本地设计决策）：版本恢复=整章替换→覆盖计数器（恢复内容归 AI，"不重复计"语义）
+      const restoredWordCount = (row.content.match(/[\u4e00-\u9fff]/g) ?? []).length
       db.prepare(
-        "UPDATE chapter SET content = ?, word_count = ?, updated_at = datetime('now') WHERE id = ? AND novel_id = ?"
-      ).run(row.content, (row.content.match(/[\u4e00-\u9fff]/g) ?? []).length, chapterId, novelId)
-      res.json({ content: row.content, wordCount: (row.content.match(/[\u4e00-\u9fff]/g) ?? []).length })
+        "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, human_words = 0, updated_at = datetime('now') WHERE id = ? AND novel_id = ?"
+      ).run(row.content, restoredWordCount, restoredWordCount, chapterId, novelId)
+      res.json({ content: row.content, wordCount: restoredWordCount })
     } catch (err) {
       next(err)
     }

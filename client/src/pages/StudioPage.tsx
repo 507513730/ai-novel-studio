@@ -6,6 +6,7 @@ import { MarketPanel } from '../components/MarketPanel'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useToast } from '../components/Toast'
 import { usePrompt } from '../components/PromptDialog'
+import { useConfirm } from '../components/ConfirmDialog'
 
 // ============================================================
 // P21-2：创造工坊——对话引导生成创作方案（agent 流水线）
@@ -49,6 +50,8 @@ export function StudioPage(): React.JSX.Element {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState<string | null>(null)
+  // v0.22.0（审查 ALOW）：themed confirm 统一
+  const [confirmFn, confirmDialog] = useConfirm()
   const [error, setError] = useState<string | null>(null)
   const { prompt: askName, element: promptElement } = usePrompt()
 
@@ -342,16 +345,17 @@ export function StudioPage(): React.JSX.Element {
                       disabled={busy !== null}
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (!window.confirm(`删除方案「${sol.name}」？`)) return
-                        setBusy('solution-del')
-                        void studioApi
-                          .solutionDelete(sol.id)
-                          .then(() => {
-                            toast('ok', '已删除')
-                            if (selectedId === sol.id) { setSelectedId(null); setDraft(null) }
-                          })
-                          .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-                          .finally(() => { setBusy(null); void queryClient.invalidateQueries({ queryKey: ['studio-solutions'] }) })
+                        confirmFn({ title: '删除方案', message: `删除方案「${sol.name}」？`, confirmText: '删除', danger: true, action: () => {
+                          setBusy('solution-del')
+                          void studioApi
+                            .solutionDelete(sol.id)
+                            .then(() => {
+                              toast('ok', '已删除')
+                              if (selectedId === sol.id) { setSelectedId(null); setDraft(null) }
+                            })
+                            .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                            .finally(() => { setBusy(null); void queryClient.invalidateQueries({ queryKey: ['studio-solutions'] }) })
+                        } })
                       }}
                     >
                       ✕
@@ -406,16 +410,17 @@ export function StudioPage(): React.JSX.Element {
                     // v0.17.0（审查 A9）：删除加 busy 门控 + try/catch（此前无禁用，可连点重复删除）
                     disabled={busy !== null}
                     onClick={() => {
-                      if (!window.confirm(`删除技能「${String(sk.name)}」？`)) return
-                      setBusy('skill-del')
-                      void studioApi
-                        .skillDelete(Number(sk.id))
-                        .then(() => {
-                          toast('ok', '已删除')
-                          void queryClient.invalidateQueries({ queryKey: ['studio-skills'] })
-                        })
-                        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-                        .finally(() => setBusy(null))
+                      confirmFn({ title: '删除技能', message: `删除技能「${String(sk.name)}」？`, confirmText: '删除', danger: true, action: () => {
+                        setBusy('skill-del')
+                        void studioApi
+                          .skillDelete(Number(sk.id))
+                          .then(() => {
+                            toast('ok', '已删除')
+                            void queryClient.invalidateQueries({ queryKey: ['studio-skills'] })
+                          })
+                          .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                          .finally(() => setBusy(null))
+                      } })
                     }}
                   >
                     ✕
@@ -642,6 +647,7 @@ export function StudioPage(): React.JSX.Element {
         </div>
       </div>
     </div>
+    {confirmDialog}
     </>
   )
 }

@@ -13,6 +13,7 @@ import type { ChapterSummary, WorldData } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
 import { BookOpenText, Users, Map, Scale, Pin, Wand2 } from 'lucide-react'
 import { estimateCost, estimateTokens, fmtCost } from '../utils/costEstimate'
 
@@ -133,6 +134,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const id = Number(novelId)
   const queryClient = useQueryClient()
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null)
+  // v0.22.0（审查 ALOW）：themed confirm 统一
+  const [confirmFn, confirmDialog] = useConfirm()
 // v0.21.0（审查 N2）：当前章节 ref（续写响应校验用——防切章后旧章建议串入）
 const selectedChapterRef = useRef<number | null>(null)
   const [content, setContent] = useState('')
@@ -553,15 +556,21 @@ const selectedChapterRef = useRef<number | null>(null)
     if (generateBusyRef.current) return
     const view = editorRef.current?.view
     const current = view ? view.state.doc.toString() : content
-    // P9 A3：有未保存内容时二次确认（生成会清空编辑器）
-    if (current.trim() && current !== savedContentRef.current) {
-      if (!window.confirm('当前章节有未保存内容，重新生成将丢弃它。继续？')) return
-    }
-    // P12 D1：生成前成本确认（防误触额度）
+    // v0.22.0（审查 ALOW）：themed confirm 统一（未保存 + 成本合并一次确认）
     const est = estimateCost(current, 4096)
-    if (!window.confirm(`将生成正文（输出预算约 4096 tokens）。输入上下文估算 ${est.tokens.toLocaleString()} tokens，预计${fmtCost(est.cost)}。继续？`)) {
-      return
-    }
+    const unsaved = current.trim() && current !== savedContentRef.current
+    confirmFn({
+      title: '生成正文',
+      message: (unsaved ? '当前章节有未保存内容，重新生成将丢弃它。\n\n' : '') + `将生成正文（输出预算约 4096 tokens）。输入上下文估算 ${est.tokens.toLocaleString()} tokens，预计${fmtCost(est.cost)}。`,
+      confirmText: '生成',
+      action: () => void generateContinue(current)
+    })
+    return
+  }
+
+  // v0.22.0：确认后的生成主体（拆出：themed confirm 为异步触发；原 generate 主体逻辑不变）
+  const generateContinue = async (current: string): Promise<void> => {
+    if (!selectedChapter) return
     const prevContent = current
     generateBusyRef.current = true
     streamingRef.current = true
@@ -677,7 +686,6 @@ const selectedChapterRef = useRef<number | null>(null)
   // P30：以方案生产正文（whole_book 步骤接力，空章节）
   const produceWithSolution = async (): Promise<void> => {
     if (!selectedChapter || !solutionId) return
-    if (!window.confirm('用方案步骤接力生产正文（将替换本章内容）？')) return
     setActionError(null)
     setSolutionRunSummary(null)
     // v0.17.0（审查 A4）：此前无 try/catch——失败时异常穿透 withBusy 的 finally，按钮卡在 busy 态
@@ -1023,6 +1031,7 @@ const selectedChapterRef = useRef<number | null>(null)
   return (
     <>
       {chapterPromptElement}
+      {confirmDialog}
       {focusMode && (
         <div style={{ position: 'fixed', top: 8, right: 12, zIndex: 999, fontSize: 11 }} className="muted">
           🖊 专注模式 · Ctrl+Shift+F 退出 · Esc 退出
@@ -1240,11 +1249,11 @@ const selectedChapterRef = useRef<number | null>(null)
             {chapter?.summary && <span className="muted t-small">{chapter.summary}</span>}
             <span className="muted t-small">｜{hanCount} 字</span>
             {/* v0.19.0：人类/AI 字数分离（NovelCraft 学习——你的字 vs AI 贡献） */}
-            {/* v0.21.0（审查 N1）：明确累计语义——AI 产出/人工输入总量（可超当前字数） */}
+            {/* v0.22.0（审查 N1）：覆盖语义——AI 字数=当前内容 AI 来源字数（整章生成/重生/修复按本次覆盖，不超当前字数）；我的=人工输入累计（增量累加，删除不降） */}
             <span
               className="muted t-small"
               style={{ color: 'var(--ok)', cursor: 'help' }}
-              title="本书累计：AI 产出与人工输入总量（生成/修复按整章计入，可超当前字数；版本恢复不重复计）"
+              title="AI 字数：当前内容中 AI 来源（整章生成/重生/修复按本次覆盖，不超当前字数）。我的字数：人工输入累计（增量累加，删除不降）。"
             >
               ｜我的 {statsShow.human.toLocaleString()} · AI {statsShow.ai.toLocaleString()}
             </span>
@@ -1543,7 +1552,7 @@ const selectedChapterRef = useRef<number | null>(null)
                 style={{ color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
                 disabled={actionBusy !== null || !selectedChapter || content !== '' || !solutionId}
                 title="用方案的章节生产步骤接力生成正文（需空章节）"
-                onClick={() => void withBusy('solution-produce', () => produceWithSolution())}
+                onClick={() => confirmFn({ title: '方案接力生产', message: '用方案步骤接力生产正文（将替换本章内容）？', confirmText: '生产', danger: true, action: () => void withBusy('solution-produce', () => produceWithSolution()) })}
               >
                 {actionBusy === 'solution-produce' ? '流水线生产中…' : '以方案生产正文'}
               </button>
@@ -1641,9 +1650,7 @@ const selectedChapterRef = useRef<number | null>(null)
                     const advice = top
                       .map((i) => `${String(i.location)}：${String(i.problem)}（建议：${String(i.suggestion)}）`)
                       .join('；')
-                    if (!window.confirm(`将按以下建议重新生成本章（当前内容会被替换）：\n\n${advice.slice(0, 300)}`)) return
-                    setGuidanceDraft(advice)
-                    void generate()
+                    confirmFn({ title: '采纳建议重写', message: `将按以下建议重新生成本章（当前内容会被替换）：\n\n${advice.slice(0, 300)}`, confirmText: '重写', danger: true, action: () => { setGuidanceDraft(advice); void generate() } })
                   }}
                 >
                   采纳建议并重写
@@ -1823,8 +1830,7 @@ const selectedChapterRef = useRef<number | null>(null)
                       disabled={actionBusy !== null || streaming}
                       onClick={() => {
                         if (!selectedChapter) return
-                        if (!window.confirm(`恢复为版本 #${v.id}？当前内容会先存入新版本，然后被替换。`)) return
-                        void withBusy(`vrestore-${v.id}`, async () => {
+                        confirmFn({ title: '恢复版本', message: `恢复为版本 #${v.id}？当前内容会先存入新版本，然后被替换。`, confirmText: '恢复', danger: true, action: () => void withBusy(`vrestore-${v.id}`, async () => {
                           try {
                             const r = await novelApi.chapterVersionRestore(id, selectedChapter, v.id)
                             setContent(r.content)
@@ -1835,7 +1841,7 @@ const selectedChapterRef = useRef<number | null>(null)
                           } catch (err) {
                             setActionError(err instanceof Error ? err.message : String(err))
                           }
-                        })
+                        }) })
                       }}
                     >
                       恢复

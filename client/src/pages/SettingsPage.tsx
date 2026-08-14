@@ -5,6 +5,7 @@ import type { ModelRoute, Provider, UsageGroup, UsageTotal } from '@shared/types
 import { taskTypeLabels, taskTypes } from '@shared/types'
 import { apiFetch } from '../api'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
 import { THEMES, applyTheme, getStoredTheme, type ThemeKey } from '../utils/theme'
 
 // v0.9.2（O4）：每日自动备份状态展示（启动后首备 + 每 24h，保留最近 7 份）
@@ -1149,6 +1150,8 @@ function ShortcutPanel(): React.JSX.Element {
 function AppearancePanel(): React.JSX.Element {
   const { toast } = useToast()
   const [current, setCurrent] = useState<ThemeKey>(getStoredTheme())
+  // v0.22.0（审查 ALOW）：themed confirm 统一——备份恢复/清除数据
+  const [confirmFn, confirmDialog] = useConfirm()
   return (
     <div className="panel col">
       {/* P27 1-9：快捷键自定义 */}
@@ -1214,7 +1217,7 @@ function AppearancePanel(): React.JSX.Element {
         </button>
         <button
           onClick={() => {
-            if (window.confirm('从备份恢复将覆盖当前全部数据（小说/设定/Key），且需要重启应用。继续？')) {
+            confirmFn({ title: '从备份恢复', message: '从备份恢复将覆盖当前全部数据（小说/设定/Key），且需要重启应用。继续？', confirmText: '恢复', danger: true, action: () => {
               void window.novelStudio?.restoreBackup().then((r) => {
                 if (!r.ok) {
                   if (!r.canceled) toast('error', r.error ?? '恢复失败')
@@ -1223,7 +1226,7 @@ function AppearancePanel(): React.JSX.Element {
                 toast('ok', '已恢复，正在重启…')
                 setTimeout(() => window.location.reload(), 1200)
               })
-            }
+            } })
           }}
         >
           ♻️ 从备份恢复
@@ -1231,9 +1234,7 @@ function AppearancePanel(): React.JSX.Element {
         <button
           className="danger"
           onClick={() => {
-            if (window.confirm('清除全部数据（API Key、小说、设定、配置）？此操作不可恢复，应用将退出。')) {
-              void window.novelStudio?.wipeData()
-            }
+            confirmFn({ title: '清除全部数据', message: '清除全部数据（API Key、小说、设定、配置）？此操作不可恢复，应用将退出。', confirmText: '清除', danger: true, action: () => void window.novelStudio?.wipeData() })
           }}
         >
           🗑 清除全部数据
@@ -1243,6 +1244,7 @@ function AppearancePanel(): React.JSX.Element {
         数据存于用户目录（AppData\\Roaming\\ai-novel-studio），与安装目录分离。卸载应用：Windows 设置 &gt; 应用 &gt; AI-Novel-Studio &gt; 卸载（会同时清除数据）；
         便携版 = 删除文件夹与旁 data/ 目录。
       </p>
+      {confirmDialog}
     </div>
   )
 }
