@@ -560,3 +560,13 @@
 - **落点**：AGENTS #60b；docs/AI-AGENT-ONBOARDING.md §2 阶段 7 / §3 / §15。
 - **首个实例（本批次）**：多 agent 并行工作区合并——协作者 v0.22.0 完整绿态批（148/148、台账齐、已 bump）+ 本会话纪律文档，按用户裁决一次提交并推送。
 
+### D94 · 2026-08-14 · pro 正式版参数校准（官方 vs OpenCode Go 网关）
+
+- **背景**：deepseek-v4-pro 正式版发布（官方定价查证：hit $0.003625 / miss $0.435 / out $0.87 per 1M）——AGENTS #59 要求新模型先校准对比再启用；此前 pro 仅 fallback 候选。
+- **方法**：复用 calibrate.ts（每组合 2 次均值）× 2 供应商（官方 api.deepseek.com / OpenCode Go 网关 opencode.ai/zen/go/v1）+ flash 基线复测（D8 对照）；成本按 pro 官方价重算（脚本 PRICE 表为 flash 价，pro 成本低估 3.1x——汇总时修正）。
+- **结果**：三方最佳组合一致为 **off@0.9**（thinking off + 温度 0.9）：flash 0.949 > 网关 pro 0.931 ≈ 官方 pro 0.923。pro 无质量优势；成本 3.1x、延迟 2.6x（~43-50s vs ~18s）。
+- **兼容性**：网关 pro `thinking-high` 组合失败（ok=false，110s）；官方 pro thinking-high 标题不合规——thinking 深度场景 pro 不稳。
+- **结论（本地设计决策）**：prose 路由维持 flash（off@0.9）；thinking 任务维持 flash，pro 保留 fallback 候选——与 D8 结论一致，pro 发布不改变现状路由。flash 基线未漂移。
+- **成本**：本批 26 次 pro + 12 次 flash ≈ $0.09。
+- 产出：docs/calibration-report-pro.md（对比）+ 三份分报告。
+
