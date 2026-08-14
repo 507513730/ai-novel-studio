@@ -1053,3 +1053,10 @@ pnpm --version   # 应 ≥10
 - [x] **P2**：N5 NovelMemory/RunTrace 入 shared / M10 reserved 回传+UI 禁编辑 / 信号防御 / A32 键盘+ARIA / 5 页 confirm 统一
 - [x] **P3 全量**：shared 实体类型补全（9 接口）/ mojibake 重编码 / carets 锁定 / migrate 排序 / analysis 死 fetch / webSearch catch 细化 / factions 事务 / ledger 上限 / JobTrace 切片 / WebSearchToggle 失败态 / CSP 加固（子代理 17 项）
 - [x] **验收**：143/143（+5）+ lint 0 error + build + 已发布
+
+
+### v0.22.1 · 2026-08-14 · 修复：kb_doc 标题清洗（? 前缀事故防再犯）
+
+- [x] **事故修复**：真实库 6 篇全局知识库文档标题去除 ???? 前缀（备份 + 短事务；正文完好；原始前缀 0x3F 不可恢复，不臆测）
+- [x] **加固**：knowledgeCreate 端点标题清洗（trim + 去首部 ? 序列 + 全? 拒 400）——防新导入再带 ? 前缀
+- [x] **验收**：151/151（+3 标题清洗）+ lint 0 error + 已发布
