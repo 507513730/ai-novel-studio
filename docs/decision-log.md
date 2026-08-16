@@ -606,3 +606,11 @@
 - **事故**：tag v0.23.0 落在提交 3fe4191 上，该提交信息写「docs: 发版纪律分层决议……（v0.22.3，免发版）」，但 diff 实际包含 v0.23.0 全部发布内容（bump/CHANGELOG/sepia 主题/main.ts 改动）——提交信息与内容严重不符，且缺约定的 `chore: release v0.23.0` 提交。
 - **根因**：免发版文档提交与发版内容（bump+CHANGELOG+src）混在同一提交，提交时未意识到其中含发版物料。
 - **决议（流程纪律）**：发版物料（版本 bump / CHANGELOG 新版段 / tag）必须与免发版改动分开提交——release 流程的提交（`chore: release vX.Y.Z` 或 release.mjs [6/7] 产物）独立成提交；免发版提交内**禁止**夹带 package.json version 变更。历史 tag 不追溯（#51 禁 force）。
+
+### D100 · 2026-08-16 · 第三轮审查修复批 A+B 落地（v0.23.1）
+
+- **批次 A 稳定性（全部经源码二次核验后修复）**：scheduler 损坏 payload 防御（JSON.parse 移入 try + tick 补 .catch——此前未处理 rejection 可 crash server）；server-lost IPC 补全（M16 只做一半：main 发送但 preload 未暴露，renderer 永远收不到——现 App 显示重启引导面板）；反 AI 重写 prompt 补 "json" 字样（jsonMode 硬要求，此前静默 400 降级）；max_tokens 截断检测（LlmResult.truncated 标志：章节截断显式失败拒落库、callLlmJson 注入精简反馈重试——落实 #10"截断即重试"）；SSE 错误复位补 status='generating' 守卫；before-quit preventDefault+优雅等待；updater/theme IPC 加 assertTrustedSender。
+- **批次 B 规范收敛**：planner prompt 九处内联收敛（#31 兑现——novels/volumes/worlds 手动路由与导演链双向漂移消除：手动路由补齐流派模板/卷间钩子注入、导演链补齐卷骨架；getGenreTemplate/getPrevVolumeHook 迁 planner 共享）；quality-debts camelCase（#20，其余两处经查服务端本已 camelCase，是客户端类型注解过期）；zustand 死依赖移除；e2e 报告路径仓库相对化；约束违反统计接通 + 修复 validateConstraints 反向条件 bug（注释"出现即违反"与实现 count===0 相反——死代码掩盖的真 bug）；死代码清理一批。
+- **e2e 抓真 bug（R4→R5）**：debtFix 销账 UPDATE 引用 quality_debt 表不存在的 updated_at 列（v0.10.0/e78e26f 引入；修复达标即 500——历史轮 rescore 未达标而绕过未暴露）。修复后 R5 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7）。
+- **验收**：162/162（+7：scheduler×2/截断×2/约束统计×3）+ db-smoke 7/7 + e2e R5 + dist 双产物。
+- **待续批次**：D（produce-chapter/refine-range 迁 job 队列，v0.24.0 MINOR）+ E（客户端重构：两大页面拆分/useBusy 共享 hook/硬编码颜色/轮询收编）。

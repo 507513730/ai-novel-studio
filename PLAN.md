@@ -6,7 +6,7 @@
 
 ---
 
-## 0.5 当前进度总览（2026-08-14 · v0.23.0）
+## 0.5 当前进度总览（2026-08-16 · v0.23.1）
 
 | 里程碑 | 状态 | 说明 |
 |---|---|---|
@@ -15,12 +15,12 @@
 | P6 发布 → P14 收尾（v0.2.0） | ✅ | 双产物打包 / 签名就绪 / 深度测试 R3 52/52 / 导航与体验修复 |
 | P16-P30（v0.2.x-v0.7.x） | ✅ | 数据管理 / 资产全局化 / 创造工坊 / 方案生产流水线 / CI 规范 / 多主题 / 字体排版 / 图标 |
 | O1-O5 + I1-I5（v0.9.2→v0.14.0） | ✅ | 查证改进全量：发布自动验收 / LLM 路径合并 / e2e 门禁 / 每日备份 / 成本预警 / 质量债闭环 / 世界状态机 / 风格指纹 |
-| v0.15-v0.23 版本线 | ✅ | 创作约束 / 自更新 + CNY / 审查修复批 ×3 / 联网查找 / 续写 + 字数分离 / NovelClaw 记忆面 / N1 字数覆盖语义 + ALOW 统一 / UI 美化（sepia 主题 + .prose 排印） |
-| 测试 | ✅ | vitest 155/155、db-smoke 7/7、typecheck/lint 0 error、e2e R3 52/52 |
+| v0.15-v0.23 版本线 | ✅ | 创作约束 / 自更新 + CNY / 审查修复批 ×3 / 联网查找 / 续写 + 字数分离 / NovelClaw 记忆面 / N1 字数覆盖语义 + ALOW 统一 / UI 美化（sepia 主题 + .prose 排印）/ 第三轮审查修复批 A+B（v0.23.1） |
+| 测试 | ✅ | vitest 162/162、db-smoke 7/7、typecheck/lint 0 error、e2e R5 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7） |
 | **当前主线** | 📚 | 真实写书（书 #25「帝路十章」）：卷 72 已产 11 章 ≈3.3 万字，剩余 9 章 + 卷 73-75 共 74 章待生产（应用内执行） |
 
 **遗留可选**：RAG 条件启用（§9.2，>100 万字时）；pro 模型切换验证（等用户通知）；P8 部分美化项（无边框标题栏已由 P12 B3 落地）。
-**已知文档债**：PLAN P18-P30 段与 §12 早期版本记录、decision-log D36-D89 因早期编码事故损坏（0x3F 有损，不可恢复）；另有 docs/CHANGELOG.md(v0.9.3-v0.14.0 段)、test-report.md、versioning.md、audit-report.md、calibration-report.md 同样损坏（v0.22.0 起纠正范围标注）。标题已按提交信息重建，正文要点以 git 提交信息与已发布代码为准（注：docs/CHANGELOG.md 该版本段亦损坏，非可靠来源）。
+**已知文档债**：PLAN P18-P30 段与 §12 早期版本记录、decision-log D36-D89 因早期编码事故损坏（0x3F 有损，不可恢复）；标题已按提交信息重建，正文要点以 git 提交信息与已发布代码为准。**v0.23.1（批次 C）已偿还**：CHANGELOG v0.9.2-v0.14.0 段按 git+decision-log 重建、versioning §8 回滚决策树重建、test-report/audit-report/calibration-report 等仍留损坏标注（历史报告，不再重建）。
 
 **关键文件**：`AGENTS.md`（61+ 条纪律）｜`docs/AI-AGENT-ONBOARDING.md`（协作者手册）｜`docs/CHANGELOG.md`｜`docs/decision-log.md`｜`tests/`（vXXXX.test.ts 按版本命名）
 
@@ -1073,3 +1073,18 @@ pnpm --version   # 应 ≥10
 - [x] **根因**：main.ts 无 requestSingleInstanceLock（grep 确认）——Electron 默认允许多实例
 - [x] **修复**：ready 前获取锁（未获得 → quit）+ second-instance 唤出主窗口（restore/show/focus）；杜绝双 server 抢库隐患
 - [x] **验收**：typecheck/build + 已发布 v0.22.3（真机多开验证待用户）
+
+### v0.23.0 · 2026-08-14 · UI 美化（sepia 主题 + 排印）
+
+- [x] **sepia 主题**（第 7 套）：#f4ecd8 底 / #a06a2c accent，theme.ts/main.ts THEME_OVERLAY 联动
+- [x] **修 --bg-input 潜伏 bug**：9 处使用但从未定义 → `--bg-input: var(--bg-elevated)`（CSS 惰性求值）
+- [x] **.prose 排印类**：CJK 悬垂标点 + palt/kern（阅读视图/导出预览待应用）
+- [x] **教训（D99）**：tag 落在提交信息写「v0.22.3 免发版」的 docs 提交上（发版物料混入免发版提交）——本段即当时缺失的 PLAN 记录补记
+- [x] **验收**：155/155 + 已发布 v0.23.0
+
+### v0.23.1 · 2026-08-16 · 第三轮全面审查修复批 A+B（详见 decision-log D98/D100）
+
+- [x] **批次 A 稳定性**：scheduler 损坏 payload 防御（JSON.parse 入 try + tick .catch，+2 单测）；server-lost IPC 补全（preload 暴露 + App 面板）；反 AI 重写 prompt 补 json 字样；max_tokens 截断检测（finish_reason=length → 章节显式失败拒落库 / callLlmJson 截断反馈重试，+2 单测）；SSE 错误复位守卫；before-quit 优雅等待 + updater/theme IPC sender 校验
+- [x] **批次 B 规范收敛**：planner prompt 九处内联收敛（手动路由补齐流派模板/卷间钩子/webCtx——双向漂移消除；getGenreTemplate/getPrevVolumeHook 迁 planner 共享）；quality-debts camelCase；zustand 死依赖移除；e2e 路径参数化；约束违反统计接通（修 validateConstraints 反向条件 bug，+3 单测）；约束 id 防撞后缀；死代码清理
+- [x] **e2e 抓真 bug**：R4 发现 debtFix 销账 UPDATE 引用 quality_debt 不存在的 updated_at 列（v0.10.0 引入）→ 修复后 R5 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7）
+- [x] **验收**：162/162（+7）+ typecheck/lint 0 error + db-smoke 7/7 + 已发布 v0.23.1

@@ -4,6 +4,33 @@
 
 ## [Unreleased]
 
+## v0.23.1（2026-08-16）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.23.1.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.23.1-portable-x64.exe`
+
+### 变更（第三轮全面审查修复批 A+B，详见 decision-log D98/D100）
+
+#### 稳定性（批次 A）
+- **scheduler 崩溃防御**：损坏 payload_json 的 job 此前在 try 块外抛错 + tick 无 `.catch` → 未处理 rejection 可 crash 整个 server 进程；现在解析失败置 job failed，tick 链兜底捕获（+2 单测）
+- **server-lost IPC 补全**：server 异常退出时 renderer 此前永远收不到通知（preload 未暴露）——现在 App 显示明确的重启引导面板，不再静默指向死服务
+- **反 AI 自动重写修复**：重写 prompt 缺 "json" 字样却走 jsonMode（DeepSeek 硬要求，违者 400）——此前重写静默失效恒保留原文
+- **max_tokens 截断检测**：流式/非流式读取 `finish_reason`——截断的半章不再静默落库为 written（显式失败+提示调大 max_tokens）；callLlmJson 截断即注入"精简输出"反馈重试（+2 单测）
+- **SSE 错误复位守卫**：复位 failed 仅限自己抢占的 generating（对齐 generate.ts，防误标他方 written 章节）
+- **退出与 IPC 加固**：before-quit preventDefault + 等待 server 优雅关闭（最长 3s）后再退出；updater 三操作与 theme-set 加主窗口顶层 frame 校验
+
+#### 规范收敛（批次 B）
+- **prompt 九处内联收敛 planner.ts**（#31）：novels（direction 定向重做上下文/framing notes/macro）、volumes（卷/节拍/章节清单——手动路由补齐流派模板与卷间钩子注入，消除与导演链的双向漂移）、worlds（世界三步 + 角色两批，webCtx 参数化）；getGenreTemplate/getPrevVolumeHook 迁入 planner 共享
+- **修复链路 500 修复**：debtFix 销账 UPDATE 引用 quality_debt 表不存在的 updated_at 列（v0.10.0 引入，历史 e2e 轮 rescore 未达标而未暴露——R4 复测抓到，R5 全绿）
+- **约束违反统计接通**：生成链路校验命中登记质量债（UI 遵守率统计此前恒 0）；同时修复 validateConstraints 反向条件 bug（注释"出现即违反"与实现相反）；去重写入防重生叠加（+3 单测）
+- **quality-debts 契约 camelCase**（#20）：novel_id/high_count 等改 novelId/highCount（客户端同步）；versionDetail/pending 的过期类型注解一并修正
+- **zustand 死依赖移除**（全仓库 0 import，D98 审查发现）
+- **e2e 报告路径参数化**：硬编码本机绝对路径改仓库相对（他机/CI 可跑）
+- **死代码清理**：runPlannerStage/JOB_TIMEOUT_MS/_attempt/客户端 hub.chat 双定义/主角名提取双实现合一（utils/protagonist）/约束 id 防撞后缀/3 文件 BOM/挤行
+
+- 测试 162/162（+7）、typecheck/lint 0 error、db-smoke 7/7、e2e R5：T1 10/10 + T2 30/30 + T3 6/6 + T4 7/7
+
 ## v0.23.0（2026-08-14）
 
 ### 安装方式
