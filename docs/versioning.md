@@ -140,7 +140,7 @@ git push origin vX.Y.Z              # 5) 重推触发 CI → 全新 Release（�
 | 0.23.0 | UI 美化：新增 sepia 主题 + 修 --bg-input bug + .prose 排印类就绪 | ✅ 已发布 |
 | 0.23.1 | 第三轮审查修复批 A+B：稳定性（scheduler/server-lost/截断检测）+ 规范收敛（planner 统一/约束统计接通/debtFix 500） | ✅ 已发布 |
 | 0.24.0 | 第三轮审查修复批 D：执行面迁移（refine-range + produce-chapter 迁 job 队列，取消感知/进度/幂等保留） | ✅ 已发布 |
-| 0.24.1 | 第三轮审查修复批 E：客户端重构（useActionRun 防重/颜色清零/轮询收编/两大页面拆分） | 🔄 发布中 |
+| 0.24.1 | 第三轮审查修复批 E：客户端重构（useActionRun 防重/颜色清零/轮询收编/两大页面拆分） | ✅ 已发布 |
 | 1.0.0 | 稳定承诺（判据见 §1 修订）：真实写书完成 + 核心链 1-2 版无 P0/P1 + 数据格式冻结 | 写书收官后 |
 
 
