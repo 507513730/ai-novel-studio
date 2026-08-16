@@ -1088,3 +1088,10 @@ pnpm --version   # 应 ≥10
 - [x] **批次 B 规范收敛**：planner prompt 九处内联收敛（手动路由补齐流派模板/卷间钩子/webCtx——双向漂移消除；getGenreTemplate/getPrevVolumeHook 迁 planner 共享）；quality-debts camelCase；zustand 死依赖移除；e2e 路径参数化；约束违反统计接通（修 validateConstraints 反向条件 bug，+3 单测）；约束 id 防撞后缀；死代码清理
 - [x] **e2e 抓真 bug**：R4 发现 debtFix 销账 UPDATE 引用 quality_debt 不存在的 updated_at 列（v0.10.0 引入）→ 修复后 R5 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7）
 - [x] **验收**：162/162（+7）+ typecheck/lint 0 error + db-smoke 7/7 + 已发布 v0.23.1
+
+### v0.24.0 · 2026-08-16 · 第三轮全面审查修复批 D：执行面迁移（详见 decision-log D101）
+
+- [x] **refine-range 迁 job**：此前 HTTP 请求内循环逐章 LLM（40 章可挂数分钟，违 #8/#23）——enqueueTypedJob 原子入队 + scheduler 串行 + 章间取消感知 + 幂等续跑保留（已有任务单跳过）+ 进度时间线
+- [x] **produce-chapter 迁 job**：方案生产多步流水线入队执行，步骤边界感知取消/看门狗；结果（字数/降级/步骤输出）入 resultJson
+- [x] **共享件**：refineOne 迁 planner（单章端点与批量 job 共用）；客户端 waitForJob 轮询助手 + VolumePanel/ChapterExecutionPage 适配（完成后回显服务端落库正文）+ TasksPage 类型中文名
+- [x] **验收**：166/166（+4）+ e2e R6 全绿（job 化批量细化断言）+ 已发布 v0.24.0

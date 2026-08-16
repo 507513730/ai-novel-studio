@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## v0.24.0（2026-08-16）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.24.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.24.0-portable-x64.exe`
+
+### 变更（第三轮全面审查修复批 D：执行面迁移，详见 decision-log D98/D101）
+
+- **批量细化迁 job 队列**：`POST /chapters/refine-range` 此前在 HTTP 请求内循环逐章调 LLM（40 章 × 2048 token 可挂数分钟——长连接挂死风险 + 无取消/无进度）；现原子入队（同书同类型活跃态查重）+ scheduler 串行执行——幂等续跑语义保留（已有任务单跳过）、章间取消感知、任务中心可见进度时间线与中文类型名
+- **方案生产迁 job 队列**：`POST /solutions/:id/produce-chapter` 此前在请求内直跑多步 LLM 流水线（每步最高 8192 token）；现入队返回 jobId，runProductionChapter 在步骤边界感知取消/看门狗中止，结果（字数/降级/步骤输出）入 resultJson；章节级并发仍由原子抢占守卫兜底
+- **共享执行件**：refineOne 自 volumes.ts 迁 planner.ts（单章端点与批量 job 共用）；jobQueue 新增 enqueueTypedJob 通用入队；客户端新增 waitForJob 轮询助手（2s 间隔、15 分钟兜底），卷面板与章节执行页适配（完成后回显服务端落库正文 + 结果摘要）
+- **e2e 适配**：round.mjs 批量细化两断言改 job 轮询口径
+
+- 测试 166/166（+4：入队查重/refine 幂等跳过/章间取消/方案生产结果）、typecheck/lint 0 error、e2e R6 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7）
+
 ## v0.23.1（2026-08-16）
 
 ### 安装方式

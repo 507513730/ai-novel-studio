@@ -614,3 +614,10 @@
 - **e2e 抓真 bug（R4→R5）**：debtFix 销账 UPDATE 引用 quality_debt 表不存在的 updated_at 列（v0.10.0/e78e26f 引入；修复达标即 500——历史轮 rescore 未达标而绕过未暴露）。修复后 R5 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7）。
 - **验收**：162/162（+7：scheduler×2/截断×2/约束统计×3）+ db-smoke 7/7 + e2e R5 + dist 双产物。
 - **待续批次**：D（produce-chapter/refine-range 迁 job 队列，v0.24.0 MINOR）+ E（客户端重构：两大页面拆分/useBusy 共享 hook/硬编码颜色/轮询收编）。
+
+### D101 · 2026-08-16 · 执行面迁移 job 队列（批次 D，v0.24.0）
+
+- **背景（D98 审查发现）**：`POST /chapters/refine-range` 与 `POST /solutions/:id/produce-chapter` 在 HTTP 请求内直跑多步 LLM（违 #8/#23 执行面隔离——40 章 × 2048 token / 每步 8192 token 可挂数分钟，长连接挂死 + 无取消 + 无进度）。
+- **迁移（本地设计决策）**：jobQueue 新增 `enqueueTypedJob`（type + novelId 活跃态原子查重，语义同 enqueueDirectorJob）；scheduler 新增 `refine-range` 分支（章间 isJobAborted 取消感知；幂等续跑语义保留——goal_json 已有 purpose 跳过；结果 done/skipped 数组入 resultJson + 进度时间线）与 `solution-chapter` 分支（runProductionChapter 增加 `isAborted` 钩子在步骤边界生效；结果字数/降级/步骤输出入 resultJson）；refineOne 迁 planner（单章端点与批量 job 共用）。
+- **契约变化（MINOR）**：两端点改 202 + `{jobId}`；客户端新增 `waitForJob`（2s 轮询 /jobs、15 分钟兜底）；VolumePanel 显示完成摘要、ChapterExecutionPage 生产完成后重拉详情回显（正文由 job 服务端落库）；TasksPage 类型中文名。
+- **验收**：166/166（+4：入队查重/幂等跳过/章间取消/方案生产结果）+ e2e R6 全绿（round.mjs 断言改 job 轮询口径）。
