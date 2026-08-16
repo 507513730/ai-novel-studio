@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+## v0.24.1（2026-08-16）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.24.1.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.24.1-portable-x64.exe`
+
+### 变更（第三轮全面审查修复批 E：客户端重构，详见 decision-log D98/D102）
+
+- **操作防重共享 hook（useActionRun）**：抽取 ChapterExecutionPage withBusy 的 ref 守卫语义（v0.17.0 审查 A2 同款——state 更新前的同帧双击此前可双跑）；VolumePanel / SetupPanel / TasksPage 三页接入（含 genVolumes/手动建卷/清理已完成等手动 setBusy 双轨收编）；SetupPanel 添加流派补 Enter+按钮双发守卫
+- **硬编码颜色清零**：约 20 处改 CSS 变量 / `color-mix(in srgb, var(--x) N%, transparent)` 派生——三种互不一致的绿与幽灵蓝统一，亮色主题（paper/sepia）下徽标/边框/滚动条不再失真（此前白色滚动条近乎不可见）
+- **轮询收编 react-query**：/jobs 四处查询（AppLayout 手写 setInterval / 列表页 / 任务中心 / 跟进页）统一共享 `['jobs']` 缓存（单一网络流 + 条件轮询保留）；AiStatusBar 手写轮询收编 `['director-status']` 共享 query（运行 3s/空闲 30s 巡检降频保留）；DebtFixBadge 无待修复债时停止 30s 空转轮询
+- **SettingsPage 拆分**：1250 行 → 46 行页壳 + `pages/settings/` 6 面板文件（供应商/模型路由/成本/更新/写作/外观，同 tab 互引组件同文件）
+- **ChapterExecutionPage 瘦身**：1976 → 1842 行——记忆面输入/质量债徽标/章节列表项拆至 `pages/chapter/`（编辑器/流式/动作面板与页面状态强耦合，保留并注释后续拆分方向）
+- **构建稳健性**：manualChunks 引用的 @codemirror/language/state/view 由传递依赖转显式声明（消除 pnpm shamefully-hoist 依赖）
+
+- 测试 166/166、typecheck/lint 0 error、e2e R7 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7）
+
 ## v0.24.0（2026-08-16）
 
 ### 安装方式

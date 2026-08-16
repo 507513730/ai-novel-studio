@@ -621,3 +621,13 @@
 - **迁移（本地设计决策）**：jobQueue 新增 `enqueueTypedJob`（type + novelId 活跃态原子查重，语义同 enqueueDirectorJob）；scheduler 新增 `refine-range` 分支（章间 isJobAborted 取消感知；幂等续跑语义保留——goal_json 已有 purpose 跳过；结果 done/skipped 数组入 resultJson + 进度时间线）与 `solution-chapter` 分支（runProductionChapter 增加 `isAborted` 钩子在步骤边界生效；结果字数/降级/步骤输出入 resultJson）；refineOne 迁 planner（单章端点与批量 job 共用）。
 - **契约变化（MINOR）**：两端点改 202 + `{jobId}`；客户端新增 `waitForJob`（2s 轮询 /jobs、15 分钟兜底）；VolumePanel 显示完成摘要、ChapterExecutionPage 生产完成后重拉详情回显（正文由 job 服务端落库）；TasksPage 类型中文名。
 - **验收**：166/166（+4：入队查重/幂等跳过/章间取消/方案生产结果）+ e2e R6 全绿（round.mjs 断言改 job 轮询口径）。
+
+### D102 · 2026-08-16 · 客户端重构（批次 E，v0.24.1）
+
+- **useActionRun 共享 hook**（hooks/useActionRun.ts）：抽取 ChapterExecutionPage withBusy 的 ref 守卫（TOCTOU）语义供全站复用——VolumePanel/SetupPanel/TasksPage 三页接入（含 genVolumes 双轨 busy/手动建卷/清理已完成等手动 setBusy 全部收编）；SetupPanel addGenre 补 Enter+按钮双发 ref 守卫。CharacterPanel/AnalysisPanel/AgentPanel/StylePanel 的布尔 busy 仍为 state-only（单发 LLM 按钮，风险低——遗留渐进项）。
+- **颜色体系收敛**：约 20 处硬编码 rgba 清零——red/green/warn 三系改 var(--danger-soft)/var(--ok-soft)/var(--warn-soft)，非标准透明度用 `color-mix(in srgb, var(--x) N%, transparent)` 派生（Chromium 111+，Electron 43 无碍）；三种互不一致的绿（rgba(52,211,153)/rgba(76,217,123)/#ff6b6b 系）与幽灵蓝 rgba(91,140,255) 统一；亮色主题（paper/sepia）滚动条由白色系改 var(--text) 派生。
+- **轮询收编 react-query**：/jobs 四处（AppLayout 手写 setInterval+本地 state / NovelListPage ['jobs','list'] / TasksPage ['jobs','tasks'] / FollowUpsPage ['jobs','followups']）统一为共享 ['jobs']（单一缓存 + AppLayout 条件轮询 4s/15s + TasksPage/FollowUps 可见性暂停保留）；AiStatusBar 手写轮询收编 ['director-status'] 共享 query（运行 3s/空闲 30s 巡检降频保留；DirectorPage 因通知+双数据源特化轮询保留不动）；DebtFixBadge pending=0 停轮询。
+- **页面拆分（机械脚本 + typecheck 兜底）**：SettingsPage 1250 → 46 行壳 + pages/settings/ 6 面板文件（同 tab 互引组件同文件，无跨文件依赖；UpdaterState 类型随 UpdatePanel 迁移）；ChapterExecutionPage 1976 → 1842（CharStateAdd/FactionStateEdit/DebtFixBadge/ChapterListItem 拆至 pages/chapter/——编辑器/流式/动作面板与 30+ 状态强耦合，保留并注释后续方向，未强行深拆防回归）。
+- **构建**：@codemirror/language/state/view 显式声明为直接依赖（manualChunks 引用传递依赖靠 shamefully-hoist 才可解析——脆弱点消除）。
+- **验收**：166/166 + typecheck/lint 0 error + e2e R7 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7）。
+- **第三轮审查（D98）五批全部收官**：C（v0.23.1 前置免发版）+ A/B（v0.23.1）+ D（v0.24.0）+ E（v0.24.1）。

@@ -1095,3 +1095,12 @@ pnpm --version   # 应 ≥10
 - [x] **produce-chapter 迁 job**：方案生产多步流水线入队执行，步骤边界感知取消/看门狗；结果（字数/降级/步骤输出）入 resultJson
 - [x] **共享件**：refineOne 迁 planner（单章端点与批量 job 共用）；客户端 waitForJob 轮询助手 + VolumePanel/ChapterExecutionPage 适配（完成后回显服务端落库正文）+ TasksPage 类型中文名
 - [x] **验收**：166/166（+4）+ e2e R6 全绿（job 化批量细化断言）+ 已发布 v0.24.0
+
+### v0.24.1 · 2026-08-16 · 第三轮全面审查修复批 E：客户端重构（详见 decision-log D102）
+
+- [x] **useActionRun 共享 hook**：ref 守卫防同帧双击（TOCTOU）——VolumePanel/SetupPanel/TasksPage 接入 + 手动 setBusy 双轨收编 + addGenre Enter/按钮双发守卫
+- [x] **颜色清零**：约 20 处硬编码 → CSS 变量/color-mix 派生（三种绿+幽灵蓝统一；亮色主题滚动条/徽标不再失真）
+- [x] **轮询收编**：/jobs 四处统一共享 ['jobs'] 缓存；AiStatusBar 收编 ['director-status'] 共享 query（降频保留）；DebtFixBadge 空载停轮询
+- [x] **页面拆分**：SettingsPage 1250→46 行壳+6 面板文件（pages/settings/）；ChapterExecutionPage 1976→1842（叶子组件拆 pages/chapter/，编辑器核心保留）
+- [x] **构建**：@codemirror/language/state/view 显式声明（消除 shamefully-hoist 依赖）
+- [x] **验收**：166/166 + e2e R7 全绿 + 已发布 v0.24.1
