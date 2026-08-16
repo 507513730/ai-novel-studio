@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { callLlmJson } from './jsonSafe'
 import { JSON_FORMAT, CHAPTER_TITLE_RULE } from '../prompts'
 import { getSystemPrompt } from '../prompts/promptAsset'
 
@@ -233,6 +234,38 @@ export function parseRefine(obj: unknown): Record<string, unknown> | null {
     scenes: r.scenes.map(String),
     ending: String(r.ending)
   }
+}
+
+// ---------- 单章细化执行（v0.23.1 批次 D2：自 volumes.ts 迁入——单章端点与批量 job 共用） ----------
+// P12 A4：质量门禁（关键字段非空）由 parseRefine 保证
+export async function refineOne(
+  db: DatabaseSync,
+  chapterId: number,
+  chapter: { title: string; summary: string; goal_json: string }
+): Promise<Record<string, unknown>> {
+  const novelId = (db.prepare('SELECT novel_id FROM chapter WHERE id = ?').get(chapterId) as { novel_id: number })
+    .novel_id
+  const refined = await callLlmJson<Record<string, unknown>>(
+    db,
+    'extraction',
+    {
+      novelId,
+      messages: [
+        {
+          role: 'user',
+          content: generateRefinePrompt(chapter.title, chapter.summary, chapter.goal_json)
+        }
+      ],
+      maxTokens: 2048
+    },
+    parseRefine,
+    'refine'
+  )
+  db.prepare("UPDATE chapter SET goal_json = ?, updated_at = datetime('now') WHERE id = ?").run(
+    JSON.stringify(refined),
+    chapterId
+  )
+  return refined
 }
 
 // ---------- 卷间/流派共享助手（v0.23.1 批次 B1：自 director.ts 迁入——手动路由同样消费） ----------

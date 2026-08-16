@@ -6,7 +6,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Annotation, type AnnotationType } from '@codemirror/state'
 import { novelEditorTheme } from '../editor/theme'
-import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, automationApi } from '../api'
+import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, automationApi, waitForJob } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
 import type { ChapterSummary, WorldData } from '../types'
@@ -691,12 +691,24 @@ const selectedChapterRef = useRef<number | null>(null)
     setSolutionRunSummary(null)
     // v0.17.0（审查 A4）：此前无 try/catch——失败时异常穿透 withBusy 的 finally，按钮卡在 busy 态
     try {
-      const r = await studioApi.solutionProduceChapter(solutionId, id, selectedChapter)
-      setContent(r.content)
-      savedContentRef.current = r.content
+      // v0.23.1（批次 D1）：迁 job 队列——入队 + 轮询终态（可到任务中心取消；不再占 HTTP 长连接）
+      const { jobId } = await studioApi.solutionProduceChapter(solutionId, id, selectedChapter)
+      const job = await waitForJob(jobId)
+      if (job.status === 'failed') throw new Error(job.error ?? '方案生产失败')
+      if (job.status === 'cancelled') throw new Error('方案生产已取消')
+      const r = (job.result ?? {}) as {
+        wordCount?: number
+        degraded?: boolean
+        outputs?: Array<{ role: string; ok: boolean }>
+      }
+      // 正文已由 job 服务端落库——重新拉详情回显（含可能的大纲标题更新）
+      const d = await novelApi.chapterDetail(id, selectedChapter)
+      const fresh = d.chapter.content ?? ''
+      setContent(fresh)
+      savedContentRef.current = fresh
       dirtyRef.current = false
-      setActionMsg(`方案生产完成：${r.wordCount} 字${r.degraded ? '（部分步骤降级）' : ''}`)
-      setSolutionRunSummary(r.outputs.map((o, i) => `${i + 1}.${o.role}${o.ok ? '' : ' ✗'}`).join(' | '))
+      setActionMsg(`方案生产完成：${r.wordCount ?? 0} 字${r.degraded ? '（部分步骤降级）' : ''}`)
+      setSolutionRunSummary((r.outputs ?? []).map((o, i) => `${i + 1}.${o.role}${o.ok ? '' : ' ✗'}`).join(' | '))
       await invalidate()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))

@@ -195,7 +195,13 @@ export function TasksPage(): React.JSX.Element {
                   <span
                     style={{ width: 8, height: 8, borderRadius: 4, background: meta.color, display: 'inline-block' }}
                   />
-                  <strong>#{j.id} {j.type === 'director' ? '自动导演' : j.type}</strong>
+                  <strong>
+                    #{j.id}{' '}
+                    {
+                      // v0.23.1（批次 D）：新 job 类型中文名（此前非 director 类型直显英文标识）
+                      ({ director: '自动导演', production: '整本生产', 'debt-fix': '质量债修复', 'refine-range': '批量细化', 'solution-chapter': '方案生产' } as Record<string, string>)[j.type] ?? j.type
+                    }
+                  </strong>
                   <span className="badge" style={{ background: `${meta.color}22`, color: meta.color }}>
                     {meta.label}
                   </span>

@@ -63,6 +63,34 @@ function js<T>(path: string, init?: RequestInit): Promise<T> {
   return j<T>(path, init, LONG_TIMEOUT)
 }
 
+// v0.23.1（批次 D1/D2）：job 轮询等待——入队型重型端点（方案生产/批量细化）迁 job 队列后，
+// 前端以 2s 轮询 /jobs 直至终态（done/failed/cancelled）；15 分钟兜底超时
+export interface JobTerminal {
+  id: number
+  type: string
+  status: string
+  progress: number
+  result: Record<string, unknown> | null
+  error: string | null
+}
+
+export async function waitForJob(
+  jobId: number,
+  onTick?: (job: { status: string; progress: number }) => void
+): Promise<JobTerminal> {
+  const deadline = Date.now() + 15 * 60 * 1000
+  for (;;) {
+    const d = await j<{ jobs: Array<JobTerminal> }>('/jobs')
+    const job = d.jobs.find((x) => x.id === jobId)
+    if (job) {
+      onTick?.(job)
+      if (job.status === 'done' || job.status === 'failed' || job.status === 'cancelled') return job
+    }
+    if (Date.now() > deadline) throw new Error('任务等待超时（15 分钟）——请到任务中心查看状态')
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+}
+
 export const novelApi = {
   list: (): Promise<{ novels: NovelSummary[] }> => j('/novels'),
   create: (inspiration: string): Promise<{ id: number }> =>
@@ -143,8 +171,8 @@ export const novelApi = {
     js(`/novels/${id}/volumes/${volId}/chapters/generate`, { method: 'POST', body: guidance ? JSON.stringify({ guidance }) : undefined }),
   chapterRefine: (id: number, chapterId: number): Promise<{ goal: Record<string, unknown> }> =>
     js(`/novels/${id}/chapters/${chapterId}/refine`, { method: 'POST' }),
-  // P12 A4：批量细化（范围 + 幂等续跑）
-  refineRange: (id: number, from: number, to: number): Promise<{ done: number[]; skipped: number[] }> =>
+  // P12 A4：批量细化（范围 + 幂等续跑）——v0.23.1（批次 D2）：迁 job 队列，返回 jobId 由调用方轮询
+  refineRange: (id: number, from: number, to: number): Promise<{ jobId: number }> =>
     js(`/novels/${id}/chapters/refine-range`, { method: 'POST', body: JSON.stringify({ from, to }) }),
 
   review: (id: number, chapterId: number): Promise<{ review: Record<string, unknown> }> =>
@@ -234,7 +262,8 @@ export const studioApi = {
     js(`/solutions/${id}/run`, { method: 'POST', body: JSON.stringify({ novelId, chapterId, humanOverride }) }),
   solutionGenerate: (body: { description: string; genre?: string }): Promise<{ name: string; description: string; steps: Array<Record<string, unknown>> }> =>
     js('/solutions/generate', { method: 'POST', body: JSON.stringify(body) }),
-  solutionProduceChapter: (id: number, novelId: number, chapterId: number): Promise<{ content: string; wordCount: number; title: string | null; degraded: boolean; outputs: Array<{ role: string; ok: boolean }> }> =>
+  // v0.23.1（批次 D1）：迁 job 队列——返回 jobId，结果（字数/降级/步骤输出）经 waitForJob 的 result 消费
+  solutionProduceChapter: (id: number, novelId: number, chapterId: number): Promise<{ jobId: number }> =>
     js(`/solutions/${id}/produce-chapter`, { method: 'POST', body: JSON.stringify({ novelId, chapterId }) }),
   solutionExport: (id: number): Promise<string> => j(`/solutions/${id}/export`),
   solutionImport: (bundle: string): Promise<{ solutionId: number; name: string }> =>

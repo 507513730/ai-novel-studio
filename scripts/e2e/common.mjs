@@ -61,6 +61,18 @@ export function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+// v0.23.1（批次 D）：job 轮询等待——refine-range/solution-chapter 迁 job 队列后 e2e 用
+export async function waitJob(jobId, timeoutMs = 10 * 60 * 1000) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const d = await api('/jobs')
+    const job = d.jobs.find((x) => x.id === jobId)
+    if (job && ['done', 'failed', 'cancelled'].includes(job.status)) return job
+    if (Date.now() > deadline) throw new Error(`job ${jobId} 等待超时`)
+    await sleep(2000)
+  }
+}
+
 export function ensureReportHeader() {
   mkdirSync('D:/OpenCode/projects/ai-novel-studio/docs', { recursive: true })
   const head = readFileSync(REPORT, 'utf8').length === 0 ? '' : ''

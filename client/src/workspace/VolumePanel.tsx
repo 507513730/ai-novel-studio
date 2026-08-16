@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { novelApi } from '../api'
+import { novelApi, waitForJob } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { useConfirm } from '../components/ConfirmDialog'
 import type { ChapterSummary } from '../types'
@@ -22,6 +22,8 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
   const [rangeTo, setRangeTo] = useState(0)
   // v0.20.0：故事板视图（卷章卡片化）
   const [view, setView] = useState<'list' | 'storyboard'>('list')
+  // v0.23.1（批次 D2）：批量细化结果摘要（job 终态后展示）
+  const [refineSummary, setRefineSummary] = useState<string | null>(null)
 
   const volumes = useQuery({
     queryKey: ['volumes', novelId],
@@ -210,7 +212,15 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
               onClick={() => {
                 const from = Math.max(1, Math.min(rangeFrom, allChapters.length))
                 const to = Math.max(from, Math.min(rangeTo, allChapters.length))
-                void run(`refine-range`, () => novelApi.refineRange(novelId, from, to))
+                // v0.23.1（批次 D2）：批量细化迁 job 队列——入队后轮询至终态（可到任务中心取消）
+                void run(`refine-range`, async () => {
+                  const { jobId } = await novelApi.refineRange(novelId, from, to)
+                  const job = await waitForJob(jobId)
+                  if (job.status === 'failed') throw new Error(job.error ?? '批量细化失败')
+                  if (job.status === 'cancelled') throw new Error('批量细化已取消（已细化部分保留，可重跑续接）')
+                  const r = (job.result ?? {}) as { done?: number[]; skipped?: number[] }
+                  setRefineSummary(`批量细化完成：新细化 ${r.done?.length ?? 0} 章、跳过（已有任务单）${r.skipped?.length ?? 0} 章`)
+                })
               }}
             >
               {busy === 'refine-range' ? '批量细化中…' : '批量细化'}
@@ -222,7 +232,12 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
         </div>
         {busy === 'refine-range' && (
           <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-            批量细化中（已细化的章节自动跳过，中断后可重跑续接）…
+            批量细化中（已细化的章节自动跳过，中断后可重跑续接；可在任务中心取消）…
+          </p>
+        )}
+        {refineSummary && (
+          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            {refineSummary}
           </p>
         )}
         {view === 'storyboard' ? (

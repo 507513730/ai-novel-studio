@@ -45,6 +45,30 @@ export function isJobCancelled(db: DatabaseSync, jobId: number): boolean {
   return row?.status === 'cancelled'
 }
 
+// v0.23.1（批次 D1/D2）：通用类型入队（refine-range / solution-chapter 迁 job 队列用）——
+// 原子查重（同类型 + 同 novelId + 活跃态不重复排），语义与 enqueueDirectorJob 一致
+export type TypedJobType = 'refine-range' | 'solution-chapter'
+
+export function enqueueTypedJob(
+  db: DatabaseSync,
+  type: TypedJobType,
+  payload: Record<string, unknown> & { novelId: number }
+): { jobId: number } | { conflict: true } {
+  const result = db
+    .prepare(
+      `INSERT INTO job (type, status, progress, payload_json)
+       SELECT ?, 'queued', 0, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM job
+         WHERE type = ? AND status IN ('queued','running')
+           AND json_extract(payload_json, '$.novelId') = ?
+       )`
+    )
+    .run(type, JSON.stringify(payload), type, payload.novelId)
+  if (Number(result.changes) === 0) return { conflict: true }
+  return { jobId: Number(result.lastInsertRowid) }
+}
+
 // v0.8.0（审查 #8）：执行中止感知——取消（cancelled）或 watchdog 超时回收（failed + watchdog: 前缀）都中止
 // watchdog 只改状态不中止执行 → 此前"假 failed"后流水线继续写库；现在每章/阶段边界自检后退出
 export function isJobAborted(db: DatabaseSync, jobId: number): boolean {

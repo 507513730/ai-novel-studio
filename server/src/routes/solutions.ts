@@ -12,7 +12,8 @@ import {
   parseSolutionSteps,
   type SolutionStep
 } from '../services/solutionAssets'
-import { runSolutionById, summarizeRun, runProductionChapter } from '../services/solutionRunner'
+import { runSolutionById, summarizeRun } from '../services/solutionRunner'
+import { enqueueTypedJob } from '../services/jobQueue'
 import { parseAgentMd } from '../services/solutionAssets'
 
 // ============================================================
@@ -208,25 +209,37 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
   })
 
   // ---------- P30：章节生产模式（方案 whole_book 步骤接力生成正文） ----------
-  router.post('/solutions/:id/produce-chapter', async (req, res, next) => {
-    try {
-      const id = Number(req.params.id)
-      const input = z
-        .object({
-          novelId: z.number().int().positive(),
-          chapterId: z.number().int().positive()
-        })
-        .parse(req.body ?? {})
-      const result = await runProductionChapter(db, id, input.novelId, input.chapterId)
-      res.json(result)
-    } catch (err) {
-      // v0.8.0（审查 #5）：抢占冲突 → 409（并发生成中），与 chapter 状态门禁语义一致
-      if (err instanceof Error && err.message.includes('正在生成中')) {
-        res.status(409).json({ error: err.message })
-        return
-      }
-      next(err)
+  // v0.23.1（批次 D1/#8/#23）：迁 job 队列——此前在 HTTP 请求内直跑多步 LLM 流水线
+  // （每步最高 8192 token：长连接挂死风险 + 无取消感知）；现入队返回 jobId，前端轮询
+  router.post('/solutions/:id/produce-chapter', (req, res) => {
+    const id = Number(req.params.id)
+    const parsed = z
+      .object({
+        novelId: z.number().int().positive(),
+        chapterId: z.number().int().positive()
+      })
+      .safeParse(req.body ?? {})
+    if (!parsed.success) {
+      res.status(400).json({ error: 'invalid request body' })
+      return
     }
+    // 快速存在性校验（执行时 runProductionChapter 仍会完整校验）
+    const sol = db.prepare('SELECT id FROM solution WHERE id = ?').get(id) as { id: number } | undefined
+    if (!sol) {
+      res.status(404).json({ error: 'solution not found' })
+      return
+    }
+    const enq = enqueueTypedJob(db, 'solution-chapter', {
+      novelId: parsed.data.novelId,
+      chapterId: parsed.data.chapterId,
+      solutionId: id
+    })
+    if ('conflict' in enq) {
+      // 同书已有方案生产任务排队/执行中（章节级并发由 runProductionChapter 原子抢占兜底）
+      res.status(409).json({ error: '该书已有方案生产任务在队列中/执行中' })
+      return
+    }
+    res.status(202).json({ jobId: enq.jobId })
   })
 
   // ---------- 试运行（chapter 级） ----------

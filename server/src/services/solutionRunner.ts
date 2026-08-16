@@ -36,6 +36,8 @@ export interface RunSolutionOptions {
   signal?: AbortSignal
   // 单步调试（P21-5a）：外部提供上一步的人工改写
   humanOverride?: Record<number, string>
+  // v0.23.1（批次 D1）：job 队列中止感知（scheduler 传 isJobAborted——取消/看门狗在步骤边界生效）
+  isAborted?: () => boolean
 }
 
 // 每步超时（LLM 调用层面用 Promise.race 兜底，防挂死）
@@ -308,7 +310,8 @@ export async function runProductionChapter(
   try {
 
   for (let i = 0; i < solution.steps.length; i++) {
-    if (opts.signal?.aborted) break
+    // v0.23.1（批次 D1）：job 中止（取消/看门狗）与 signal 同在步骤边界生效
+    if (opts.signal?.aborted || opts.isAborted?.()) break
     const step = solution.steps[i]
     if (step.stage !== 'whole_book') {
       throw new Error(`生产模式方案包含非生产步骤（${step.role}）——请仅用章节生产步骤`)

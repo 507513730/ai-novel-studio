@@ -5,9 +5,9 @@ import { callLlmJson } from '../services/jsonSafe'
 import { JSON_FORMAT } from '../prompts'
 // v0.23.1（批次 B1）：卷/节拍/章节清单 prompt+解析收敛 planner（此前三处内联副本，
 // 节拍 prompt 缺 genreTemplate、章节清单缺 prevVolumeHook——功能漂移已实际发生）
+// v0.23.1（批次 D2）：refineOne 迁 planner（单章端点与批量 job 队列共用）
 import {
-  generateRefinePrompt,
-  parseRefine,
+  refineOne,
   generateVolumesPrompt,
   parseVolumes,
   generateBeatsPrompt,
@@ -17,38 +17,7 @@ import {
   getGenreTemplate,
   getPrevVolumeHook
 } from '../services/planner'
-
-// P12 A4：单章细化（单章端点与批量端点共用；质量门禁：关键字段非空）
-async function refineOne(
-  db: DatabaseSync,
-  chapterId: number,
-  chapter: { title: string; summary: string; goal_json: string }
-): Promise<Record<string, unknown>> {
-  const novelId = (db.prepare('SELECT novel_id FROM chapter WHERE id = ?').get(chapterId) as { novel_id: number })
-    .novel_id
-  // v0.17.0（审查 M7）：prompt/解析统一走 planner.ts（此前内联副本重复）
-  const refined = await callLlmJson<Record<string, unknown>>(
-    db,
-    'extraction',
-    {
-      novelId,
-      messages: [
-        {
-          role: 'user',
-          content: generateRefinePrompt(chapter.title, chapter.summary, chapter.goal_json)
-        }
-      ],
-      maxTokens: 2048
-    },
-    parseRefine,
-    'refine'
-  )
-  db.prepare("UPDATE chapter SET goal_json = ?, updated_at = datetime('now') WHERE id = ?").run(
-    JSON.stringify(refined),
-    chapterId
-  )
-  return refined
-}
+import { enqueueTypedJob } from '../services/jobQueue'
 
 export function createVolumesRouter(db: DatabaseSync): Router {
   const router = Router()
@@ -541,42 +510,34 @@ export function createVolumesRouter(db: DatabaseSync): Router {
   })
 
   // P12 A4：批量细化（范围 [from,to]，幂等续跑：已细化的章节跳过）
-  router.post('/:novelId/chapters/refine-range', async (req, res, next) => {
-    try {
-      const novelId = Number(req.params.novelId)
-      const input = z
-        .object({
-          from: z.number().int().positive(),
-          to: z.number().int().positive()
-        })
-        .parse(req.body)
-      if (input.to < input.from) {
-        res.status(400).json({ error: 'to 必须 ≥ from' })
-        return
-      }
-      const rows = db
-        .prepare(
-          `SELECT id, title, summary, goal_json FROM chapter
-           WHERE novel_id = ? AND id BETWEEN ? AND ?
-           ORDER BY id`
-        )
-        .all(novelId, input.from, input.to) as Array<{ id: number; title: string; summary: string; goal_json: string }>
-      const done: number[] = []
-      const skipped: number[] = []
-      for (const row of rows) {
-        // 幂等判定：goal_json 已有完整任务单（purpose 非空）则跳过
-        const g = JSON.parse(String(row.goal_json ?? '{}')) as Record<string, unknown>
-        if (typeof g.purpose === 'string' && g.purpose.trim().length >= 4) {
-          skipped.push(row.id)
-          continue
-        }
-        await refineOne(db, row.id, { title: row.title, summary: row.summary, goal_json: row.goal_json })
-        done.push(row.id)
-      }
-      res.json({ done, skipped })
-    } catch (err) {
-      next(err)
+  // v0.23.1（批次 D2/#8/#23）：迁 job 队列——此前在 HTTP 请求内循环逐章调 LLM
+  // （40 章 × 2048 token 可挂数分钟：长连接挂死风险 + 无取消/无进度）
+  router.post('/:novelId/chapters/refine-range', (req, res) => {
+    const novelId = Number(req.params.novelId)
+    const parsed = z
+      .object({
+        from: z.number().int().positive(),
+        to: z.number().int().positive()
+      })
+      .safeParse(req.body ?? {})
+    if (!parsed.success) {
+      res.status(400).json({ error: 'invalid request body' })
+      return
     }
+    if (parsed.data.to < parsed.data.from) {
+      res.status(400).json({ error: 'to 必须 ≥ from' })
+      return
+    }
+    const enq = enqueueTypedJob(db, 'refine-range', {
+      novelId,
+      from: parsed.data.from,
+      to: parsed.data.to
+    })
+    if ('conflict' in enq) {
+      res.status(409).json({ error: '已有批量细化任务在队列中/执行中' })
+      return
+    }
+    res.status(202).json({ jobId: enq.jobId })
   })
 
   return router

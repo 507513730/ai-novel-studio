@@ -3,7 +3,10 @@ import { runDirectorPipeline } from './director'
 import { runProductionPipeline, type ProductionProgress } from './production'
 import { fixAllDebts } from './debtFix'
 import { setActiveModelOverride } from './llm'
-import { isJobCancelled } from './jobQueue'
+import { isJobCancelled, isJobAborted } from './jobQueue'
+// v0.23.1（批次 D）：refine-range / solution-chapter 两个迁入 job 队列的重型端点
+import { refineOne } from './planner'
+import { runProductionChapter } from './solutionRunner'
 
 // ============================================================
 // 执行面隔离（PLAN 修正 #2 / P2）
@@ -34,6 +37,9 @@ interface JobPayload {
   modelOverride?: string
   from?: number
   to?: number
+  // v0.23.1（批次 D）：迁入 job 队列的两个重型端点的载荷字段
+  chapterId?: number
+  solutionId?: number
 }
 
 // v0.20.0（NovelClaw 学习组）：运行轨迹——每次进度回调追加时间线（保留最新 300 条）
@@ -187,6 +193,80 @@ async function processJob(db: DatabaseSync, job: JobRecord): Promise<void> {
         }
       )
       finishJob(db, job.id, { progress: 100, status: 'done' })
+    } else if (job.type === 'refine-range') {
+      // v0.23.1（批次 D2）：批量细化迁 job（此前 HTTP 请求内循环逐章 LLM）——
+      // 幂等续跑语义保留（goal_json 已有 purpose 的章节跳过）；章间检查中止（取消/看门狗）
+      const rows = db
+        .prepare(
+          `SELECT id, title, summary, goal_json FROM chapter
+           WHERE novel_id = ? AND id BETWEEN ? AND ?
+           ORDER BY id`
+        )
+        .all(payload.novelId, Number(payload.from ?? 0), Number(payload.to ?? 0)) as Array<{
+        id: number
+        title: string
+        summary: string
+        goal_json: string
+      }>
+      const done: number[] = []
+      const skipped: number[] = []
+      let aborted = false
+      for (const row of rows) {
+        if (isJobAborted(db, job.id)) {
+          aborted = true
+          break
+        }
+        let purposeful = false
+        try {
+          const g = JSON.parse(String(row.goal_json ?? '{}')) as { purpose?: unknown }
+          purposeful = typeof g.purpose === 'string' && g.purpose.trim().length >= 4
+        } catch {
+          purposeful = false
+        }
+        if (purposeful) {
+          skipped.push(row.id)
+        } else {
+          await refineOne(db, row.id, { title: row.title, summary: row.summary, goal_json: row.goal_json })
+          done.push(row.id)
+        }
+        updateJob(db, job.id, {
+          progress: rows.length > 0 ? Math.round(((done.length + skipped.length) / rows.length) * 100) : 100,
+          resultJson: JSON.stringify(
+            traceAppend(db, job.id, {
+              current: row.title,
+              action: '细化',
+              done: done.length,
+              total: rows.length,
+              skipped: skipped.length
+            })
+          )
+        })
+      }
+      if (aborted) {
+        updateJob(db, job.id, { status: 'cancelled' })
+      } else {
+        finishJob(db, job.id, {
+          progress: 100,
+          status: 'done',
+          resultJson: JSON.stringify(traceAppend(db, job.id, { done, skipped }))
+        })
+      }
+    } else if (job.type === 'solution-chapter') {
+      // v0.23.1（批次 D1）：方案生产迁 job（此前 HTTP 请求内多步 LLM 流水线）——
+      // 步骤边界感知取消；结果（字数/降级/步骤输出）入 resultJson 供前端轮询消费
+      const r = await runProductionChapter(db, Number(payload.solutionId), payload.novelId, Number(payload.chapterId), {
+        isAborted: () => isJobAborted(db, job.id)
+      })
+      finishJob(db, job.id, {
+        progress: 100,
+        status: 'done',
+        resultJson: JSON.stringify({
+          wordCount: r.wordCount,
+          title: r.title,
+          degraded: r.degraded,
+          outputs: r.outputs.map((o) => ({ role: o.role, ok: o.ok }))
+        })
+      })
     } else {
       updateJob(db, job.id, { status: 'failed', error: `unknown job type: ${job.type}` })
     }

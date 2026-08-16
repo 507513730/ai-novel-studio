@@ -1,6 +1,6 @@
 // P14 D：全功能测试轮（T1 配置/系统 + T2 创作主链 + T3 资产智能 + T4 导演恢复）
 // 用法：node scripts/e2e/round.mjs <roundNo>
-import { api, apiTry, ok, startRound, finishRound, sleep } from './common.mjs'
+import { api, apiTry, ok, startRound, finishRound, sleep, waitJob } from './common.mjs'
 
 const round = Number(process.argv[2] ?? 1)
 const tag = `R${round}`
@@ -115,20 +115,36 @@ export async function t2() {
   }
   const chList = await api(`/novels/${novelId}/chapters`)
   ok(chList.chapters.length >= 5, `章节数 ≥5（门禁后）`, `got ${chList.chapters.length}`)
-  // 批量细化（range 幂等）
+  // 批量细化（range 幂等）——v0.23.1（批次 D2）：迁 job 队列，POST 返回 jobId 后轮询终态
   const ids = chList.chapters.map((c) => c.id)
   if (ids.length >= 2) {
     const rr = await apiTry(`/novels/${novelId}/chapters/refine-range`, {
       method: 'POST',
       body: JSON.stringify({ from: ids[0], to: ids[ids.length - 1] })
     })
-    ok(rr.ok && rr.body.done.length > 0, '批量细化', rr.error ?? '')
+    let refineOk = false
+    let refineDetail = rr.error ?? ''
+    if (rr.ok && rr.body.jobId) {
+      const job = await waitJob(rr.body.jobId)
+      const r = job.result ?? {}
+      refineOk = job.status === 'done' && Array.isArray(r.done) && r.done.length > 0
+      refineDetail = `job#${job.id} ${job.status} done=${r.done?.length ?? 0} skipped=${r.skipped?.length ?? 0} ${job.error ?? ''}`
+    }
+    ok(refineOk, '批量细化（job 队列）', refineDetail)
     // 幂等：重跑应全 skipped
     const rr2 = await apiTry(`/novels/${novelId}/chapters/refine-range`, {
       method: 'POST',
       body: JSON.stringify({ from: ids[0], to: ids[ids.length - 1] })
     })
-    ok(rr2.ok && rr2.body.done.length === 0 && rr2.body.skipped.length > 0, '批量细化幂等续跑', rr2.error ?? '')
+    let idemOk = false
+    let idemDetail = rr2.error ?? ''
+    if (rr2.ok && rr2.body.jobId) {
+      const job2 = await waitJob(rr2.body.jobId)
+      const r2 = job2.result ?? {}
+      idemOk = job2.status === 'done' && r2.done?.length === 0 && r2.skipped?.length > 0
+      idemDetail = `done=${r2.done?.length ?? 0} skipped=${r2.skipped?.length ?? 0}`
+    }
+    ok(idemOk, '批量细化幂等续跑（job 队列）', idemDetail)
   }
   // 单章生成 + 取消保留（首章生成完整，第二章取消验证保留）
   const firstCh = chList.chapters[0]
