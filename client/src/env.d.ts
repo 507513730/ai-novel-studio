@@ -3,6 +3,7 @@
 interface NovelStudioApi {
   onServerReady: (callback: (baseUrl: string) => void) => () => void
   getServerUrl: () => Promise<string | null>
+  onServerLost: (callback: (code: string) => void) => () => void
   setTheme: (theme: string) => Promise<boolean>
   openDataDir: () => Promise<boolean>
   wipeData: () => Promise<boolean>

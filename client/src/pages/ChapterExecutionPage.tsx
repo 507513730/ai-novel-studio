@@ -16,6 +16,8 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import { BookOpenText, Users, Map, Scale, Pin, Wand2 } from 'lucide-react'
 import { estimateCost, estimateTokens, fmtCost } from '../utils/costEstimate'
+// v0.23.1（批次 B6）：主角名提取统一 utils（此前双实现且正则漂移）
+import { extractProtagonistName } from '../utils/protagonist'
 
 // v0.19.0：AI 写入标记（字数分离：区分 AI 插入与人工输入）
 const aiWrite = Annotation.define<boolean>()
@@ -23,13 +25,6 @@ const aiWrite = Annotation.define<boolean>()
 /** 中文字符计数（字数分离口径：与 word_count 一致） */
 function countCjk(text: string): number {
   return (text.match(/[\u4e00-\u9fff]/g) ?? []).length
-}
-
-// v0.15.0：「主角必须叫 Jing」类文本 → 提取规范名
-function extractProtagonistNameFromDraft(text: string): string {
-  if (!text.includes('主角')) return ''
-  const m = text.match(/(?:必须|要|应|请)?(?:叫|是|名为|名)[「"“'（(]*([^\s」"“”'’）)、。，！？!?]{1,12})/)
-  return m ? m[1] : ''
 }
 
 // v0.20.0：记忆面小组件——角色状态追加（Enter 提交）
@@ -1299,9 +1294,10 @@ const selectedChapterRef = useRef<number | null>(null)
                   const d = await novelApi.detail(id)
                   const cur = d.novel.constraints ?? []
                   const list = cur.filter((c) => c.text !== t)
-                  const canon = extractProtagonistNameFromDraft(t)
+                  const canon = extractProtagonistName(t)
                   list.push({
-                    id: `c${Date.now()}`,
+                    // v0.23.1（批次 B6）：约束 id 补随机后缀（同毫秒多次固定不撞 id）
+                    id: `c${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
                     text: t,
                     level: 'must' as const,
                     enabled: true,

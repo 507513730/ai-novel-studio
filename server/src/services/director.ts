@@ -19,8 +19,12 @@ import {
   generateBeatsPrompt,
   parseBeats,
   generateChaptersPrompt,
+  parseChaptersPlan,
   generateRefinePrompt,
-  parseRefine
+  parseRefine,
+  // v0.23.1（批次 B1）：共享助手自本文件迁出至 planner.ts（手动路由同源消费）
+  getGenreTemplate,
+  getPrevVolumeHook
 } from './planner'
 
 // ============================================================
@@ -94,43 +98,7 @@ export interface DirectorTask {
 
 const MAX_REPLAN = 3
 
-// P2.1 🟡5：按 novel.genre 取流派爽点/节奏模板
-function getGenreTemplate(db: DatabaseSync, novelId: number): string {
-  const novel = db.prepare('SELECT genre FROM novel WHERE id = ?').get(novelId) as
-    | { genre: string }
-    | undefined
-  if (!novel?.genre) return ''
-  const preset = db
-    .prepare('SELECT name, beat_templates_json, payoff_json FROM genre_asset WHERE novel_id IS NULL AND genre_type = ?')
-    .get(novel.genre) as { name: string; beat_templates_json: string; payoff_json: string } | undefined
-  if (!preset) return ''
-  const beats = JSON.parse(preset.beat_templates_json || '[]') as string[]
-  const payoffs = JSON.parse(preset.payoff_json || '[]') as string[]
-  const parts: string[] = []
-  if (beats.length > 0) {
-    parts.push(`【流派节奏模板（${preset.name}）】`)
-    for (const b of beats) parts.push(`- ${b}`)
-  }
-  if (payoffs.length > 0) {
-    parts.push('【爽点兑现方式】')
-    for (const p of payoffs) parts.push(`- ${p}`)
-  }
-  return parts.join('\n')
-}
-
-// P2.1 🟡7：取上一卷的结尾钩子（卷间衔接）
-function getPrevVolumeHook(db: DatabaseSync, novelId: number, currentVolumeId: number): string {
-  const cur = db.prepare('SELECT order_index FROM volume WHERE id = ?').get(currentVolumeId) as
-    | { order_index: number }
-    | undefined
-  if (!cur || cur.order_index <= 0) return ''
-  const prev = db
-    .prepare('SELECT skeleton_json FROM volume WHERE novel_id = ? AND order_index = ?')
-    .get(novelId, cur.order_index - 1) as { skeleton_json: string } | undefined
-  if (!prev) return ''
-  const skeleton = JSON.parse(prev.skeleton_json || '{}') as { endingHook?: string }
-  return skeleton.endingHook ?? ''
-}
+// v0.23.1（批次 B1）：getGenreTemplate/getPrevVolumeHook 迁至 planner.ts（共享助手，消除手动路由漂移）
 
 // P2.1 🟡7：取前一章的结尾钩子（章间衔接）
 function getPrevChapterEnding(db: DatabaseSync, novelId: number, currentChapterId: number): string {
@@ -643,33 +611,21 @@ async function runStage(
             messages: [
               {
                 role: 'user',
-                content: injectGuidance(db, novelId, generateChaptersPrompt(
-                  v.title,
-                  v.strategy_json,
-                  JSON.stringify(beats),
-                  count,
-                  prevHook
-                ))
-              }
-            ],
-            maxTokens: 8192
-          },
-          (obj) => {
-            const arr = (obj as { chapters?: unknown }).chapters
-            if (!Array.isArray(arr) || arr.length === 0) return null
-            return arr.map((c) => {
-              const r = c as Record<string, unknown>
-              const beatIndex = Number(r.beatIndex ?? -1)
-              return {
-                title: String(r.title ?? ''),
-                summary: String(r.summary ?? ''),
-                goal: String(r.goal ?? ''),
-                beatId: beatIndex >= 0 && beats[beatIndex] ? beats[beatIndex].id : null
-              }
-            })
-          },
-          'director-chapters'
-        )
+              content: injectGuidance(db, novelId, generateChaptersPrompt(
+                v.title,
+                v.strategy_json,
+                JSON.stringify(beats),
+                count,
+                // v0.23.1（批次 B1）：统一超集——补卷骨架注入（与手动路由对齐）
+                { prevVolumeHook: prevHook, skeletonJson: v.skeleton_json }
+              ))
+            }
+          ],
+          maxTokens: 8192
+        },
+        (obj) => parseChaptersPlan(obj, beats),
+        'director-chapters'
+      )
         // P20（M3）：章节幂等去重（按 volume+title 跳过重跑产物）
         const existingChapters = new Set(
           (

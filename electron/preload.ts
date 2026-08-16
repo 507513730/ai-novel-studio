@@ -13,6 +13,12 @@ const api = {
   },
   // P11-1.2：主动拉取缓存的 server URL（防 IPC 消息竞态丢失）
   getServerUrl: (): Promise<string | null> => ipcRenderer.invoke('get-server-url') as Promise<string | null>,
+  // v0.23.1（批次 A2）：server 异常退出通知（M16 补全——main 侧早已发送，此前 preload 未暴露、renderer 收不到）
+  onServerLost: (callback: (code: string) => void): (() => void) => {
+    const listener = (_event: unknown, code: string): void => callback(code)
+    ipcRenderer.on('server-lost', listener)
+    return () => ipcRenderer.removeListener('server-lost', listener)
+  },
   // P13 F0：主题同步（nativeTheme + 标题栏 overlay）
   setTheme: (theme: string): Promise<boolean> => ipcRenderer.invoke('theme-set', theme) as Promise<boolean>,
   // P16 P0：数据管理

@@ -6,6 +6,8 @@ import type { NovelSummary } from '../types'
 import { novelApi } from '../api'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
+// v0.23.1（批次 B6）：主角名提取统一 utils（此前双实现且正则漂移）
+import { extractProtagonistName } from '../utils/protagonist'
 
 export function NovelListPage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -76,13 +78,6 @@ export function NovelListPage(): React.JSX.Element {
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setCreating(false))
   }
-
-/** 「主角必须叫 Jing」类文本 → 提取规范名（含中文引号/括号/空格容忍） */
-function extractProtagonistName(text: string): string {
-  if (!text.includes('主角')) return ''
-  const m = /(?:必须|要|应|请)?(?:叫|是|名为|名)?[「「"“'（(]*([^\s「」"“”'’（）()，。、；：!?！？]{1,12})[」」"”'’（）)]?$/.exec(text.replace(/^.+?(叫|是|名为|名)/, '$1'))
-  return m ? m[1] : ''
-}
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', padding: 24 }}>

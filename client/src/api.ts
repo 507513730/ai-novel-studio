@@ -165,7 +165,7 @@ export const novelApi = {
     j(`/novels/${id}/chapters/${chapterId}/versions`, { method: 'POST', body: JSON.stringify({ note }) }),
   // v0.9.0：修复乱码注释（此前 P20 U1 注释为编码损坏）
   // P20（U1）：版本详情 / 恢复
-  chapterVersionDetail: (id: number, chapterId: number, versionId: number): Promise<{ version: { id: number; content: string; note: string; created_at: string } }> =>
+  chapterVersionDetail: (id: number, chapterId: number, versionId: number): Promise<{ version: { id: number; content: string; note: string; createdAt: string } }> =>
     j(`/novels/${id}/chapters/${chapterId}/versions/${versionId}`),
   chapterVersionRestore: (id: number, chapterId: number, versionId: number): Promise<{ content: string; wordCount: number }> =>
     js(`/novels/${id}/chapters/${chapterId}/versions/${versionId}/restore`, { method: 'POST' }),
@@ -175,7 +175,7 @@ export const novelApi = {
     js(`/novels/${id}/chapters/${chapterId}/backfill`, { method: 'POST' }),
   confirmState: (id: number, characterStates: Array<{ name: string; state: string }>): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/confirm-state`, { method: 'POST', body: JSON.stringify({ characterStates }) }),
-  pending: (id: number): Promise<{ pendingFacts: Array<{ id: number; content: string; chapter_id: number }>; pendingCharacters: Array<{ id: number; name: string; profile: Record<string, string> }> }> =>
+  pending: (id: number): Promise<{ pendingFacts: Array<{ id: number; content: string; chapterId: number }>; pendingCharacters: Array<{ id: number; name: string; profile: Record<string, string> }> }> =>
     j(`/novels/${id}/pending`),
   // v0.20.0：记忆面（状态机显式查看/修正）
   memory: (id: number): Promise<{
@@ -213,8 +213,7 @@ export const automationApi = {
   jobs: (): Promise<{ jobs: Array<Record<string, unknown>> }> => j('/jobs'),
   // P19 ③：清理已完成任务（保留 running）
   jobsClearDone: (): Promise<{ deleted: number }> => j('/jobs/done', { method: 'DELETE' }),
-  hubChat: (id: number, message: string): Promise<{ reply: string; toolCalls: string[] }> =>
-    js(`/novels/${id}/hub/chat`, { method: 'POST', body: JSON.stringify({ message }) }),
+  // v0.23.1（批次 B6）：hubChat 双定义合一——统一走 hub.chat（带 AbortSignal 的版本）
   // v0.10.0（批B/I2）：质量债自动修复
   debts: (id: number): Promise<{ pendingDebts: number }> => j(`/novels/${id}/debts`),
   debtsFix: (id: number): Promise<{ jobId: number }> => js(`/novels/${id}/debts/fix`, { method: 'POST' })
@@ -309,7 +308,8 @@ export const styleApi = {
   list: (id: number): Promise<{ assets: Array<{ id: number; name: string; features: Array<Record<string, unknown>>; antiAiWords: string[]; createdAt: string }> }> =>
     j(`/novels/${id}/style`),
   updateFeatures: (id: number, assetId: number, features: Array<Record<string, unknown>>): Promise<{ ok: boolean }> =>
-    j(`/novels/${id}/style/${assetId}`, { method: 'PATCH', body: JSON.stringify({ features }) }),  antiAiCheck: (id: number, text: string): Promise<{ hits: Array<{ word: string; count: number }>; total: number }> =>
+    j(`/novels/${id}/style/${assetId}`, { method: 'PATCH', body: JSON.stringify({ features }) }),
+  antiAiCheck: (id: number, text: string): Promise<{ hits: Array<{ word: string; count: number }>; total: number }> =>
     j(`/novels/${id}/style/anti-ai-check`, { method: 'POST', body: JSON.stringify({ text }) }),
   trial: (id: number, task: string): Promise<{ output: string; usedRules: string[] }> =>
     j(`/novels/${id}/style/trial`, { method: 'POST', body: JSON.stringify({ task }) }),

@@ -40,7 +40,8 @@ export function ConstraintPanel({ novelId }: Props): React.JSX.Element {
     const t = text.trim()
     if (!t || pending) return
     const item: NovelConstraint = {
-      id: `c${Date.now()}`,
+      // v0.23.1（批次 B6）：约束 id 补随机后缀（同毫秒多次添加不撞 id）
+      id: `c${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       text: t,
       level,
       enabled: true,

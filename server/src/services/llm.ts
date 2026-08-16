@@ -94,6 +94,9 @@ export interface LlmResult {
   provider: string
   degraded: boolean
   toolCalls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]
+  // v0.23.1（批次 A4）：max_tokens 截断显式检测（finish_reason === 'length'）——
+  // 此前截断静默通过，仅靠下游 JSON 解析失败间接感知；语法完整的截断正文会被当完整章节落库
+  truncated?: boolean
 }
 
 // v0.9.0（审查 #25）：导出供 generate.ts 复用（消除双 LLM 路径的 body 构造漂移）
@@ -200,8 +203,7 @@ export function buildCandidates(
 export async function callLlm(
   db: DatabaseSync,
   taskType: TaskType,
-  opts: LlmCallOptions,
-  _attempt = 1
+  opts: LlmCallOptions
 ): Promise<LlmResult> {
   const route = getRouteConfig(db, taskType)
   if (!route) throw new Error(`no model route for task: ${taskType}`)
@@ -248,6 +250,7 @@ export async function callLlm(
           )
           let content = ''
           let reasoning = ''
+          let finishReason: string | null = null
           let usage: LlmResult['usage'] = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0 }
           try {
             for await (const chunk of stream) {
@@ -264,6 +267,8 @@ export async function callLlm(
                   opts.onDelta?.(delta.content)
                 }
               }
+              // v0.23.1（批次 A4）：流式末块携带 finish_reason——length 即截断
+              if (chunk.choices[0]?.finish_reason) finishReason = chunk.choices[0].finish_reason
               if (chunk.usage) usage = extractUsage(chunk.usage)
             }
           } catch (err) {
@@ -276,7 +281,8 @@ export async function callLlm(
             usage,
             model: candidate.model,
             provider: providerRow.name,
-            degraded: candidate.degraded
+            degraded: candidate.degraded,
+            truncated: !opts.signal?.aborted && finishReason === 'length'
           }
           // abort 时不记账（调用方按上下文预算估算补账，见 generate.ts）；正常完成统一记账
           if (!opts.signal?.aborted) {
@@ -309,7 +315,8 @@ export async function callLlm(
           model: response.model ?? candidate.model,
           provider: providerRow.name,
           degraded: candidate.degraded,
-          toolCalls: message?.tool_calls
+          toolCalls: message?.tool_calls,
+          truncated: response.choices[0]?.finish_reason === 'length'
         }
         // 统一记账（novelId 由调用方经 opts 传入）
         recordUsage(db, {

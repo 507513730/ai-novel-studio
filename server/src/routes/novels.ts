@@ -1,10 +1,11 @@
-﻿import { Router } from 'express'
+import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { generateSettingBrief } from '../services/settingBrief'
 import { callLlmJson } from '../services/jsonSafe'
 import { JSON_FORMAT } from '../prompts'
 import { getSystemPrompt } from '../prompts/promptAsset'
+import { generateDirectionsPrompt, generateFramingPrompt, generateMacroPrompt } from '../services/planner'
 
 interface DirectionScheme {
   title: string
@@ -31,8 +32,8 @@ function parseTitles(obj: unknown): string[] | null {
   return titles.length > 0 ? titles : null
 }
 
-export // v0.17.0（LOW）：安全 JSON 解析（损坏数据兜底返回默认形状）
-function safeParseJson(v: unknown, fallback: unknown = null): unknown {
+// v0.17.0（LOW）：安全 JSON 解析（损坏数据兜底返回默认形状）
+export function safeParseJson(v: unknown, fallback: unknown = null): unknown {
   try {
     return JSON.parse(String(v ?? ''))
   } catch {
@@ -299,7 +300,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${getSystemPrompt('direction')}\n${JSON_FORMAT}\n\n灵感：${novel.inspiration}${contextLine}\n\n请输出 {"directions": [2 套方案]}，每套含 title/sellingPoint/genre/coreSetting/mainline/first30/readerFeeling。`
+              // v0.23.1（批次 B1）：prompt 收敛 planner（此前内联副本，定向重做上下文参数化）
+              content: generateDirectionsPrompt(novel.inspiration, contextLine)
             }
           ],
           maxTokens: 4096
@@ -386,7 +388,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${getSystemPrompt('planning')}\n${JSON_FORMAT}\n\n灵感：${novel?.inspiration ?? ''}\n方向：${JSON.stringify(direction)}\n补充：${input.notes}\n\n请输出 {"summary": "故事梗概", "sellingPoint": "卖点", "readerFeeling": "目标读者感受", "first30Promise": "前30章承诺"}`
+              // v0.23.1（批次 B1）：prompt 收敛 planner（notes 补充行参数化——此前内联独有）
+              content: generateFramingPrompt(novel.inspiration, direction, input.notes)
             }
           ],
           maxTokens: 2048
@@ -480,7 +483,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${getSystemPrompt('macro')}\n${JSON_FORMAT}\n\n书名：${novel.title}\n设定：${novel.framing_json}\n\n请输出 {"storyEngine": "故事引擎（核心张力）", "longConflict": "长期对立", "payoffSummary": "推进与兑现摘要", "theme": "主题"}`
+              // v0.23.1（批次 B1）：prompt 收敛 planner（统一超集文案）
+              content: generateMacroPrompt(novel.title, novel.framing_json)
             }
           ],
           maxTokens: 2048

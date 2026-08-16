@@ -11,8 +11,8 @@ import { isJobCancelled } from './jobQueue'
 // 重型链路（导演/整本生产）在调度循环中执行，不阻塞普通 API
 // ============================================================
 
-// P20（M1）：job 看门狗超时（超过该时长强制回收，防挂死 job 永久瘫痪调度器）
-const JOB_TIMEOUT_MS = 30 * 60 * 1000
+// P20（M1）：job 看门狗——运行中且超 30 分钟无进展的 job 强制回收（防挂死 job 永久瘫痪调度器；
+// v0.23.1 批次 B6：删除从未被消费的 JOB_TIMEOUT_MS 导出，时长以 watchdog SQL 的 '-30 minutes' 为准）
 
 export interface JobRecord {
   id: number
@@ -133,7 +133,15 @@ function updateJob(
 }
 
 async function processJob(db: DatabaseSync, job: JobRecord): Promise<void> {
-  const payload = JSON.parse(job.payload_json) as JobPayload
+  // v0.23.1（批次 A1）：payload 解析移入防御——损坏的 payload_json 此前在 try 块外抛出，
+  // 叠加 tick 的 void 链无 .catch 会成为未处理 rejection（Node 默认 crash 整个 server 进程）
+  let payload: JobPayload
+  try {
+    payload = JSON.parse(job.payload_json) as JobPayload
+  } catch {
+    updateJob(db, job.id, { status: 'failed', error: 'corrupted payload_json (unparseable)' })
+    return
+  }
   // P13 G1：换模型重试（活动覆盖，单例执行串行安全）
   setActiveModelOverride(payload.modelOverride ?? null)
   try {
@@ -205,9 +213,14 @@ function tick(): void {
       // 单例调度：一次只处理一个 job（串行执行，防并发烧 token）
       const job = claimNextJob(dbRef)
       if (job) {
-        void processJob(dbRef, job).finally(() => {
-          running = false
-        })
+        void processJob(dbRef, job)
+          .catch((err) => {
+            // v0.23.1（批次 A1）：双层防御——processJob 内部各路径已 try/catch，此处兜底意外逃逸
+            console.error('[scheduler] processJob unexpected error:', err)
+          })
+          .finally(() => {
+            running = false
+          })
       } else {
         running = false
       }
@@ -245,5 +258,3 @@ export function stopScheduler(): void {
 export function isSchedulerBusy(): boolean {
   return running
 }
-
-export { JOB_TIMEOUT_MS }

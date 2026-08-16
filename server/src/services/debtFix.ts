@@ -120,7 +120,10 @@ export async function fixChapterOnce(
   const passed = rescore.score >= PASS_SCORE
   // ⑤ 达标 → 该章未解决债务 resolved（质量债可消费闭环）
   if (passed) {
-    db.prepare("UPDATE quality_debt SET resolved = 1, updated_at = datetime('now') WHERE chapter_id = ? AND resolved = 0").run(chapterId)
+    // v0.23.1（批次 B7/e2e R4 发现）：quality_debt 表无 updated_at 列（仅 created_at）——
+    // 此前带 updated_at 的 UPDATE 必抛 no such column → 修复链路 500（v0.10.0 引入，
+    // 历史轮 rescore 未达标而绕过未暴露）
+    db.prepare('UPDATE quality_debt SET resolved = 1 WHERE chapter_id = ? AND resolved = 0').run(chapterId)
   }
   return { fixed: true, round: fixHistory.length, content: fixed.content, score: rescore.score, passed }
 }

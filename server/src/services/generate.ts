@@ -4,7 +4,7 @@ import { buildChapterWriteContext, estimateTokens } from './context'
 import { recordUsage } from './usage'
 import { runTripleReview } from './tripleReview'
 import { getBoundStyleRules, detectAntiAiHits, extractAntiAiWordsFromRules } from './styleEngine'
-import { replaceProtagonistName } from './constraintEngine'
+import { replaceProtagonistName, validateConstraints, recordConstraintViolation } from './constraintEngine'
 import { callLlmJson } from './jsonSafe'
 
 export interface GenerateOptions {
@@ -110,6 +110,13 @@ export async function generateChapter(
   // v0.15.0：主角名约束替换（角色表主角名 ≠ 硬约束规范名时自动对齐）
   content = replaceProtagonistName(db, novelId, content)
   const aborted = opts.signal?.aborted ?? false
+  // v0.23.1（批次 A4）：max_tokens 截断检测——截断的半章不再静默落库为 written，
+  // 显式失败并提示调整（外层 catch 会复位 failed，可重试）
+  if (!aborted && llmResult.truncated) {
+    throw new Error(
+      '生成被 max_tokens 截断（finish_reason=length）——请在设置 → 模型路由调大 max_tokens，或降低单章目标字数后重试'
+    )
+  }
   let usageInput = llmResult.usage.input
   let usageOutput = llmResult.usage.output
   let cacheHit = llmResult.usage.cacheHit
@@ -141,6 +148,16 @@ export async function generateChapter(
     console.warn(`[constraint] 章节 ${chapterId} 字数 ${wordCount} 超出常规区间（1500-4500）`)
   }
 
+  // v0.23.1（批次 B5）：接通约束违反统计——最终内容（含反 AI 重写后）确定性校验，
+  // 命中登记质量债（[约束违反] 前缀由 /settings/quality-debts 遵守率统计消费；
+  // 此前写入方缺失，UI 统计恒 0——D98 审查死特性项）
+  if (!aborted && content.trim().length > 0) {
+    for (const v of validateConstraints(db, novelId, content).violations) {
+      recordConstraintViolation(db, novelId, v.constraint.id, v.constraint.text, chapterId)
+      console.warn(`[constraint] 章节 ${chapterId} 违反硬约束「${v.constraint.text}」（禁用词「${v.constraint.keyword}」出现 ${v.count} 次）已登记质量债`)
+    }
+  }
+
   // P20（U8）：反 AI 校验闭环——生成后检测，重度命中（总命中≥5 或单词≥3 次）自动重写一次
   if (!aborted && content.trim().length > 0) {
     const bound = getBoundStyleRules(db, novelId)
@@ -161,7 +178,7 @@ export async function generateChapter(
               messages: [
                 {
                   role: 'user',
-                  content: `你是文字润色编辑。以下章节含禁用的 AI 腔词汇，请只替换这些词/句式（保持原文结构与内容），不要改动其他文字。\n禁用词：${words.join('、')}\n\n【正文】\n${content.slice(0, 8000)}\n\n请输出 {"content": "重写后的全文"}`
+                  content: `你是文字润色编辑。以下章节含禁用的 AI 腔词汇，请只替换这些词/句式（保持原文结构与内容），不要改动其他文字。\n禁用词：${words.join('、')}\n\n【正文】\n${content.slice(0, 8000)}\n\n请只输出 JSON 对象：{"content": "重写后的全文"}`
                 }
               ],
               maxTokens: 8192

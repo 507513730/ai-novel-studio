@@ -47,7 +47,8 @@ export function addConstraint(
   const list = getConstraints(db, novelId)
   const full: NovelConstraint = {
     ...c,
-    id: `c${Date.now()}`,
+    // v0.23.1（批次 B6）：随机后缀防同毫秒撞 id
+    id: `c${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     createdAt: new Date().toISOString()
   }
   list.push(full)
@@ -87,16 +88,14 @@ export function validateConstraints(
   const violations: ConstraintViolation[] = []
   for (const c of list) {
     if (c.level !== 'must' || !c.keyword) continue
-    // 主角名类：keyword 是规范名，正文中规范名缺失不算违反（替代名替换由 replaceProtagonistName 处理）
     const count = countOccurrences(text, c.keyword)
-    if (count > 0 && c.replaceWith) continue // 规范名存在 = 正常
-    if (count === 0 && !c.replaceWith) {
-      // 禁用词约束：规范名不应出现？——语义：keyword 是"不得出现"的词（如"虐主"）
-      // 约束文本约定：禁用类约束 keyword = 禁止词，replaceWith 为空 → 出现即违反
-      violations.push({ constraint: c, count, fixed: false })
-      void novelId
-      void db
-    }
+    // 主角名类（keyword=规范名，replaceWith=规范名）：规范名缺失不算违反
+    // （替代名由 replaceProtagonistName 处理），规范名存在 = 正常
+    if (c.replaceWith) continue
+    // 禁用词类（keyword=禁止词，replaceWith 为空）：出现即违反
+    // v0.23.1（批次 B5）：修正反向条件——此前 count === 0 才登记（注释"出现即违反"与实现相反，
+    // 因函数零调用方从未暴露）
+    if (count > 0) violations.push({ constraint: c, count, fixed: false })
   }
   return { violations }
 }
@@ -166,8 +165,13 @@ export function replaceProtagonistName(db: DatabaseSync, novelId: number, text: 
 }
 
 // ---------- 违反统计 ----------
+// v0.23.1（批次 B5）：接通写入方——生成链路校验命中即登记（此前零调用方，
+// /settings/quality-debts 遵守率统计恒 0/100——死特性）；去重写入防重生/再审叠加
 export function recordConstraintViolation(db: DatabaseSync, _novelId: number, constraintId: string, detail: string, chapterId = 0): void {
+  const issue = `[约束违反] ${constraintId}: ${detail.slice(0, 100)}`
   db.prepare(
-    "INSERT INTO quality_debt (chapter_id, issue, severity, resolved) VALUES (?, ?, 'high', 0)"
-  ).run(chapterId, `[约束违反] ${constraintId}: ${detail.slice(0, 100)}`)
+    `INSERT INTO quality_debt (chapter_id, issue, severity, resolved)
+     SELECT ?, ?, 'high', 0
+     WHERE NOT EXISTS (SELECT 1 FROM quality_debt WHERE chapter_id = ? AND issue = ? AND resolved = 0)`
+  ).run(chapterId, issue, chapterId, issue)
 }

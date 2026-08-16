@@ -1,11 +1,15 @@
 // P14 D：e2e 测试公共库（API 客户端 + 断言 + 报告）
 import { readFileSync, appendFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const BASE = 'http://127.0.0.1:3000/api'
 
-export const REPORT = 'D:/OpenCode/projects/ai-novel-studio/docs/test-report.md'
+// v0.23.1（批次 B4）：报告路径改为仓库相对（此前硬编码本机绝对路径——他机/CI 必写坏路径）；
+// 可用 E2E_REPORT 覆盖
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+export const REPORT = process.env.E2E_REPORT ?? join(REPO_ROOT, 'docs', 'test-report.md')
 
 let pass = 0
 let fail = 0

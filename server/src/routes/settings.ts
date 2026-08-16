@@ -427,19 +427,20 @@ export function createSettingsRouter(db: DatabaseSync): Router {
   router.get('/quality-debts', (_req, res) => {
     const rows = db
       .prepare(
-        `SELECT c.novel_id AS novel_id, n.title,
-                SUM(CASE WHEN q.severity = 'high' THEN 1 ELSE 0 END) AS high_count,
-                SUM(CASE WHEN q.severity = 'medium' THEN 1 ELSE 0 END) AS medium_count,
-                SUM(CASE WHEN q.resolved = 1 THEN 1 ELSE 0 END) AS resolved_count
+        // v0.23.1（批次 B2/#20）：DAO 边界 camelCase（此前 novel_id/high_count 等直出）
+        `SELECT c.novel_id AS novelId, n.title,
+                SUM(CASE WHEN q.severity = 'high' THEN 1 ELSE 0 END) AS highCount,
+                SUM(CASE WHEN q.severity = 'medium' THEN 1 ELSE 0 END) AS mediumCount,
+                SUM(CASE WHEN q.resolved = 1 THEN 1 ELSE 0 END) AS resolvedCount
          FROM quality_debt q
          JOIN chapter c ON c.id = q.chapter_id
          JOIN novel n ON n.id = c.novel_id
-         GROUP BY c.novel_id ORDER BY high_count DESC`
+         GROUP BY c.novel_id ORDER BY highCount DESC`
       )
       .all() as Array<Record<string, number | string>>
     // v0.15.0：约束遵守统计（违反记录 → 遵守率 = 1 - 违反/产出章节数）
     for (const r of rows) {
-      const novelId = Number(r.novel_id)
+      const novelId = Number(r.novelId)
       const viol = db
         .prepare("SELECT COUNT(*) AS c FROM quality_debt q JOIN chapter c ON c.id = q.chapter_id WHERE c.novel_id = ? AND q.issue LIKE '[约束违反]%'")
         .get(novelId) as { c: number }

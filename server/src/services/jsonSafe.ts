@@ -59,6 +59,19 @@ export async function callLlmJson<T>(
       ? [{ ...guidedOpts.messages[0], content: `${guidedOpts.messages[0].content ?? ''}\n\n【上次输出问题】${retryHint}` }, ...guidedOpts.messages.slice(1)]
       : guidedOpts.messages
     const result = await callLlm(db, taskType, { ...guidedOpts, messages, jsonMode: true })
+    // v0.23.1（批次 A4）：显式截断检测（finish_reason=length）——截断的 JSON 必不完整，
+    // 旧逻辑靠解析失败间接感知；注入"精简输出"反馈后重试（PLAN #10 截断即重试）
+    if (result.truncated) {
+      retryHint =
+        '上次输出被 max_tokens 截断（finish_reason=length）——请大幅精简输出（去除解释性文字、压缩字段内容），确保 JSON 完整闭合'
+      lastError = new Error(
+        `${label} 输出被 max_tokens 截断（第 ${attempt} 次）；原文片段: ${result.content.slice(0, 120)}`
+      )
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, 400 * attempt))
+      }
+      continue
+    }
     const raw = extractJson(result.content)
     try {
       const parsed = JSON.parse(raw)

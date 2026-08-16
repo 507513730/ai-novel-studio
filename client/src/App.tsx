@@ -64,12 +64,18 @@ export function App(): React.JSX.Element {
   const [baseUrl, setBaseUrl] = useState<string | null>(null)
   // v0.17.0（审查 C25）：命令面板状态提升到组件顶层——此前在 useEffect 源序之后声明（先使用后声明）
   const [commandOpen, setCommandOpen] = useState(false)
+  // v0.23.1（批次 A2）：server 异常退出标记（M16 补全——此前 renderer 无法感知，静默指向死服务）
+  const [serverLost, setServerLost] = useState<string | null>(null)
 
   useEffect(() => {
     if (window.novelStudio) {
-      const unsubscribe = window.novelStudio.onServerReady((url) => {
+      const unsubReady = window.novelStudio.onServerReady((url) => {
         setApiBaseUrl(url)
         setBaseUrl(url)
+      })
+      const unsubLost = window.novelStudio.onServerLost((code) => {
+        setServerLost(code)
+        setBaseUrl(null)
       })
       // P11-1.2：主动拉取缓存的 server URL（防 server-ready 消息早于监听丢失）
       void window.novelStudio
@@ -80,7 +86,10 @@ export function App(): React.JSX.Element {
             setBaseUrl(url)
           }        })
         .catch(() => undefined)
-      return unsubscribe
+      return () => {
+        unsubReady()
+        unsubLost()
+      }
     }
     setBaseUrl(getApiBaseUrl())
     return undefined
@@ -140,6 +149,17 @@ export function App(): React.JSX.Element {
   }, [baseUrl])
 
   // P27 2-7：命令面板（搜小说 + 跳页面）
+  // v0.23.1（批次 A2）：server 异常退出——明确告知并引导重启（不再静默指向死服务）
+  if (serverLost) {
+    return (
+      <div style={{ padding: 40 }} className="panel">
+        <h2>本地服务已异常退出</h2>
+        <p className="muted">
+          服务进程退出（代码 {serverLost}），生成/保存等操作已不可用。请重启应用；若反复出现，请从设置页打开数据目录查看日志并反馈。
+        </p>
+      </div>
+    )
+  }
   if (!baseUrl) return <div style={{ padding: 40 }}>正在启动本地服务…</div>
   if (bootstrap.isLoading) return <div style={{ padding: 40 }}>正在连接本地服务…</div>
   if (bootstrap.isError) {

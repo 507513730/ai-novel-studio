@@ -50,7 +50,13 @@ const THEME_OVERLAY: Record<string, { color: string; symbolColor: string }> = {
   paper: { color: '#ffffff', symbolColor: '#4c554f' },
   sepia: { color: '#faf3e0', symbolColor: '#4a3f2f' }
 }
-ipcMain.handle('theme-set', (_e, theme: string) => {
+ipcMain.handle('theme-set', (event, theme: string) => {
+  // v0.23.1（批次 A6）：窗口外观变更同样限定主窗口顶层 frame（对齐破坏性 IPC 防线）
+  try {
+    assertTrustedSender(event)
+  } catch {
+    return false
+  }
   const dark = theme !== 'paper' && theme !== 'sepia'
   nativeTheme.themeSource = dark ? 'dark' : 'light'
   const overlay = THEME_OVERLAY[theme] ?? THEME_OVERLAY.deepblue
@@ -561,9 +567,16 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
-  // v0.17.0（审查 M17）：优雅关闭（shutdown 消息 → server.close + stopScheduler → exit 兜底 kill）
-  void shutdownServer()
+// v0.23.1（批次 A6）：优雅退出防重入——preventDefault + await shutdownServer（最长 3s，含 kill 兜底）
+// 后再真正退出；此前 void 不等待，app 可能在 server.close 完成前就退出截断清理
+let quitting = false
+app.on('before-quit', (event) => {
+  if (quitting) return
+  quitting = true
+  event.preventDefault()
+  void shutdownServer().then(() => {
+    app.quit()
+  })
 })
 
 // ---------- v0.16.0：应用更新（electron-updater；仅打包态启用） ----------
@@ -633,7 +646,9 @@ function updaterBusy(message = '更新模块不可用（当前环境不支持自
 }
 
 // IPC：手动检查 / 下载 / 重启安装 / 当前状态
-ipcMain.handle('updater-check', () => {
+// v0.23.1（批次 A6）：updater 三操作限定主窗口顶层 frame（quitAndInstall 为高危操作）
+ipcMain.handle('updater-check', (event) => {
+  if (!trusted(event)) return { ok: false, reason: 'untrusted' }
   if (!updaterEnabled || typeof autoUpdater?.checkForUpdates !== 'function') {
     return updaterBusy()
   }
@@ -647,7 +662,8 @@ ipcMain.handle('updater-check', () => {
     })
   return { ok: true }
 })
-ipcMain.handle('updater-download', () => {
+ipcMain.handle('updater-download', (event) => {
+  if (!trusted(event)) return { ok: false, reason: 'untrusted' }
   if (!updaterEnabled || typeof autoUpdater?.downloadUpdate !== 'function') {
     return updaterBusy()
   }
@@ -657,7 +673,8 @@ ipcMain.handle('updater-download', () => {
   })
   return { ok: true }
 })
-ipcMain.handle('updater-install', () => {
+ipcMain.handle('updater-install', (event) => {
+  if (!trusted(event)) return { ok: false, reason: 'untrusted' }
   if (!updaterEnabled || typeof autoUpdater?.quitAndInstall !== 'function') {
     return updaterBusy()
   }
@@ -665,3 +682,13 @@ ipcMain.handle('updater-install', () => {
   return { ok: true }
 })
 ipcMain.handle('updater-status', () => ({ ...updaterStatus, currentVersion: app.getVersion() }))
+
+/** v0.23.1（批次 A6）：sender 校验布尔版（不抛错——IPC 返回 untracked 语义） */
+function trusted(event: Electron.IpcMainInvokeEvent): boolean {
+  try {
+    assertTrustedSender(event)
+    return true
+  } catch {
+    return false
+  }
+}

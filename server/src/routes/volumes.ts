@@ -1,10 +1,22 @@
-﻿import { Router } from 'express'
+import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
-import { JSON_FORMAT, CHAPTER_TITLE_RULE } from '../prompts'
-import { generateRefinePrompt, parseRefine } from '../services/planner'
-import { getSystemPrompt } from '../prompts/promptAsset'
+import { JSON_FORMAT } from '../prompts'
+// v0.23.1（批次 B1）：卷/节拍/章节清单 prompt+解析收敛 planner（此前三处内联副本，
+// 节拍 prompt 缺 genreTemplate、章节清单缺 prevVolumeHook——功能漂移已实际发生）
+import {
+  generateRefinePrompt,
+  parseRefine,
+  generateVolumesPrompt,
+  parseVolumes,
+  generateBeatsPrompt,
+  parseBeats,
+  generateChaptersPrompt,
+  parseChaptersPlan,
+  getGenreTemplate,
+  getPrevVolumeHook
+} from '../services/planner'
 
 // P12 A4：单章细化（单章端点与批量端点共用；质量门禁：关键字段非空）
 async function refineOne(
@@ -167,39 +179,22 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${getSystemPrompt('volumes')}\n${JSON_FORMAT}\n\n书名：${novel?.title ?? ''}\n书级合约：${novel?.framing_json ?? ''}\n角色：${characters
-                .map((c) => {
-                  const profile = JSON.parse(c.profile_json) as { identity?: string }
-                  return `${c.name}：${profile.identity ?? ''}`
-                })
-                .join('；')}\n每卷 ${input.chaptersPerVolume} 章，全书 3-5 卷。\n\n请输出 {"volumes": [{"title","theme","coreConflict","keyEvents":[],"endingHook"}]}`
+              content: generateVolumesPrompt(
+                novel?.title ?? '',
+                novel?.framing_json ?? '',
+                characters
+                  .map((c) => {
+                    const profile = JSON.parse(c.profile_json) as { identity?: string }
+                    return `${c.name}：${profile.identity ?? ''}`
+                  })
+                  .join('；'),
+                input.chaptersPerVolume
+              )
             }
           ],
           maxTokens: 4096
         },
-        (obj) => {
-          const arr = (obj as { volumes?: unknown }).volumes
-          if (!Array.isArray(arr) || arr.length === 0) return null
-          const out: Array<{
-            title: string
-            theme: string
-            coreConflict: string
-            keyEvents: string[]
-            endingHook: string
-          }> = []
-          for (const v of arr) {
-            const r = v as Record<string, unknown>
-            if (!r.title) return null
-            out.push({
-              title: String(r.title),
-              theme: String(r.theme ?? ''),
-              coreConflict: String(r.coreConflict ?? ''),
-              keyEvents: Array.isArray(r.keyEvents) ? r.keyEvents.map(String) : [],
-              endingHook: String(r.endingHook ?? '')
-            })
-          }
-          return out
-        },
+        parseVolumes,
         'volumes'
       )
 
@@ -264,6 +259,7 @@ export function createVolumesRouter(db: DatabaseSync): Router {
         return
       }
       const strategy = JSON.parse(volume.strategy_json) as { chaptersPerVolume: number }
+      // v0.23.1（批次 B1）：节拍 prompt 走 planner 超集——手动路由此前缺流派模板注入（漂移修复）
       const beats = await callLlmJson<
         Array<{ title: string; purpose: string; emotionCurve: string; scenes: string[] }>
       >(
@@ -275,27 +271,18 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${getSystemPrompt('beats')}\n${JSON_FORMAT}\n\n卷名：${volume.title}\n卷战略：${volume.strategy_json}\n卷骨架：${volume.skeleton_json}\n卷内 ${strategy.chaptersPerVolume ?? 20} 章。\n\n请输出 {"beats": [{"title","purpose","emotionCurve","scenes":[]}]}，6-12 个 beat。`
+              content: generateBeatsPrompt(
+                volume.title,
+                volume.strategy_json,
+                volume.skeleton_json,
+                strategy.chaptersPerVolume ?? 20,
+                getGenreTemplate(db, novelId)
+              )
             }
           ],
           maxTokens: 4096
         },
-        (obj) => {
-          const arr = (obj as { beats?: unknown }).beats
-          if (!Array.isArray(arr) || arr.length === 0) return null
-          const out: Array<{ title: string; purpose: string; emotionCurve: string; scenes: string[] }> = []
-          for (const b of arr) {
-            const r = b as Record<string, unknown>
-            if (!r.title) return null
-            out.push({
-              title: String(r.title),
-              purpose: String(r.purpose ?? ''),
-              emotionCurve: String(r.emotionCurve ?? ''),
-              scenes: Array.isArray(r.scenes) ? r.scenes.map(String) : []
-            })
-          }
-          return out
-        },
+        parseBeats,
         'beats'
       )
       db.exec('BEGIN')
@@ -499,28 +486,20 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           messages: [
             {
               role: 'user',
-              content: `${getSystemPrompt('chapters')}\n${JSON_FORMAT}\n${CHAPTER_TITLE_RULE}\n\n卷名：${volume.title}\n卷战略：${volume.strategy_json}\n卷骨架：${volume.skeleton_json}\n节奏板：${JSON.stringify(beats)}\n本章节数：${count}。\n\n请输出 {"chapters": [{"title","summary","goal"}]}，正好 ${count} 章，按节奏板顺序分配 beat（字段可加 "beatIndex"）。`
+              // v0.23.1（批次 B1）：章节清单 prompt/解析走 planner 超集——
+              // 手动路由此前缺上一卷结尾钩子注入（漂移修复），解析器双份合一
+              content: generateChaptersPrompt(
+                volume.title,
+                volume.strategy_json,
+                JSON.stringify(beats),
+                count,
+                { skeletonJson: volume.skeleton_json, prevVolumeHook: getPrevVolumeHook(db, novelId, volId) }
+              )
             }
           ],
           maxTokens: 8192
         },
-        (obj) => {
-          const arr = (obj as { chapters?: unknown }).chapters
-          if (!Array.isArray(arr) || arr.length === 0) return null
-          const out: Array<{ title: string; summary: string; goal: string; beatId: number | null }> = []
-          for (const c of arr) {
-            const r = c as Record<string, unknown>
-            if (!r.title) return null
-            const beatIndex = Number(r.beatIndex ?? -1)
-            out.push({
-              title: String(r.title),
-              summary: String(r.summary ?? ''),
-              goal: String(r.goal ?? ''),
-              beatId: beatIndex >= 0 && beats[beatIndex] ? beats[beatIndex].id : null
-            })
-          }
-          return out
-        },
+        (obj) => parseChaptersPlan(obj, beats),
         'chapters-plan'
       )
 

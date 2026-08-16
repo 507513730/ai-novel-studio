@@ -38,8 +38,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-router-dom": "^7.9.0",
-    "zod": "4.4.3",
-    "zustand": "5.0.14"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

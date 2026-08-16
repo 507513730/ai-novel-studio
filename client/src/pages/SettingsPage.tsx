@@ -648,9 +648,9 @@ function UsagePanel(): React.JSX.Element {
 
 function QualityDebtPanel(): React.JSX.Element {
   const { toast } = useToast()
-  const debts = useQuery<{ debts: Array<{ novel_id: number; title: string; high_count: number; medium_count: number; resolved_count: number }> }>({
+  const debts = useQuery<{ debts: Array<{ novelId: number; title: string; highCount: number; mediumCount: number; resolvedCount: number }> }>({
     queryKey: ['quality-debts'],
-    queryFn: async () => (await apiFetch('/settings/quality-debts')) as { debts: Array<{ novel_id: number; title: string; high_count: number; medium_count: number; resolved_count: number }> }
+    queryFn: async () => (await apiFetch('/settings/quality-debts')) as { debts: Array<{ novelId: number; title: string; highCount: number; mediumCount: number; resolvedCount: number }> }
   })
   const [cleanBusy, setCleanBusy] = useState(false)
   const runCleanup = async (): Promise<void> => {
@@ -686,11 +686,11 @@ function QualityDebtPanel(): React.JSX.Element {
           </thead>
           <tbody>
             {debts.data.debts.map((d) => (
-              <tr key={d.novel_id} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: 6 }}>{d.title || `#${d.novel_id}`}</td>
-                <td style={{ padding: 6, textAlign: 'right', color: 'var(--danger)' }}>{d.high_count}</td>
-                <td style={{ padding: 6, textAlign: 'right', color: 'var(--text-dim)' }}>{d.medium_count}</td>
-                <td style={{ padding: 6, textAlign: 'right', color: 'var(--ok)' }}>{d.resolved_count}</td>
+              <tr key={d.novelId} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={{ padding: 6 }}>{d.title || `#${d.novelId}`}</td>
+                <td style={{ padding: 6, textAlign: 'right', color: 'var(--danger)' }}>{d.highCount}</td>
+                <td style={{ padding: 6, textAlign: 'right', color: 'var(--text-dim)' }}>{d.mediumCount}</td>
+                <td style={{ padding: 6, textAlign: 'right', color: 'var(--ok)' }}>{d.resolvedCount}</td>
               </tr>
             ))}
           </tbody>
