@@ -431,8 +431,12 @@ if (PUSH) {
     let vc = readFileSync(vp, 'utf8')
     const lines = vc.split('\n')
     const idx = lines.findIndex((l) => l.startsWith(`| ${version} |`))
-    if (idx !== -1 && lines[idx].includes('🔄')) {
-      lines[idx] = lines[idx].replace('🔄 发布中', '✅ 已发布')
+    // v0.23.1（批次 C3）：状态列任意非 ✅ 终态均翻转（此前只匹配 🔄 发布中——
+    // 规划中（待发布）行永远翻不动，v0.23.0 台账滞留即此盲区）
+    if (idx !== -1 && !lines[idx].includes('✅ 已发布')) {
+      const cells = lines[idx].split('|')
+      cells[cells.length - 2] = ' ✅ 已发布 '
+      lines[idx] = cells.join('|')
       writeFileSync(vp, lines.join('\n'), 'utf8')
       console.log('  ✓ versioning §7 已标记 ✅ 已发布')
     }

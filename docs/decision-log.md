@@ -592,3 +592,17 @@
 - **落点**：AGENTS #57 改写；onboarding §13 发布类型分层表；本条目。
 - **效果**：其他 agent 不再被 #57 拦住——修复类改动按 PATCH 正常发版，语义清晰。
 
+
+### D98 · 2026-08-16 · 第三轮全面审查（v0.23.0 基线）与分层修复决议
+
+- **背景（用户指令）**：对项目做全面审查。三路并行深查（服务端 49 文件 13,464 行 / 客户端 56 文件 / 主进程+构建+CI+测试+文档），关键发现均经源码二次核验。
+- **总体结论**：健康度良好偏上，无数据丢失级缺陷；安全基本面/执行面隔离/竞态防护/测试防线（155 单测 + T1-T4 e2e）扎实。债务集中在：稳定性边界、prompt 双份维护漂移、死特性伪装（约束统计恒 0）、文档台账局部腐化。
+- **关键发现（已核验）**：① scheduler.ts `JSON.parse` 在 try 外 + tick 无 `.catch`——损坏 payload 可 crash server 进程；② main 发 `server-lost` 但 preload 未暴露、client 无监听（M16 修复半途）；③ generate.ts 反 AI 重写 prompt 缺 "json" 字样却走 jsonMode（DeepSeek 硬要求，违者 400——降级保留原文）；④ llm.ts 不检查 `finish_reason==='length'`（截断静默通过）；⑤ solutions/produce-chapter 与 volumes/refine-range 在 HTTP 请求内直跑多步 LLM（违反 #8/#23）；⑥ planner.ts prompt 在 novels/volumes/worlds 三处内联且已漂移（genreTemplate 注入仅导演链有）；⑦ zustand 纯死依赖（0 import）；⑧ CHANGELOG v0.22.x 缺标题/versioning §8 乱码/台账滞留等文档债。
+- **决议（用户批准，全量执行）**：五批修复——C 文档台账（免发版，先行——release 流程依赖 verify-docs，台账不修则发版被阻断）→ A 稳定性 + B 规范收敛（PATCH v0.23.1）→ D 执行面迁 job 队列（MINOR v0.24.0）→ E 客户端重构（v0.24.x）。约束违反统计选择**接通**（validateConstraints + recordConstraintViolation 已存在，只差调用方）。
+- **不修项（显式记录）**：v0.23.0 tag 历史不 force（#51 禁则）；kb_chunk 空壳表/embedding 桩保留（v1.0 embedding 路线预留）；debug/ 一次性脚本暂留待单独决策。
+
+### D99 · 2026-08-16 · 发版内容不得混入免发版提交（v0.23.0 tag 教训）
+
+- **事故**：tag v0.23.0 落在提交 3fe4191 上，该提交信息写「docs: 发版纪律分层决议……（v0.22.3，免发版）」，但 diff 实际包含 v0.23.0 全部发布内容（bump/CHANGELOG/sepia 主题/main.ts 改动）——提交信息与内容严重不符，且缺约定的 `chore: release v0.23.0` 提交。
+- **根因**：免发版文档提交与发版内容（bump+CHANGELOG+src）混在同一提交，提交时未意识到其中含发版物料。
+- **决议（流程纪律）**：发版物料（版本 bump / CHANGELOG 新版段 / tag）必须与免发版改动分开提交——release 流程的提交（`chore: release vX.Y.Z` 或 release.mjs [6/7] 产物）独立成提交；免发版提交内**禁止**夹带 package.json version 变更。历史 tag 不追溯（#51 禁 force）。

@@ -1,5 +1,7 @@
 # AI-Novel-Studio 发布说明
 
+> 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
 ## [Unreleased]
 
 ## v0.23.0（2026-08-14）
@@ -26,6 +28,8 @@
 ### 变更
 - **修复**：应用单实例——再次点击快捷方式不再新开窗口，改为唤出已有实例（`requestSingleInstanceLock` + `second-instance` 聚焦；未获得锁的实例立即退出）；顺带杜绝多实例双 server 抢真实库的隐患
 
+## v0.22.2（2026-08-14）
+
 ### 安装方式
 - **安装版**：`AI-Novel-Studio Setup 0.22.2.exe`（NSIS 向导版）
 - **便携版**：`AI-Novel-Studio-0.22.2-portable-x64.exe`
@@ -35,6 +39,8 @@
 - **方案 Agent 名称现代化**：「帝路十章」10 个 agent 改名（定策阁主→总策划、命途执笔→主线编剧、棋局推手→节奏策划、丹青妙笔→场景描摹、声韵师→对白编剧、鼓点手→爽点调度、青史主编→内容审校、红尘读者→读者视角、因果司→连续性检查、天命合卷→终审合稿）+ 职责说明补全；方案详情步骤列表展示「名称（职责）」
 - 测试 155/155（+4 nextSteps 四态）
 
+## v0.22.1（2026-08-14）
+
 ### 安装方式
 - **安装版**：`AI-Novel-Studio Setup 0.22.1.exe`（NSIS 向导版）
 - **便携版**：`AI-Novel-Studio-0.22.1-portable-x64.exe`
@@ -42,6 +48,8 @@
 ### 变更
 - **修复**：知识库文档创建端点标题清洗（trim + 去除首部孤立 `?` 序列，全 `?` 标题拒 400）——防 kb_doc 标题 `?????` 前缀事故再犯（6 篇全局文档标题已由修正脚本修复，正文完好未受影响）
 - 测试 151/151（+3 标题清洗：修剪/全?拒绝/正常不受影响）
+
+## v0.22.0（2026-08-14）
 
 ### 安装方式
 - **安装版**：`AI-Novel-Studio Setup 0.22.0.exe`（NSIS 向导版）
@@ -94,8 +102,6 @@
 
 - 419e510 feat: 第二轮审查修复批（N1 字数记账/N2 续写 race/N3-N5 + 残留收敛 + P3 全量：实体类型补全/confirm 统一/事务/上限/CSP）（v0.21.0）
 
-## v0.21.0
-
 ## v0.20.0（2026-08-13）
 
 ### 安装方式
@@ -112,8 +118,6 @@
 - 测试 138/138（+4 记忆面：聚合/增删/势力/404）
 
 - 911e4f5 feat: NovelClaw 学习组——生产运行轨迹时间线 + 记忆面（状态机查看/手动修正）+ 故事板视图（全局角色库已存在，复用）（v0.20.0）
-
-## v0.20.0
 
 ## v0.19.0（2026-08-13）
 
@@ -136,8 +140,6 @@
 
 - 7ca9479 feat: 编辑器光标续写（Cmd/Ctrl+J 建议浮层 → Tab 插入）+ 人类/AI 字数分离（来源追踪 · 服务端累计 · 顶部展示）（v0.19.0）
 
-## v0.19.0
-
 ## v0.18.0（2026-08-13）
 
 ### 安装方式
@@ -156,8 +158,6 @@
 
 - 322e77e feat: 联网查找可开关（零 key Wikipedia · 知识库一键导入 · 世界观生成可选注入 · 失败静默降级）（v0.18.0）
 - 6da7966 fix: 打包态验收 env 加 AI_NOVEL_ALLOW_PLAINTEXT（独立 server 调试模式，M2 fail-closed 配套）
-
-## v0.18.0
 
 ## v0.17.0（2026-08-13）
 
@@ -198,10 +198,6 @@
 
 - df96f00 feat: 全量审查修复批（0 CRITICAL/11 HIGH/45 MEDIUM/25 LOW 收敛——状态机自愈/安全加固/snake_case 契约/并发纪律/代码质量）（v0.17.0）
 
-## v0.17.0
-
-## [Unreleased]
-
 ## v0.16.3（2026-08-13）
 
 ### 安装方式
@@ -213,8 +209,6 @@
 
 - 8eb21c9 fix: 更新页版本号显示——broadcast 统一带 currentVersion + renderer 用 __APP_VERSION__ 兜底（v0.16.3）
 
-## v0.16.3
-
 ## v0.16.2（2026-08-13）
 
 ### 安装方式
@@ -224,10 +218,6 @@
 ### 变更
 - **修复**：检查更新改为静态导入 `electron-updater`——此前动态 `import()` 对 CJS 包的命名导出检测失败（`autoUpdater` 解构为 undefined），点击「检查更新」报 `Cannot read properties of undefined (reading 'checkForUpdates')`（与网络无关）
 - **加固**：updater 各 IPC 增加模块可用性防御（不可用时返回明确错误文案，不再裸抛）；启动静默检查同路径修复
-
-## v0.16.2
-
-## [Unreleased]
 
 ## v0.16.1（2026-08-13）
 
@@ -260,10 +250,6 @@
 
 - 67e02fd feat: 检查更新（electron-updater 自更新 · 设置页更新区）+ 成本人民币显示（汇率自动获取/手动覆盖 · 定价 USD 基准查证）（v0.16.0）
 
-## v0.16.0
-
-## [Unreleased]
-
 ## v0.15.0（2026-08-13）
 
 ### 安装方式
@@ -293,77 +279,84 @@
 - de70c20 chore: 仓库整理（CodeQL workflow + README badge + Release body 自动化 + 安全功能开启）（免发版）
 - fd76abb fix: release versioning 自动标记补 writeFileSync import + 0.14.0 ✅（scripts，免发版）
 
-## v0.15.0
-
-> 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
-
-## [Unreleased]
-
-## v0.14.0?2026-08-12?
+## v0.14.0（2026-08-12）
+> 注：v0.9.2–v0.14.0 段原正文因 PowerShell 中文编码事故损坏（D90②，字节级有损不可恢复，git 各历史提交亦已损坏）；本段按 git 提交信息 + decision-log D79–D89 + 已发布代码重建（v0.23.1 批次 C 文档债偿还，不臆测）。
 
 ### Added
-- ?????????????????????/??/??/???????????? AI ?????????????????????
+- **批F 风格指纹（I5）**：Stylometry 文体计量学零 LLM 统计提取（句长分布/高频词/句式/标点/段落节奏）→ 指纹入库 + style_asset 自动归档；端点 `POST /style/fingerprint` 生成章节指纹并抽样展示；UI 展示（长度分布/词频/句式偏好/重复度/标点）
+- **release 发布后台账自动翻转**：发布成功后 versioning.md §7 状态自动标记 ✅
+- 测试 101/101（+5 指纹用例）；**O1-O5 + I1-I5 第二轮路线图全量完成**（v0.9.2 → v0.14.0）
 
-## v0.13.0?2026-08-12?
+## v0.13.0（2026-08-12）
 
 ### Added
-- ??????I4????????????????? ? ????????????+ ??????????????????????????????
-- ???????verify-docs ??????????????? CHANGELOG/versioning/PLAN?
+- **批E 世界状态机（I4）**：势力状态 backfill（writeFactionStates → factions_json.currentState）+ 时间线消费（getTimelineEvents 取最近 5 章 chapter_id 关联事件注入生产上下文，含类型 marker）
+- **文档断言机制**：verify-docs.mjs（脚本化 replace 后 grep 命中目标串，失败即报错；覆盖 CHANGELOG/versioning/PLAN）并入 release.mjs [3/7]；AGENTS #61b 文档断言纪律
 
 ### Fixed
-- release ? vitest ????????
-- versioning.md ??????0.5.0?0.13.0??? 8 ???????
+- release 流程 vitest 防假 PASS（失败重试一次 + 输出校验）
+- versioning.md §7 台账补齐（v0.5.0 误标 0.4.0 等 8 处，0.5.0–0.13.0 全量对齐）
 
-## v0.12.0?2026-08-12?
+- 测试 96/96（+4 状态机/文档断言用例）
+
+## v0.12.0（2026-08-12）
 
 ### Added
-- ???????P31??????????? prompt ???????????/????/??????????/??????????????????????????
+- **批D P31 方案感知卷章**：整本生产流水线注入卷章定位——chapterRole.getChapterPosition（卷/章/序/总数/前后章）→ chapterPositionBlock 注入 runProductionChapter prompt，消除「章节定位不明/角色无锚点」；mc-good2.0 真机验证 3 章（2514/1903/2045 字，outline/场景/对话定位正确）
+- 测试 92/92（+3 卷章定位用例）
 
-## v0.11.1?2026-08-12?
+## v0.11.1（2026-08-12）
 
 ### Fixed
-- ???????? DELETE /:id????????? 404???????????????409 + ?????
-- ?????/????/????????????????????????????????????8 ???????
+- **智能体删除端点**（DELETE /:id，此前 404）：内置智能体不可删 409、被方案引用（json_each）409、agent_skill 级联清理
+- **乱码清零**：3 处 EmptyState 文案 + 全库 `[?]{4,}` 扫描（8 个文件清查）
 
 ### Changed
-- ????/??/???????????????????????????
+- **空状态引导卡片**：标题工坊/基础角色库/拆书 3 页接入统一空态 + 创造工坊选项 6 → 10
 
-## v0.11.0?2026-08-12?
+- 测试 89/89（+4 删除端点用例）
+
+## v0.11.0（2026-08-12）
 
 ### Added
-- ????solution-pack????+???+??+????????????????????????
-- ???????????????????? GitHub ?? solutions/ ?????????/????/????????????? mc-good2.0?10 ????????
+- **solution-pack 方案包**：kind/id/version/metrics/sampleBook 自包含格式（内嵌 agent/skill 依赖，按 id + hash 防重复导入）
+- **GitHub 仓库方案市场**：solutions/ 目录 + index.json 索引（raw.githubusercontent.com 分发，安装/更新/回退）；export-market-pack.mjs 生成 + publish-solution.mjs 发布（npm manifest 规范：name+version 唯一标识、kebab-case id、description+tags）；样例 mc-good2.0 v1.0.0（10 智能体）
 
 ### Fixed
-- ???? github-pages ??????????????
+- 弃用 GitHub Pages 市场分发（部署持续失败，pages.yml `if: false` 停用）
 
-## v0.10.0?2026-08-12?
+- 测试 85/85（+5 方案包用例）
+
+## v0.10.0（2026-08-12）
 
 ### Added
-- ?????????????? + ??????????????
-- ???????????????????????????? 2 ? + ??????????????????????? + ???????????
+- **O5 成本预警月度预算**：月度预算设置（app_settings cost_monthly_budget，默认 0 不限）+ 用量统计 + 超预算告警
+- **I2 质量债自动修复闭环**：修复逻辑收敛 services/debtFix（fixChapterOnce：定位/修复/校验/销账），经 debt-fix job 由 scheduler 串行执行——护栏：每章自限轮次（最多 2 轮）+ 同签名防重复烧 LLM + 修复达标自动销账（参考 Anthropic evaluator-optimizer 模式设护栏）
+- **显式 UI**：设置开关（默认开）+ 质量债计数 + 30s 轮询修复进度
+- 测试 80/80（+7 预算/闭环用例）
 
 ### Changed
-- AI ????????????????????
+- AI 修复链路从「审核建议人工处理」升级为「自动闭环 + 显性可控」
 
-## v0.9.3?2026-08-12?
+## v0.9.3（2026-08-12）
 
 ### Fixed
-- SDK ?????????????429 ??? 9 ??????? maxRetries:1??????????
-- Node close ???????D75?D80??? v16+ ?????? Node24 ??????????
+- **SDK 重试叠加**：openai SDK 默认自动重试 2 次（429/408/409/≥500）与候选链 tryCount 3 叠加（429 时最多 9 次调用）→ 显式 `maxRetries: 1`，重试统一由候选链管理
+- **Node close 语义勘误**（D75 → D80）：IncomingMessage 'close' 行为变更自 v16.0.0（socket 空闲即触发），非 Node24 专属——SSE 断连判定改 res.on('close') + writableEnded；不依赖 v17+ 的 'aborted' 事件
 
 ### Changed
-- ???????AGENTS ?61???????????????????????
+- **查证纪律入规**：AGENTS #61——实现前必须上网查证官方文档，结论回写 decision-log；本地设计决策显式标注「本地设计」
 
-## v0.9.2?2026-08-12?
+## v0.9.2（2026-08-12）
 
 ### Added
-- ??????????????????????
-- ???????WAL checkpoint + ?? N ??
+- **O1 发布自动验收**：v072-pack-verify.mjs（独立 server 打包态等价验收：鉴权 403 拦截/SSE 真实生成/导出）并入 release.mjs [7/7]
+- **O4 每日自动备份**：启动检查 + 备份前 WAL checkpoint + 保留最近 N 份轮转 + 设置页展示备份信息
 
 ### Changed
-- LLM ????????? SSE ???? callLlm?????????
-- ?? e2e ???????????
+- **O2 双 LLM 路径合并**：callLlm 支持 stream/onDelta/onThinking，流式生成统一走 callLlm（generate.ts 弃用客户端专用流式路径，统一 buildBody/候选链）
+- **O3 真机 e2e 门禁**：p30-mcgood2-e2e.mjs（FF_DIR 环境变量）接入 release --e2e 可选门禁
+
 
 ## v0.9.1（2026-08-12）
 

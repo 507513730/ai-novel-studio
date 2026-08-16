@@ -39,6 +39,10 @@ jobs:
             echo "src_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Verify docs consistency
+        # v0.23.1（批次 C7）：verify-docs 九项检查进 CI（此前只在本地 release.mjs [3/7] 执行）
+        run: node scripts/verify-docs.mjs
+
       - name: Verify version bumped + CHANGELOG updated
         if: steps.src.outputs.src_changed == 'true'
         run: |
