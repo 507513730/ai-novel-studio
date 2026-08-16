@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, memo } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import CodeMirror from '@uiw/react-codemirror'
@@ -6,10 +6,10 @@ import { markdown } from '@codemirror/lang-markdown'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Annotation, type AnnotationType } from '@codemirror/state'
 import { novelEditorTheme } from '../editor/theme'
-import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, automationApi, waitForJob } from '../api'
+import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, waitForJob } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
-import type { ChapterSummary, WorldData } from '../types'
+import type { WorldData } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
@@ -27,100 +27,11 @@ function countCjk(text: string): number {
   return (text.match(/[\u4e00-\u9fff]/g) ?? []).length
 }
 
-// v0.20.0：记忆面小组件——角色状态追加（Enter 提交）
-function CharStateAdd({ name, disabled, onAdd }: { name: string; disabled: boolean; onAdd: (s: string) => void }): React.JSX.Element {
-  const [draft, setDraft] = useState('')
-  return (
-    <input
-      style={{ width: 140, fontSize: 11, padding: '2px 6px' }}
-      placeholder={`给 ${name} 加状态…`}
-      value={draft}
-      disabled={disabled}
-      onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && draft.trim()) {
-          onAdd(draft.trim())
-          setDraft('')
-        }
-      }}
-    />
-  )
-}
-
-// v0.20.0：记忆面小组件——势力当前状态修正（Enter 保存）
-function FactionStateEdit({
-  current,
-  disabled,
-  onSave
-}: {
-  current: string
-  disabled: boolean
-  onSave: (s: string) => void
-}): React.JSX.Element {
-  const [draft, setDraft] = useState('')
-  return (
-    <input
-      style={{ width: 160, fontSize: 11, padding: '2px 6px' }}
-      placeholder={current ? `当前：${current}` : '设置势力状态…'}
-      value={draft}
-      disabled={disabled}
-      onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && draft.trim()) {
-          onSave(draft.trim())
-          setDraft('')
-        }
-      }}
-    />
-  )
-}
-
-// v0.10.0（批B/I2）：质量债待修复徽标——整本生产后自动修复队列的显性入口
-// 用户必须"看得明白"：徽标显示待修复章节数，点击后任务入队（任务中心可见），修复上限由服务端保证
-function DebtFixBadge({ novelId }: { novelId: number }): React.JSX.Element | null {
-  const { toast } = useToast()
-  const [fixing, setFixing] = useState(false)
-  const debts = useQuery<{ pendingDebts: number }>({
-    queryKey: ['debts', novelId],
-    queryFn: () => automationApi.debts(novelId),
-    refetchInterval: 30_000
-  })
-  const pending = debts.data?.pendingDebts ?? 0
-  if (pending === 0) return null
-  return (
-    <div
-      className="row"
-      style={{
-        gap: 8,
-        alignItems: 'center',
-        padding: '4px 10px',
-        borderRadius: 'var(--radius)',
-        background: 'rgba(255,193,7,.08)',
-        border: '1px solid rgba(255,193,7,.3)',
-        fontSize: 12
-      }}
-    >
-      <span style={{ color: 'var(--warn)' }}>⚙ 待自动修复 {pending} 章（评分低于 75 的章节）</span>
-      <button
-        className="sm"
-        disabled={fixing}
-        onClick={() => {
-          setFixing(true)
-          void automationApi
-            .debtsFix(novelId)
-            .then(() => {
-              toast('ok', '自动修复任务已入队（任务中心可查看进度）')
-              void debts.refetch()
-            })
-            .catch((err) => toast('error', err instanceof Error ? err.message : String(err)))
-            .finally(() => setFixing(false))
-        }}
-      >
-        {fixing ? '排队中…' : '立即修复'}
-      </button>
-    </div>
-  )
-}
+// v0.23.1（批次 E1）：叶子组件拆出至 ./chapter/（记忆面输入/质量债徽标/章节列表项）——
+// 编辑器/流式/动作面板与页面状态强耦合，保留本文件（后续按面板再拆）
+import { CharStateAdd, FactionStateEdit } from './chapter/MemoryInputs'
+import { DebtFixBadge } from './chapter/DebtFixBadge'
+import { ChapterListItem } from './chapter/ChapterListItem'
 
 export function ChapterExecutionPage(): React.JSX.Element {
   const { novelId } = useParams()
@@ -1680,7 +1591,7 @@ const selectedChapterRef = useRef<number | null>(null)
                 <div style={{ marginTop: 10, borderTop: '1px solid var(--border)' }}>
                   {(reviewResult.issues as Array<Record<string, unknown>>).map((issue, i) => (
                     <div key={i} style={{ marginTop: 8, fontSize: 12, paddingTop: 8 }}>
-                      <span className="badge" style={issue.severity === 'high' ? { color: '#ff6b6b', background: 'rgba(255,107,107,0.12)' } : {}}>
+                      <span className="badge" style={issue.severity === 'high' ? { color: 'var(--danger)', background: 'var(--danger-soft)' } : {}}>
                         {String(issue.severity)}
                       </span>
                       <div style={{ marginTop: 4 }}>{String(issue.problem)}</div>
@@ -1928,57 +1839,4 @@ const selectedChapterRef = useRef<number | null>(null)
   )
 }
 
-// P22-C1：章节页 memo 隔离（100+ 章节时性能）
-const ChapterListItem = memo(function ChapterListItem({
-  c,
-  selected,
-  onSelect
-}: {
-  c: ChapterSummary
-  selected: boolean
-  onSelect: () => void
-}): React.JSX.Element {
-  const stColor =
-    c.status === 'reviewed' || c.status === 'done'
-      ? 'var(--ok)'
-      : c.status === 'written'
-        ? 'var(--accent)'
-        : c.status === 'failed'
-          ? 'var(--danger)'
-          : 'var(--text-faint)'
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      className={`list-item${selected ? ' active' : ''}`}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onSelect()
-        }
-      }}
-    >
-      <div className="row justify-between">
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {c.title || `第 ${c.id} 章`}
-        </span>
-        {c.wordCount > 0 && <span className="muted t-small">{c.wordCount}</span>}
-      </div>
-      <div className="row" style={{ gap: 6, marginTop: 2 }}>
-        <span
-          style={{ width: 7, height: 7, borderRadius: 4, background: stColor, display: 'inline-block', flexShrink: 0 }}
-        />
-        <span className="muted t-small">
-          {c.status} {c.volumeTitle ? `· ${c.volumeTitle}` : ''}
-        </span>
-      </div>
-      <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-faint)' }}>
-        {c.status === 'planned' && '下一步：生成正文'}
-        {c.status === 'written' && '下一步：AI 审核'}
-        {['reviewed', 'done'].includes(c.status) && '✓ 可进入下一章'}
-        {c.status === 'failed' && '⚠️ 生成失败，可重试'}
-      </div>
-    </div>
-  )
-})
+// P22-C1 章节列表项已拆至 ./chapter/ChapterListItem.tsx（批次 E1）

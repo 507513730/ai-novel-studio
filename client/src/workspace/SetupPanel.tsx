@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { novelApi } from '../api'
+import { useActionRun } from '../hooks/useActionRun'
 
 export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirtyChange?: (dirty: boolean) => void }): React.JSX.Element {
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
   const [selectedDirection, setSelectedDirection] = useState<string | null>(null)
   const [titles, setTitles] = useState<string[]>([])
   const [title, setTitle] = useState('')
@@ -17,6 +17,8 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
   // P11-3：流派自定义
   const [addingGenre, setAddingGenre] = useState(false)
   const [newGenre, setNewGenre] = useState('')
+  // v0.23.1（批次 E3）：addGenre 防重（ref 守卫——输入框 Enter 与保存按钮可在 disabled 生效前双发）
+  const addGenreBusyRef = useRef(false)
 
   const detail = useQuery({
     queryKey: ['novel', novelId],
@@ -46,6 +48,9 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
   const addGenre = async (): Promise<void> => {
     const name = newGenre.trim()
     if (!name) return
+    // v0.23.1（批次 E3）：ref 守卫防双发（Enter + 按钮/连点）
+    if (addGenreBusyRef.current) return
+    addGenreBusyRef.current = true
     setError(null)
     try {
       await novelApi.genreCreate(name, novelId)
@@ -56,35 +61,24 @@ export function SetupPanel({ novelId, onDirtyChange }: { novelId: number; onDirt
       await invalidate()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      addGenreBusyRef.current = false
     }
   }
 
-  const run = async (key: string, fn: () => Promise<unknown>): Promise<void> => {
-    setBusy(key)
-    setError(null)
-    try {
-      await fn()
-      await invalidate()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(null)
-    }
-  }
+  // v0.23.1（批次 E3）：共享 useActionRun（ref 守卫防同帧双击——此前 state-only 实现可双跑）
+  const { busy, run } = useActionRun({
+    onStart: () => setError(null),
+    onError: (msg) => setError(msg),
+    onDone: () => invalidate()
+  })
 
   const genTitles = async (direction: unknown): Promise<void> => {
-    // v0.17.0（审查 A14）：已有任务进行中则跳过——此前无条件 setBusy('titles') 会覆盖并发的 directions 任务
-    if (busy) return
-    setBusy('titles')
-    setError(null)
-    try {
+    // v0.17.0（审查 A14）：已有任务进行中则跳过——run 的 ref 守卫同语义
+    await run('titles', async () => {
       const r = await novelApi.titles(novelId, direction)
       setTitles(r.titles)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(null)
-    }
+    })
   }
 
   return (

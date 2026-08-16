@@ -125,7 +125,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
             <div className="row justify-between">
               <strong>综合评分：{str(teamResult.score)}</strong>
               {Number(teamResult.highCount) > 0 && (
-                <span className="badge" style={{ color: 'var(--danger)', background: 'rgba(255,107,107,0.12)' }}>
+                <span className="badge" style={{ color: 'var(--danger)', background: 'var(--danger-soft)' }}>
                   {String(teamResult.highCount)} 个高严重度问题
                 </span>
               )}
@@ -150,7 +150,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
                 <strong>问题清单（去重后 {issues.length} 项）：</strong>
                 {issues.map((i, idx) => (
                   <div key={idx} style={{ marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 4 }}>
-                    <span className="badge" style={i.severity === 'high' ? { color: 'var(--danger)', background: 'rgba(255,107,107,0.12)' } : {}}>
+                    <span className="badge" style={i.severity === 'high' ? { color: 'var(--danger)', background: 'var(--danger-soft)' } : {}}>
                       [{str(i.focus)}] {str(i.severity)}
                     </span>
                     <div>{str(i.problem)}</div>
@@ -164,7 +164,7 @@ export function AgentPanel({ novelId }: { novelId: number }): React.JSX.Element 
                 <strong>OOC 问题（{ooc.length}）：</strong>
                 {ooc.map((i, idx) => (
                   <div key={idx} style={{ marginTop: 4 }}>
-                    <span className="badge" style={{ color: 'var(--danger)', background: 'rgba(255,107,107,0.12)' }}>{str(i.severity)}</span>
+                    <span className="badge" style={{ color: 'var(--danger)', background: 'var(--danger-soft)' }}>{str(i.severity)}</span>
                     {' '}{str(i.problem)}
                   </div>
                 ))}

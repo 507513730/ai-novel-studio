@@ -8,7 +8,8 @@ import { novelApi } from '../api'
 export function FollowUpsPage(): React.JSX.Element {
   const navigate = useNavigate()
   const jobs = useQuery({
-    queryKey: ['jobs', 'followups'],
+    // v0.23.1（批次 E5）：统一共享 ['jobs'] 缓存（与 AppLayout/列表页/任务中心同源）
+    queryKey: ['jobs'],
     queryFn: novelApi.jobs,
     // v0.17.0（审查 C38）：页面不可见时暂停轮询（后台标签不再空转请求）
     refetchInterval: () => (document.visibilityState === 'visible' ? 5000 : false)

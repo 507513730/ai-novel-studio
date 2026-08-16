@@ -123,7 +123,7 @@ export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Elem
             <div key={c.id} className="panel" style={{ background: 'var(--bg-card)' }}>
               <div className="row justify-between">
                 <strong>{c.name}</strong>
-                <span className="badge" style={c.status === 'pending' ? { color: '#ffb86c', background: 'rgba(255,184,108,0.12)' } : {}}>
+                <span className="badge" style={c.status === 'pending' ? { color: 'var(--warn)', background: 'var(--warn-soft)' } : {}}>
                   {c.status === 'pending' ? '待确认' : '正式'}
                 </span>
               </div>

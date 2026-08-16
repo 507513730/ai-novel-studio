@@ -28,8 +28,9 @@ export function NovelListPage(): React.JSX.Element {
   })
 
   // P12 A2：失败任务徽章（有 failed job 的书显示"需恢复"）
+  // v0.23.1（批次 E5）：统一共享 ['jobs'] 缓存（与 AppLayout/TasksPage/跟随页同源，轮询合并）
   const jobs = useQuery({
-    queryKey: ['jobs', 'list'],
+    queryKey: ['jobs'],
     queryFn: novelApi.jobs,
     refetchInterval: 6000
   })

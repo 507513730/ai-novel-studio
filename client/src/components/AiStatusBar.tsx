@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Clapperboard } from 'lucide-react'
 import { automationApi } from '../api'
 import type { DirectorStatus } from '../../../shared/src/types'
 
 // P11-5：AI 状态条（学习参考项目"AI 接管状态"轻量投影：阶段 + 阻塞原因 + 下一步）
-// 有运行中导演任务时显示，3s 轮询；连续失败静默隐藏
+// 有运行中导演任务时显示；v0.23.1（批次 E5）：收编 react-query 共享缓存
+// （运行中 3s / 空闲 30s 巡检降频——替代手写 setInterval 轮询）
 
 const STAGE_LABELS: Record<string, string> = {
   inspiration: '灵感理解',
@@ -25,53 +26,19 @@ const RUNNING = ['queued', 'running']
 
 export function AiStatusBar({ novelId }: { novelId: number }): React.JSX.Element | null {
   const navigate = useNavigate()
-  const [status, setStatus] = useState<DirectorStatus | null>(null)
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    let failCount = 0
-    let alive = true
-    let inFlight = false
-    let timer: ReturnType<typeof setInterval> | null = null
-    let wasRunning = true // 初始按"可能运行中"快速轮询
-    // v0.9.0（审查 M3）：任务进行中 3s 轮询；任务结束后降频 30s 巡检（此前空转轮询无谓开销）
-    const restartTimer = (ms: number): void => {
-      if (timer) clearInterval(timer)
-      timer = setInterval(tick, ms)
-    }
-    const tick = (): void => {
-      if (inFlight || !alive) return
-      inFlight = true
-      void automationApi
-        .directorStatus(novelId)
-        .then((s) => {
-          failCount = 0
-          const st = s as unknown as DirectorStatus
-          setStatus(st)
-          const running = RUNNING.includes(st.status)
-          setVisible(running)
-          if (running !== wasRunning) {
-            wasRunning = running
-            restartTimer(running ? 3000 : 30_000)
-          }
-        })
-        .catch(() => {
-          failCount += 1
-          if (failCount >= 3) setVisible(false)
-        })
-        .finally(() => {
-          inFlight = false
-        })
-    }
-    tick()
-    timer = setInterval(tick, 3000)
-    return () => {
-      alive = false
-      if (timer) clearInterval(timer)
-    }
-  }, [novelId])
-
-  if (!visible || !status) return null
+  const statusQuery = useQuery({
+    queryKey: ['director-status', novelId],
+    queryFn: async () => (await automationApi.directorStatus(novelId)) as unknown as DirectorStatus,
+    refetchInterval: (query) => {
+      // v0.9.0（审查 M3）：任务进行中 3s；结束后降频 30s 巡检
+      const st = query.state.data as DirectorStatus | undefined
+      return RUNNING.includes(st?.status ?? 'queued') ? 3000 : 30_000
+    },
+    retry: 1
+  })
+  const status = statusQuery.data ?? null
+  const visible = status !== null && RUNNING.includes(status.status)
+  if (!visible) return null
 
   const stageLabel = STAGE_LABELS[status.stage ?? ''] ?? status.stage ?? ''
   const progressKeys = Object.keys(status.progress ?? {})

@@ -49,6 +49,8 @@ export default defineConfig({
       rollupOptions: {
         input: resolve(__dirname, 'client/index.html'),
         // P20（U4）：分包——react/codemirror/lucide 独立 chunk（4.4MB 单包拆分为缓存友好多包）
+        // v0.23.1（批次 E6）：@codemirror/language/state/view 显式声明为直接依赖
+        // （此前是 @uiw/react-codemirror 的传递依赖，靠 pnpm shamefully-hoist 才可解析——脆弱）
         output: {
           manualChunks: {
             react: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],

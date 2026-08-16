@@ -130,7 +130,7 @@ function GuideStrip({
               padding: '10px 12px',
               borderRadius: 'var(--radius-m)',
               background: 'var(--bg-card)',
-              border: `1px solid ${st === 'current' ? 'var(--accent)' : st === 'done' ? 'rgba(52, 211, 153, 0.35)' : 'var(--border)'}`,
+              border: `1px solid ${st === 'current' ? 'var(--accent)' : st === 'done' ? 'color-mix(in srgb, var(--ok) 35%, transparent)' : 'var(--border)'}`,
               cursor: 'pointer',
               textAlign: 'left'
             }}
@@ -146,7 +146,7 @@ function GuideStrip({
                   justifyContent: 'center',
                   fontSize: 11,
                   flexShrink: 0,
-                  background: st === 'done' ? 'rgba(52, 211, 153, 0.15)' : st === 'current' ? 'var(--accent-soft)' : 'var(--bg-card)',
+                  background: st === 'done' ? 'color-mix(in srgb, var(--ok) 15%, transparent)' : st === 'current' ? 'var(--accent-soft)' : 'var(--bg-card)',
                   border: `1px solid ${st === 'done' ? 'var(--ok)' : st === 'current' ? 'var(--accent)' : 'var(--border)'}`
                 }}
               >
@@ -255,7 +255,7 @@ export function NovelWorkspacePage(): React.JSX.Element {
                     padding: '8px 10px',
                     borderRadius: 8,
                     border: '1px solid transparent',
-                    background: st === 'current' ? 'var(--accent-soft)' : st === 'done' ? 'rgba(52, 211, 153, 0.08)' : 'transparent',
+                    background: st === 'current' ? 'var(--accent-soft)' : st === 'done' ? 'color-mix(in srgb, var(--ok) 8%, transparent)' : 'transparent',
                     color: st === 'done' ? 'var(--ok)' : st === 'current' ? 'var(--text)' : 'var(--text-dim)',
                     fontSize: 13,
                     textAlign: 'left',
@@ -276,7 +276,7 @@ export function NovelWorkspacePage(): React.JSX.Element {
                       justifyContent: 'center',
                       fontSize: 11,
                       flexShrink: 0,
-                      background: st === 'done' ? 'rgba(52, 211, 153, 0.15)' : st === 'current' ? 'var(--accent-soft)' : 'var(--bg-card)',
+                      background: st === 'done' ? 'color-mix(in srgb, var(--ok) 15%, transparent)' : st === 'current' ? 'var(--accent-soft)' : 'var(--bg-card)',
                       border: `1px solid ${st === 'done' ? 'var(--ok)' : st === 'current' ? 'var(--accent)' : 'var(--border)'}`
                     }}
                   >

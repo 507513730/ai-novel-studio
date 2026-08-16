@@ -3,6 +3,7 @@ import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { novelApi, waitForJob } from '../api'
+import { useActionRun } from '../hooks/useActionRun'
 import { usePrompt } from '../components/PromptDialog'
 import { useConfirm } from '../components/ConfirmDialog'
 import type { ChapterSummary } from '../types'
@@ -10,7 +11,6 @@ import type { ChapterSummary } from '../types'
 export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const [busy, setBusy] = useState<string | null>(null)
   // v0.22.0（审查 ALOW）：themed confirm 统一
   const [confirmFn, confirmDialog] = useConfirm()
   const [error, setError] = useState<string | null>(null)
@@ -40,18 +40,12 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
     await queryClient.invalidateQueries({ queryKey: ['chapters', novelId] })
   }
 
-  const run = async (key: string, fn: () => Promise<unknown>): Promise<void> => {
-    setBusy(key)
-    setError(null)
-    try {
-      await fn()
-      await inval()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(null)
-    }
-  }
+  // v0.23.1（批次 E3）：共享 useActionRun（ref 守卫防同帧双击——此前 state-only 实现可双跑）
+  const { busy, run } = useActionRun({
+    onStart: () => setError(null),
+    onError: (msg) => setError(msg),
+    onDone: () => inval()
+  })
 
   const genVolumes = useMutation({
     mutationFn: () => novelApi.volumesGenerate(novelId, Math.min(40, Math.max(5, Number(chaptersPerVolume) || 20))),
@@ -97,9 +91,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
               className="primary"
               disabled={busy !== null}
               onClick={() => {
-                setBusy('volumes')
-                setError(null)
-                void genVolumes.mutateAsync().finally(() => setBusy(null))
+                void run('volumes', () => genVolumes.mutateAsync())
               }}
             >
               {busy === 'volumes' ? '生成中…' : 'AI 生成卷规划'}
@@ -111,13 +103,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
               onClick={() => {
                 void askTitle({ title: '新卷标题', placeholder: '输入卷标题后确定' }).then((t) => {
                   if (!t?.trim()) return
-                  setBusy('volume-create')
-                  setError(null)
-                  void novelApi
-                    .volumeCreate(novelId, t.trim())
-                    .then(() => inval())
-                    .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-                    .finally(() => setBusy(null))
+                  void run('volume-create', () => novelApi.volumeCreate(novelId, t.trim()))
                 })
               }}
             >
@@ -259,7 +245,7 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
                           padding: '8px 10px',
                           borderRadius: 'var(--radius-m)',
                           background: 'var(--bg-card)',
-                          border: `1px solid ${c.status === 'written' || c.status === 'reviewed' || c.status === 'done' ? 'rgba(52, 211, 153, 0.35)' : c.status === 'failed' ? 'rgba(248, 113, 113, 0.35)' : 'var(--border)'}`
+                          border: `1px solid ${c.status === 'written' || c.status === 'reviewed' || c.status === 'done' ? 'color-mix(in srgb, var(--ok) 35%, transparent)' : c.status === 'failed' ? 'color-mix(in srgb, var(--danger) 35%, transparent)' : 'var(--border)'}`
                         }}
                       >
                         <div className="muted t-small">{c.id}</div>

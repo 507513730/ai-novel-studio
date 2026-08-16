@@ -336,7 +336,7 @@ button.primary {
 button.primary:hover:not(:disabled) {
   background: var(--accent-bright);
   border-color: var(--accent-bright);
-  box-shadow: 0 4px 16px rgba(79, 124, 255, 0.3);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* ghost 删除：默认透明，hover 才红（kimi 建议） */
@@ -573,12 +573,12 @@ h2 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--text) 14%, transparent);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--text) 24%, transparent);
 }
 
 ::-webkit-scrollbar-track {

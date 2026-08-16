@@ -251,7 +251,7 @@ export function DirectorPage(): React.JSX.Element {
                   borderRadius: 20,
                   fontSize: 12,
                   background: progress[s]
-                    ? 'rgba(76,217,123,0.15)'
+                    ? 'color-mix(in srgb, var(--ok) 15%, transparent)'
                     : s === activeStage
                       ? 'var(--accent-soft)'
                       : 'var(--bg-card)',
@@ -296,11 +296,11 @@ export function DirectorPage(): React.JSX.Element {
         {production && (
           <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
             <span className="badge">章节 {String(production.chapters)}</span>
-            <span className="badge" style={{ color: 'var(--ok)', background: 'rgba(76,217,123,0.12)' }}>
+            <span className="badge" style={{ color: 'var(--ok)', background: 'var(--ok-soft)' }}>
               已写 {String(production.written)}
             </span>
             {Number(production.failed) > 0 && (
-              <span className="badge" style={{ color: 'var(--danger)', background: 'rgba(255,107,107,0.12)' }}>
+              <span className="badge" style={{ color: 'var(--danger)', background: 'var(--danger-soft)' }}>
                 失败 {String(production.failed)}
               </span>
             )}

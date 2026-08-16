@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   House,
   BookOpenText,
@@ -68,37 +69,30 @@ export function AppLayout(): React.JSX.Element {
   const novelId = novelMatch ? Number(novelMatch[1]) : null
 
   // P12 A1：失败任务徽章（延迟 500ms 启用防首屏闪烁）；P16 P1：条件轮询（仅活动任务时）
-  const [failedCount, setFailedCount] = useState(0)
+  // v0.23.1（批次 E5）：收编 react-query——单一 ['jobs'] 缓存与 NovelListPage/TasksPage 共享
+  // （此前手写 setInterval + 本地 state，三处轮询三份缓存）
   const [badgeReady, setBadgeReady] = useState(false)
-  const [polling, setPolling] = useState(false)
-  // P13 G8：全局运行任务（悬浮状态）+ P27 1-5：可展开进度浮层
-  const [runningJobs, setRunningJobs] = useState<Array<{ id: number; type: string; progress: number }>>([])
   const [jobsOpen, setJobsOpen] = useState(false)
   useEffect(() => {
     const timer = setTimeout(() => setBadgeReady(true), 500)
     return () => clearTimeout(timer)
   }, [])
-  useEffect(() => {
-    if (!badgeReady) return
-    const tick = (): void => {
-      void novelApi
-        .jobs()
-        .then((r) => {
-          const failed = r.jobs.filter((j) => j.status === 'failed').length
-          const active = r.jobs.filter((j) => j.status === 'running' || j.status === 'queued')
-          setFailedCount(failed)
-          setRunningJobs(active.map((j) => ({ id: j.id, type: j.type, progress: j.progress })))
-          // P16 P1：条件轮询——仅当有活动任务时保持 4s 轮询，否则暂停（参考项目策略）
-          setPolling(failed > 0 || active.length > 0)
-        })
-        .catch(() => undefined)
+  const jobsQuery = useQuery({
+    queryKey: ['jobs'],
+    queryFn: novelApi.jobs,
+    enabled: badgeReady,
+    refetchInterval: (query) => {
+      const jobs = query.state.data?.jobs
+      const active = jobs?.some((j) => j.status === 'running' || j.status === 'queued') ?? true
+      return active ? 4000 : 15000
     }
-    tick()
-    const t = setInterval(() => {
-      if (polling) tick()
-    }, 4000)
-    return () => clearInterval(t)
-  }, [badgeReady, polling])
+  })
+  const allJobs = jobsQuery.data?.jobs ?? []
+  const failedCount = allJobs.filter((j) => j.status === 'failed').length
+  // P13 G8：全局运行任务（悬浮状态）+ P27 1-5：可展开进度浮层
+  const runningJobs = allJobs
+    .filter((j) => j.status === 'running' || j.status === 'queued')
+    .map((j) => ({ id: Number(j.id), type: String(j.type), progress: Number(j.progress ?? 0) }))
 
   const navGroups: NavGroup[] = [
     {
@@ -280,7 +274,7 @@ export function AppLayout(): React.JSX.Element {
                       padding: collapsed ? '10px 0' : '8px 10px',
                       borderRadius: 8,
                       border: '1px solid transparent',
-                      background: active || isPrimary ? (active ? 'var(--accent-soft)' : 'rgba(91,140,255,0.05)') : 'transparent',
+                      background: active || isPrimary ? (active ? 'var(--accent-soft)' : 'color-mix(in srgb, var(--accent) 6%, transparent)') : 'transparent',
                       color: active ? 'var(--text)' : isPrimary ? 'var(--accent-bright)' : 'var(--text-dim)',
                       fontWeight: isPrimary ? 600 : 'inherit',
                       fontSize: 13,

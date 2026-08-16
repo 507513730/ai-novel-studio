@@ -262,7 +262,7 @@ export function StylePanel({ novelId }: { novelId: number }): React.JSX.Element 
         </div>
         {checkResult && (
           <div className="t-small">
-            <span className="badge" style={checkResult.total > 0 ? { color: 'var(--danger)', background: 'rgba(255,107,107,0.12)' } : {}}>
+            <span className="badge" style={checkResult.total > 0 ? { color: 'var(--danger)', background: 'var(--danger-soft)' } : {}}>
               {checkResult.total > 0 ? `命中 ${checkResult.total} 处` : '无命中 ✓'}
             </span>
             {checkResult.hits.map((h) => (

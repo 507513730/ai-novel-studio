@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ListChecks, RotateCcw, XCircle, RefreshCw, Trash2, Inbox, History } from 'lucide-react'
 import { novelApi, automationApi } from '../api'
+import { useActionRun } from '../hooks/useActionRun'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { EmptyState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
@@ -83,7 +84,6 @@ export function TasksPage(): React.JSX.Element {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const [busy, setBusy] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   // P13 G1：重试换模型
   const [retryModel, setRetryModel] = useState<Record<number, string>>({})
@@ -97,28 +97,28 @@ export function TasksPage(): React.JSX.Element {
   const models = [...new Set((routes.data?.routes ?? []).map((r) => r.model))]
 
   const jobs = useQuery({
-    queryKey: ['jobs', 'tasks'],
+    // v0.23.1（批次 E5）：统一共享 ['jobs'] 缓存（与 AppLayout/列表页/跟随页同源）
+    queryKey: ['jobs'],
     queryFn: novelApi.jobs,
     // v0.17.0（审查 C38）：页面不可见时暂停轮询——后台标签不再每 4s 空转拉取
     refetchInterval: () => (document.visibilityState === 'visible' ? 4000 : false)
   })
 
-  const act = async (id: number, fn: () => Promise<{ ok: boolean }>, doneMsg: string): Promise<void> => {
-    if (busy !== null) return
-    setBusy(id)
-    setError(null)
-    try {
-      await fn()
-      toast('ok', doneMsg)
-      void queryClient.invalidateQueries({ queryKey: ['jobs', 'tasks'] })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+  // v0.23.1（批次 E3）：共享 useActionRun（ref 守卫防同帧双击；busy 键由 number 改 string）
+  const { busy, run } = useActionRun({
+    onStart: () => setError(null),
+    onError: (msg) => {
       setError(msg)
       toast('error', msg)
-    } finally {
-      setBusy(null)
-    }
-  }
+    },
+    onDone: () => queryClient.invalidateQueries({ queryKey: ['jobs'] })
+  })
+
+  const act = (id: number, fn: () => Promise<{ ok: boolean }>, doneMsg: string): Promise<void> =>
+    run(String(id), async () => {
+      await fn()
+      toast('ok', doneMsg)
+    })
 
   const retryWith = (id: number): void => {
     void act(id, () => novelApi.jobRetry(id, retryModel[id] || undefined), retryModel[id] ? `已用 ${retryModel[id]} 重新排队` : '任务已重新排队')
@@ -126,21 +126,10 @@ export function TasksPage(): React.JSX.Element {
 
   // P13 G3：导演任务"从断点继续"（复用 directorResume）
   const resumeDirector = (novelId: number): void => {
-    if (busy !== null) return
-    setBusy(-novelId)
-    setError(null)
-    void automationApi
-      .directorResume(novelId)
-      .then(() => {
-        toast('ok', '已从断点继续导演任务')
-        void queryClient.invalidateQueries({ queryKey: ['jobs', 'tasks'] })
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(msg)
-        toast('error', msg)
-      })
-      .finally(() => setBusy(null))
+    void run(String(-novelId), async () => {
+      await automationApi.directorResume(novelId)
+      toast('ok', '已从断点继续导演任务')
+    })
   }
 
   const list = jobs.data?.jobs ?? []
@@ -164,17 +153,10 @@ export function TasksPage(): React.JSX.Element {
               return
             }
             confirmFn({ title: '清理已完成', message: `将删除 ${done} 条已完成任务记录（不影响正文/文档）。继续？`, confirmText: '清理', danger: true, action: () => {
-              setBusy(-1)
-              void automationApi
-                .jobsClearDone()
-                .then((r: { deleted: number }) => {
-                  toast('ok', `已清理 ${r.deleted} 条完成记录`)
-                  void queryClient.invalidateQueries({ queryKey: ['jobs', 'tasks'] })
-                })
-                .catch((err: unknown) => {
-                  toast('error', err instanceof Error ? err.message : String(err))
-                })
-                .finally(() => setBusy(null))
+              void run('-1', async () => {
+                const r = await automationApi.jobsClearDone()
+                toast('ok', `已清理 ${r.deleted} 条完成记录`)
+              })
             } })
           }}
         >
@@ -229,7 +211,7 @@ export function TasksPage(): React.JSX.Element {
                 <div className="row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
                   {j.type === 'director' && novelId > 0 && (
                     <button className="sm primary" disabled={busy !== null} onClick={() => resumeDirector(novelId)}>
-                      {busy === -novelId ? '继续中…' : '▶ 从断点继续'}
+                      {busy === String(-novelId) ? '继续中…' : '▶ 从断点继续'}
                     </button>
                   )}
                   <select
@@ -245,7 +227,7 @@ export function TasksPage(): React.JSX.Element {
                   </select>
                   <button className="sm" disabled={busy !== null} onClick={() => retryWith(j.id)}>
                     <RotateCcw size={12} className="icon-gap" />
-                    {busy === j.id ? '处理中…' : '重试'}
+                    {busy === String(j.id) ? '处理中…' : '重试'}
                   </button>
                   <button className="sm danger" disabled={busy !== null} onClick={() => void act(j.id, () => novelApi.jobCancel(j.id), '任务已取消')}>
                     <XCircle size={12} className="icon-gap" />
