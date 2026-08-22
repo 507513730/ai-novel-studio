@@ -1,4 +1,5 @@
-// P14 D：全功能测试轮（T1 配置/系统 + T2 创作主链 + T3 资产智能 + T4 导演恢复）
+// P14 D：全功能测试轮（T1 配置/系统 + T2 创作主链 + T3 资产智能 + T4 导演恢复 + T5 功能回归）
+// T5（v0.24.2 起）：方案整本生产 / 全书检索 / 版本 diff
 // 用法：node scripts/e2e/round.mjs <roundNo>
 import { api, apiTry, ok, startRound, finishRound, sleep, waitJob } from './common.mjs'
 
@@ -334,9 +335,82 @@ export async function t4(novelId) {
   return finishRound(`T4 导演与恢复（${tag}）`)
 }
 
+// ---------- T5 v0.24.2 功能回归（方案整本生产 / 全书检索 / 版本 diff） ----------
+export async function t5() {
+  startRound(`T5 功能回归（${tag}）`)
+  try {
+    // 数据准备：新书 + 2 章（第 1 章预置正文——同时验证 produce-book 幂等跳过已有正文）
+    const created = await api('/novels', { method: 'POST', body: JSON.stringify({ inspiration: `T5-${tag}：全书检索与方案整本生产回归` }) })
+    const novelId = created.id
+    ok(novelId > 0, 'T5 新建书', `id=${novelId}`)
+    const c1 = await api(`/novels/${novelId}/chapters`, { method: 'POST', body: JSON.stringify({ title: '第一章 · 油灯' }) })
+    const c2 = await api(`/novels/${novelId}/chapters`, { method: 'POST', body: JSON.stringify({ title: '第二章 · 夜访' }) })
+    ok(c1.id > 0 && c2.id > 0, 'T5 手动建章')
+    await api(`/novels/${novelId}/chapters/${c1.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content: '油灯在桌上静静燃着。他伸手碰了碰灯罩，指尖传来一阵温热。', status: 'written', aiWordsDelta: 30 })
+    })
+
+    // ---- 全书检索（F2） ----
+    const s = await apiTry(`/novels/${novelId}/search?q=${encodeURIComponent('油灯')}`)
+    ok(s.ok && s.body.chapters.some((c) => c.id === c1.id), '全书检索命中（正文定向词）', s.error ?? '')
+    const sMiss = await apiTry(`/novels/${novelId}/search?q=${encodeURIComponent('不存在的词xyz123')}`)
+    ok(sMiss.ok && sMiss.body.chapters.length === 0, '全书检索无命中正确')
+
+    // ---- 版本 diff（F3） ----
+    const snap = await apiTry(`/novels/${novelId}/chapters/${c1.id}/versions`, { method: 'POST', body: JSON.stringify({ note: 'e2e 快照' }) })
+    ok(snap.ok && snap.body.versionId > 0, '版本快照', snap.error ?? '')
+    await api(`/novels/${novelId}/chapters/${c1.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content: '油灯在桌上静静燃着。他把灯芯挑亮了一分，指尖传来一阵温热。' })
+    })
+    const diff = await apiTry(`/novels/${novelId}/chapters/${c1.id}/versions/${snap.body.versionId}/diff`)
+    ok(diff.ok && diff.body.lines.some((l) => l.type === 'add' || l.type === 'del'), '版本 diff（增删行）', diff.error ?? '')
+
+    // ---- 方案整本生产（F4） ----
+    const agents = await api('/agents')
+    const a1 = agents.agents[0]?.id
+    const a2 = agents.agents[1]?.id ?? a1
+    const sol = await apiTry('/solutions', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `T5方案-${tag}`,
+        description: 'e2e 回归',
+        steps: [
+          { agentId: a1, role: '大纲', stage: 'whole_book', production: { output: 'outline' } },
+          { agentId: a2, role: '终稿', stage: 'whole_book', production: { output: 'final' } }
+        ]
+      })
+    })
+    ok(sol.ok && sol.body.id > 0, '创建 whole_book 方案', sol.error ?? '')
+    const produce = await apiTry(`/solutions/${sol.body.id}/produce-book`, { method: 'POST', body: JSON.stringify({ novelId }) })
+    ok(produce.ok && produce.body.jobId > 0 && produce.body.pending === 1, '方案整本生产入队（pending 1 章）', JSON.stringify(produce.body).slice(0, 120))
+    const dup = await apiTry(`/solutions/${sol.body.id}/produce-book`, { method: 'POST', body: JSON.stringify({ novelId }) })
+    ok(!dup.ok && dup.error.includes('运行中'), '生产任务查重 409', dup.error ?? '')
+    let jobDone = null
+    for (let w = 0; w < 130; w++) {
+      await sleep(3000)
+      const j = (await api('/jobs')).jobs.find((x) => x.id === produce.body.jobId)
+      if (j && ['done', 'failed', 'cancelled'].includes(j.status)) { jobDone = j; break }
+    }
+    ok(jobDone?.status === 'done', '方案整本生产完成', jobDone?.status ?? 'timeout')
+    const chAfter = await api(`/novels/${novelId}/chapters`)
+    const c2row = chAfter.chapters.find((c) => c.id === c2.id)
+    const c1detail = await api(`/novels/${novelId}/chapters/${c1.id}`)
+    ok(c2row.wordCount > 0, '生产章节已生成正文', `got ${c2row.wordCount}`)
+    ok(c1detail.chapter.content.includes('油灯在桌上'), '已有正文章未被覆盖（幂等跳过）')
+    const nd = await api(`/novels/${novelId}`)
+    ok(nd.novel.currentSolutionId === sol.body.id, '方案已绑定到书')
+  } catch (err) {
+    ok(false, `T5 异常：${err.message}`)
+  }
+  return finishRound(`T5 功能回归（${tag}）`)
+}
+
 // 主流程
 const r1 = await t1()
 const r2 = await t2()
 const r3 = await t3(r2.extra ? Number(r2.extra.split('=')[1]) : null)
 await t4(r2.extra ? Number(r2.extra.split('=')[1]) : null)
-console.log(`\nROUND ${tag} done: T1(${r1.pass}/${r1.pass + r1.fail}) T2(${r2.pass}/${r2.pass + r2.fail}) T3(${r3.pass}/${r3.pass + r3.fail})`)
+const r5 = await t5()
+console.log(`\nROUND ${tag} done: T1(${r1.pass}/${r1.pass + r1.fail}) T2(${r2.pass}/${r2.pass + r2.fail}) T3(${r3.pass}/${r3.pass + r3.fail}) T5(${r5.pass}/${r5.pass + r5.fail})`)

@@ -82,7 +82,7 @@ docs/          校准报告 + P9 体验修复明细
 42. **重试换模型纪律**（P13 G1/D37）：重试若指定 modelOverride 必须写入 job payload（重排队时 model_route 可能已变）；scheduler 构建候选时 override 优先于 fallback 链。
 
 43. **代码签名纪律**（P14 C3）：electron-builder 打包 Windows 安装包需要 .pfx 证书——通过 `WIN_CSC_LINK`（文件路径/base64）与 `WIN_CSC_KEY_PASSWORD` 传入 `pnpm dist`；无证书时 electron-builder 仅告警，但用户侧可能被 SmartScreen 拦截/报毒。
-44. **e2e 测试纪律**（P14 D）：发版前必须跑 `node scripts/e2e/round.mjs <n>` 至少 1 轮（T1-T4 全功能，opencode-go 网关 key 从 auth.json 读取不落盘）；所有 callLlmJson 的 prompt 必须含 json 字样（D41；json_object response_format 硬要求）；动态 import CJS 包在 utilityProcess 下要处理双层 default（D42）。
+44. **e2e 测试纪律**（P14 D）：发版前必须跑 `node scripts/e2e/round.mjs <n>` 至少 1 轮（T1-T5 全功能——T5 为 v0.24.2 功能回归：方案整本生产/全书检索/版本 diff；opencode-go 网关 key 从 auth.json 读取不落盘；网关异常时按 D103 允许官方 key 备用）；所有 callLlmJson 的 prompt 必须含 json 字样（D41；json_object response_format 硬要求）；动态 import CJS 包在 utilityProcess 下要处理双层 default（D42）。
 45. **图标/静态渲染纪律**（P16 P3/D45）：Playwright 中 `img` 加载 `file://` SVG/PNG 被 Chromium 拦截（导致全白截图）——渲染图形必须用内联 <svg> 元素或 data URI；应用图标源文件（SVG）必须入库 resources/icon-sources/。
 46. **提示词资产纪律**（P17-5A/D50）：新增或修改系统提示词必须走 prompt_asset（sys_* ），禁止新增 SYSTEM_* 代码常量；提示词工作台编辑后删除 invalidatePromptCache。
 47. **检索后端接口纪律**（P17-5B/D51）：知识库检索统一走 Retriever 接口（TfidfRetriever 默认 / EmbeddingRetriever 预留）；新后端实现接口不侵入上下文组装逻辑；引入 embedding 供应商时在设置页切换后端。
