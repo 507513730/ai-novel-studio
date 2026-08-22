@@ -1,6 +1,6 @@
 # AI-Novel-Studio · AI Agent 协作者手册
 
-> **新 AI agent 进场必读**（配合 `AGENTS.md` 与 `PLAN.md` 当前阶段章节）。
+> **新 AI agent 进场必读**（配合 `AGENTS.md` 与 `PLAN.md`——当前版；历史阶段编年史在 `docs/archive/PLAN-history.md`）。
 > 本文档是聚合与上下文入口：纪律详见 AGENTS.md，架构详见 docs/architecture.md，查证历史详见 docs/decision-log.md。
 > 本文档维护规范见 §17（防过时机制——读完全文请回来对照执行）。
 
@@ -28,7 +28,7 @@
 ## 2. 任务工作流（每次任务）
 
 ### 阶段 0 · 进场（首次）
-1. 读完本文档 → `AGENTS.md` → `PLAN.md` 当前阶段章节 → `docs/decision-log.md` 最近 10 条
+1. 读完本文档 → `AGENTS.md` → `PLAN.md`（当前版；历史阶段清单按需查 `docs/archive/PLAN-history.md`）→ `docs/decision-log.md` 最近 10 条
 2. `pnpm install`（依赖已锁定——勿随意升级，见 AGENTS 纪律 #2）
 3. **安装 pre-push 门禁钩子（一次性）**：`git config core.hooksPath scripts/git-hooks`——push 前自动跑三绿，未过拦截（AGENTS #60b 强制层；新 clone 必须执行）
 4. `pnpm dev` 跑通（Electron 三进程；dev 固定端口 3000，浏览器可直连调试）
@@ -59,14 +59,14 @@
 > **push 由 pre-push hook 强制门禁**（阶段 0 安装）：`git push` 前自动跑 typecheck/lint/test 三绿，未过拦截——所有 agent 与手操均无法绕过（AGENTS #60b）。
 
 ### 阶段 5 · 台账（写时更新）
-- `PLAN.md` 对应阶段勾选 `[x]` + 新版本记录
+- `PLAN.md`（当前版版本记录）更新；历史阶段清单勾选在 `docs/archive/PLAN-history.md`（2026-08-22 起归档，append-only 保留）
 - 重大变更/查证 → `docs/decision-log.md`（D 系列：`### D## · 日期 · 主题` + 结论 + 来源）
 - 功能/修复 → `docs/CHANGELOG.md`（发版时）
 - **onboarding 相关章节若被本次改动触及 → 同步回写**（§17 变更驱动纪律）
 
 ### 阶段 6 · 发布（仅用户批准）
 - `pnpm release --bump=minor|patch --push`（7 步自动：工作区检查 → bump → verify-docs 台账 → 全量验证 → dist → 提交推 tag → CI + 打包态等价验收 PASS 门槛）
-- 台账三件：CHANGELOG 补 `[Unreleased]` 占位 / versioning §7 行 / PLAN 记录（verify-docs 强制）
+- 台账三件：CHANGELOG 补 `[Unreleased]` 占位 / versioning §7 行 / PLAN（当前版版本记录，verify-docs 强制）
 - CI 构建 GitHub Release（exe/blockmap/**latest.yml**）→ 用户应用内自更新（更新页「设置 → 更新」）
 
 ### 阶段 7 · 收尾（完成即推送——AGENTS #60b）
@@ -214,7 +214,7 @@ node out/main/server.js
 
 ### 流程
 1. `pnpm release --bump=minor|patch --push`（或先手工 bump 后 `--push`）
-2. 若 [3/7] verify-docs 失败 → 补台账：CHANGELOG 当前版本段 + `[Unreleased]` 占位、versioning §7 行、PLAN 记录 → 提交 → 重跑
+2. 若 [3/7] verify-docs 失败 → 补台账：CHANGELOG 当前版本段 + `[Unreleased]` 占位、versioning §7 行、PLAN（当前版版本记录）→ 提交 → 重跑
 3. [5/7] 本地 dist；[6/7] 提交 + tag 推送；[7/7] CI 构建 Release（等 5-10 分钟）→ `node scripts/release.mjs --release-notes-only` 补 Release body
 4. 打包态等价验收 PASS 是放行门槛（release.mjs 自动跑，失败则修）
 5. 用户应用内「设置 → 更新」自升级（差分 blockmap → 重启安装）
@@ -248,10 +248,11 @@ node out/main/server.js
 |---|---|
 | 本文档 | 每次进场 + 任务开始 |
 | AGENTS.md | 任何代码改动前（61+ 硬纪律） |
-| PLAN.md | 了解阶段清单与版本记录；任务对应章节 |
+| PLAN.md | 了解当前状态/版本记录/遗留 backlog；历史编年史（P0-P30+ 清单）在 docs/archive/PLAN-history.md |
 | docs/architecture.md | 理解进程模型/数据流/目录导览 |
 | docs/decision-log.md | 查证结论与历史决策（D 系列）；新查证回填 |
 | docs/versioning.md | 发版；1.0 判据；台账 |
+| docs/archive/PLAN-history.md | 完整实施编年史（历史阶段清单/版本记录；需查历史时读） |
 | docs/CHANGELOG.md | 各版本发布说明；发版时更新 |
 | docs/getting-started.md / README.md | 用户向内容 |
 

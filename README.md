@@ -1,8 +1,8 @@
 # AI-Novel-Studio · AI 小说创作工作台
 
-<!-- 仓库整理（2026-08-12）：shields badge——版本/测试/License/平台 -->
+<!-- 仓库整理（2026-08-12）：shields badge——版本/CI/License/平台 -->
 ![Release](https://img.shields.io/github/v/release/507513730/ai-novel-studio?label=Release)
-![Tests](https://img.shields.io/badge/tests-155%20passing-brightgreen)
+![CI](https://img.shields.io/github/actions/workflow/status/507513730/ai-novel-studio/release-readiness.yml?branch=main&label=CI)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-8A2BE2)
 
@@ -16,13 +16,14 @@
 
 - **自动导演**：11 阶段整本生产链（灵感 → 方向 → 设定 → 宏观 → 世界观 → 角色 → 卷 → 节奏 → 拆章 → 细化 → 可写），全自动/半自动双模式，检查点恢复；任务看门狗与取消感知
 - **创造工坊**：一句话 → AI 生成创作方案（智能体流水线）；可视化编辑/试运行/保存；支持导入 Feelfish 智能体定义与方案；技能体系 + 智能体资产化
-- **章节执行链**：生成（SSE 流式 + 引导输入框）→ AI 审核 → 修复（局部补丁优先）→ 状态回灌；版本历史可查看/恢复、30 秒自动保存、反 AI 词自动重写
+- **章节执行链**：生成（SSE 流式 + 引导输入框）→ AI 审核 → 修复（局部补丁优先）→ 状态回灌；版本历史可查看/恢复/对比 diff、30 秒自动保存、反 AI 词自动重写
+- **阅读与检索（v0.24.2）**：章节阅读/复盘模式（.prose 排印 + 字号可调 + 上下章导航）；书内全文检索（正文/角色/设定/伏笔/事实/知识库分组）；方案一键整本生产（绑定方案 → job 队列逐章流水线）
 - **方案生产流水线**：书级绑定生产方案后，整本批量生产逐章走智能体接力（大纲→片段→审校→最终合并），已真机验证 Feelfish mc-good2.0 10 步方案跑通
 - **资产库统一建设**：知识库 / 世界样本库 / 推进模式库 / 写法引擎 / 流派管理 / 反 AI 规则 / 标题工坊 / 基础角色库 / 拆书——上传文件（TXT/MD/EPUB 自动分章）+ 粘贴文本 + AI 提取草稿 → 人工修改 → 保存
 - **任务中心**：后台任务统一管理，失败可换模型重试/从断点继续
 - **模型路由**：任务级模型分配 + 供应商 fallback + 成本仪表盘（缓存命中率 + 质量债追踪）
 - **OpenCode Go 网关**：一键导入订阅凭证，聚合 DeepSeek/GLM/GPT/Grok/Kimi 等模型
-- **多主题 / 字体排版**：6 套界面主题；3 款打包开源字体 + 5 款系统字体，首行缩进/行距/字号/阅读宽度可调
+- **多主题 / 字体排版**：7 套界面主题（含 sepia 暖色文学风）；3 款打包开源字体 + 5 款系统字体，首行缩进/行距/字号/阅读宽度可调
 
 ## 快速上手
 
@@ -44,7 +45,7 @@ pnpm install
 pnpm dev            # 开发（electron-vite 三端）
 pnpm typecheck      # 类型检查
 pnpm lint           # ESLint
-pnpm test           # vitest 单测（155 项）
+pnpm test           # vitest 单测（数量以 pnpm test 为准）
 pnpm db:smoke       # 数据库冒烟（7 项）
 pnpm release        # 发布流程（文档检查/验证/本地构建/推送，--push 半自动）
 pnpm dist           # 打包 NSIS 安装版 + portable
@@ -64,6 +65,7 @@ pnpm dist           # 打包 NSIS 安装版 + portable
 - [📖 入门教程](docs/getting-started.md)：第一次使用的完整路径
 - [docs/README.md](docs/README.md)：全部文档索引（架构 / 变更日志 / 决策日志 / 版本规范 / 审查追踪 / 测试报告）
 - [docs/CHANGELOG.md](docs/CHANGELOG.md)：版本变更记录（Keep a Changelog 格式）
+- [PLAN.md](PLAN.md)：当前计划（定位/进度/遗留）；历史编年史见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md)
 
 ## 目录结构
 
@@ -78,7 +80,7 @@ docs/          架构 / 变更日志 / 决策日志 / 版本规范 / 审查追�
 
 ## 测试
 
-- `pnpm test`：155 项单测（补丁修复/导演/SSE 取消/成本估算/模型覆盖/世界渲染/方案资产/引导系统/创作约束/记忆面/审查回归/字数覆盖语义/UI 主题）
+- `pnpm test`：vitest 单测（补丁修复/导演/SSE 取消/成本估算/模型覆盖/世界渲染/方案资产/引导系统/创作约束/记忆面/审查回归/字数覆盖语义/UI 主题/版本 diff/全文检索，178+ 项）
 - `node scripts/e2e/round.mjs <n>`：全功能 e2e（T1 配置/T2 创作链/T3 资产/T4 导演）
 
 ## 贡献

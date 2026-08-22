@@ -4,7 +4,14 @@
 
 ## [Unreleased]
 
-## v0.24.2（2026-08-16）
+### 文档治理（2026-08-22，免发版）
+
+- **乱码清零**：decision-log 头部 / test-report / calibration-report / audit-report P21 段编码损坏重建或删除（正文数据完好，仅标题/表头损坏）；全库扫描 0 残 0x3F
+- **README 修正**：静态 tests badge → GitHub Actions 状态 badge（动态）；硬编码数字清扫（178+ 测试 / 7 套主题）；补录 v0.24.2 能力
+- **架构对齐**：architecture.md 与实现一致化（RAG 标注条件启用、whole_book 标注已落地 v0.24.2、侧栏 21 项/路由 15 文件等目录数字）
+- **PLAN 归档**：完整实施编年史 → `docs/archive/PLAN-history.md`；根 PLAN.md 精简为当前版（定位/进度/版本记录/遗留）；AGENTS/onboarding 引用同步
+
+## v0.24.2（2026-08-22）
 
 ### 安装方式
 - **安装版**：`AI-Novel-Studio Setup 0.24.2.exe`（NSIS 向导版）

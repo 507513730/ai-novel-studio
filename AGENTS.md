@@ -2,7 +2,7 @@
 
 ## 每次任务前必读
 - **新 AI agent 进场先读 `docs/AI-AGENT-ONBOARDING.md`**（协作者手册：工作流/验证门禁/实战教训/协作边界——v0.21.0 起，verify-docs 守护其一致性）
-- **先读 `PLAN.md` 对应阶段章节**，按清单勾选进度 `[x]`，完成后更新
+- **先读 `PLAN.md`（当前版）**；历史阶段清单/版本记录（P0-P30+ 编年史）在 `docs/archive/PLAN-history.md`（2026-08-22 文档治理归档）
 - 每阶段结束必须跑：`pnpm typecheck` + `pnpm lint`
 - **测试 Key 纪律（2026-08-09 起）**：所有 E2E/校准/连通性测试**优先使用 OpenCode Go 网关 key**（来源：`~/.local/share/opencode/auth.json` 的 `opencode-go` 条目；端点 `https://opencode.ai/zen/go/v1`，OpenAI 兼容）。校准脚本传参示例：
   ```powershell
@@ -29,7 +29,7 @@
 14. **打包态早验证**：打包后 server 入口、资源路径、db 路径必须以应用目录为基准（app.getPath('userData')），P0 必须做打包冒烟，不拖到 P6。
 15. **模型路由 fallback**：model_route 必须支持 fallback 链（主模型失败自动降级），usage_log 记录 degraded 标记。
 16. **代码规范**：不写无关注释；文件命名与现有结构一致；新组件先看同类已有组件。
-17. **调研-更新闭环（强制）**：实现中遇到技术阻碍或不确定的 API/参数，**必须先上网查官方文档核实（禁止凭记忆写）**；结论必须回写 PLAN.md（§12 技术决策日志或对应章节）后才能继续。每阶段验收前自查本约束是否违反。
+17. **调研-更新闭环（强制）**：实现中遇到技术阻碍或不确定的 API/参数，**必须先上网查官方文档核实（禁止凭记忆写）**；结论必须回写 `docs/decision-log.md`（D 系列——原 PLAN §12 已外移）后才能继续。每阶段验收前自查本约束是否违反。
 18. **node:sqlite 使用纪律**（Electron 43 = Node 24.17，模块为 RC 状态）：**只用核心路径**——`prepare()` + `get/all/iterate/run` + `exec('BEGIN/COMMIT/ROLLBACK')` + `timeout` 选项（busy_timeout 默认 0 必须显式设置）+ `PRAGMA journal_mode=WAL` + `enableForeignKeyConstraints`；**禁用** SQLTagStore、自定义函数（database.function/aggregate）、applyChangeset/Session、loadExtension（这些有 segfault 级 open bug，见 nodejs/node #65149/#65102/#64795）。数据层必须封装 DAO 薄接口，隔离 DatabaseSync 细节，便于必要时切换。
 19. **服务安全边界**：本地 Express 只监听 `127.0.0.1` + 随机端口（`port: 0`），禁止固定端口（dev 模式除外，AI_NOVEL_PORT=3000）；**CORS 必须用 services/security.ts 的 originGuard 白名单（P2.2 #1/D20）**：允许 `null`(file://) + localhost/127.0.0.1 任意端口 + dev 5173，其他 Origin 403；禁止全开 cors()；app 退出钩子必须 server.close + kill utilityProcess，禁止 Windows 孤儿进程。
 20. **API 字段命名**：所有 REST API 返回统一 camelCase，与 shared/types 对齐；禁止 snake_case 直出（参考 D5 教训）。新增路由时必须核对客户端类型。
@@ -98,7 +98,7 @@ docs/          校准报告 + P9 体验修复明细
 54. **方案生成纪律**：/solutions/generate 必须走 callLlmJson + schema 校验 + 限次重试；长任务超时按 90s 处理；降级时记录 degradedReasons。
 
 55. **发布流程纪律**：版本发布必须走 `pnpm release`（scripts/release.mjs，含 versioning.md §3 校验），禁止手动改版本/tag；发布前必须执行 `pnpm dist`（产物在 release/），发布走 GitHub Release。
-56. **文档同步纪律**：功能/修复/版本变更同步更新 docs/README.md；重大变更记入 CHANGELOG.md / PLAN.md / decision-log.md；发版必须同步 CHANGELOG。**v0.21.0 起：机制/纪律/教训变更若触及 `docs/AI-AGENT-ONBOARDING.md` 章节（§6/§8/§11/§14）必须同批回写**（onboarding 保鲜纪律，verify-docs 守护存在性与锚点）。
+56. **文档同步纪律**：功能/修复/版本变更同步更新 docs/README.md；重大变更记入 CHANGELOG.md / decision-log.md / PLAN.md（当前版版本记录；历史编年史在 docs/archive/PLAN-history.md）；发版必须同步 CHANGELOG。**v0.21.0 起：机制/纪律/教训变更若触及 `docs/AI-AGENT-ONBOARDING.md` 章节（§6/§8/§11/§14）必须同批回写**（onboarding 保鲜纪律，verify-docs 守护存在性与锚点）。
 
 57. **发版纪律（v0.22.3 分层决议，D97）**：发布类型分层——**PATCH 修复**：src 改动被 CI release-readiness 强制 bump + 发布（合规路径，非"乱发版"——禁止绕过 CI 或制造空版本）；**MINOR 功能批**：批次完成即 `pnpm release --push`；**MAJOR**：1.0 判据达成。**免发版**：仅 docs/scripts/tests 改动（CI 不拦）——按 #60b 完成即推送，无需 bump。"改动即发版不可取"限定为：无 CI 依据的 bump、重复发版、仅文档改动 bump。release/ 产物 = 正式交付，变更必须记入 PLAN/decision-log。优先级：CI 硬约束（release-readiness）> 字面纪律。
 58. **CI 纪律**：CI 失败必须本地复现修复，禁止用 if: false 跳过流程或静默吞错。
