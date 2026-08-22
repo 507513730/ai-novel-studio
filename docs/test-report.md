@@ -251,3 +251,11 @@
 | T2 创作主链（R10） | 30 | 0 |  | novelId=1 |
 | T3 资产与智能（R10） | 6 | 0 |  |  |
 | T4 导演与恢复（R10） | 7 | 0 |  |  |
+
+## v0.24.2（2026-08-22）
+| 验证项 | 结果 | 说明 |
+| vitest 单测 | 178/178 | +12（diff 7 / 检索+方案整本 5） |
+| typecheck / lint / db-smoke / verify-docs | 0 错 / 0 错 / 7/7 / 10 项一致 | 7 warning 均为既有 |
+| e2e R10（官方 DeepSeek 直连） | T1 10/10 + T2 30/30 + T3 6/6 + T4 7/7 | R8/R9 网关对照见上表（网关降速非代码回归） |
+| 打包态等价验收（release.mjs [7/7]） | PASS | Origin:null + token：SSE/导出/鉴权 |
+| CI（run 32579060752） | 通过 | tag v0.24.2 → GitHub Release 4 资产 + latest.yml |
