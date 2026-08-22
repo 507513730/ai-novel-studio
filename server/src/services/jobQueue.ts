@@ -69,6 +69,27 @@ export function enqueueTypedJob(
   return { jobId: Number(result.lastInsertRowid) }
 }
 
+// v0.24.2（F4）：整本生产入队（production 型，原子查重）——自动化路由与方案整本入口共用
+export function enqueueProductionJob(
+  db: DatabaseSync,
+  novelId: number,
+  range?: { from: number; to: number }
+): { jobId: number } | { conflict: true } {
+  const result = db
+    .prepare(
+      `INSERT INTO job (type, status, progress, payload_json)
+       SELECT 'production', 'queued', 0, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM job
+         WHERE type = 'production' AND status IN ('queued','running')
+           AND json_extract(payload_json, '$.novelId') = ?
+       )`
+    )
+    .run(JSON.stringify({ novelId, ...(range ? { from: range.from, to: range.to } : {}) }), novelId)
+  if (Number(result.changes) === 0) return { conflict: true }
+  return { jobId: Number(result.lastInsertRowid) }
+}
+
 // v0.8.0（审查 #8）：执行中止感知——取消（cancelled）或 watchdog 超时回收（failed + watchdog: 前缀）都中止
 // watchdog 只改状态不中止执行 → 此前"假 failed"后流水线继续写库；现在每章/阶段边界自检后退出
 export function isJobAborted(db: DatabaseSync, jobId: number): boolean {

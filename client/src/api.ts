@@ -4,6 +4,8 @@ import type {
   CharacterData,
   NovelDetail,
   NovelSummary,
+  SearchResults,
+  VersionDiffInfo,
   VolumeData,
   WorldData
 } from './types'
@@ -197,6 +199,12 @@ export const novelApi = {
     j(`/novels/${id}/chapters/${chapterId}/versions/${versionId}`),
   chapterVersionRestore: (id: number, chapterId: number, versionId: number): Promise<{ content: string; wordCount: number }> =>
     js(`/novels/${id}/chapters/${chapterId}/versions/${versionId}/restore`, { method: 'POST' }),
+  // v0.24.2（F3）：版本对比当前（行级 diff）
+  chapterVersionDiff: (id: number, chapterId: number, versionId: number): Promise<VersionDiffInfo> =>
+    j(`/novels/${id}/chapters/${chapterId}/versions/${versionId}/diff`),
+  // v0.24.2（F2）：书内全文检索
+  search: (id: number, q: string): Promise<SearchResults> =>
+    j(`/novels/${id}/search?q=${encodeURIComponent(q)}`),
   fix: (id: number, chapterId: number): Promise<{ fixed: boolean; round: number; content: string; rescore?: { score: number; needsFix: boolean; passed: boolean } }> =>
     js(`/novels/${id}/chapters/${chapterId}/fix`, { method: 'POST' }),
   backfill: (id: number, chapterId: number): Promise<Record<string, unknown>> =>
@@ -265,6 +273,9 @@ export const studioApi = {
   // v0.23.1（批次 D1）：迁 job 队列——返回 jobId，结果（字数/降级/步骤输出）经 waitForJob 的 result 消费
   solutionProduceChapter: (id: number, novelId: number, chapterId: number): Promise<{ jobId: number }> =>
     js(`/solutions/${id}/produce-chapter`, { method: 'POST', body: JSON.stringify({ novelId, chapterId }) }),
+  // v0.24.2（F4）：方案一键整本生产（绑定方案 → production job）
+  solutionProduceBook: (id: number, novelId: number): Promise<{ jobId: number; pending: number }> =>
+    js(`/solutions/${id}/produce-book`, { method: 'POST', body: JSON.stringify({ novelId }) }),
   solutionExport: (id: number): Promise<string> => j(`/solutions/${id}/export`),
   solutionImport: (bundle: string): Promise<{ solutionId: number; name: string }> =>
     js('/solutions/import', { method: 'POST', body: JSON.stringify({ bundle }) }),

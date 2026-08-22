@@ -1,6 +1,6 @@
 {
   "name": "ai-novel-studio",
-  "version": "0.24.1",
+  "version": "0.24.2",
   "description": "AI 小说创作工作台 - AI Novel Production Engine Desktop",
   "main": "out/main/index.js",
   "author": "ai-novel-studio",

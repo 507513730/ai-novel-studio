@@ -1104,3 +1104,12 @@ pnpm --version   # 应 ≥10
 - [x] **页面拆分**：SettingsPage 1250→46 行壳+6 面板文件（pages/settings/）；ChapterExecutionPage 1976→1842（叶子组件拆 pages/chapter/，编辑器核心保留）
 - [x] **构建**：@codemirror/language/state/view 显式声明（消除 shamefully-hoist 依赖）
 - [x] **验收**：166/166 + e2e R7 全绿 + 已发布 v0.24.1
+
+### v0.24.2 · 2026-08-16 · 功能优化批 F（F1 阅读视图 / F2 全书检索 / F3 版本 diff / F4 方案整本入口）
+
+- [x] **F1 章节阅读/复盘视图**：ChapterExecutionPage 编辑/阅读双模式 + `pages/chapter/ReadingView.tsx`（复用 .prose 排印、字号 13-24px 持久化、上一章/下一章、字数·我的·AI 统计）——直接服务"每卷完成抽读"验收；新增 shared `VersionDiffInfo/SearchResults` 类型
+- [x] **F2 书内全文检索**：`GET /:novelId/search`（章节/角色/设定/伏笔/事实/知识库 分组 + 命中窗口 snippet + LIKE 通配符转义 + 分组 LIMIT 护栏）+ `BookSearchPanel`（300ms 防抖 + seq 丢弃过期响应）
+- [x] **F3 版本 diff**：`services/diff.ts`（行级 Myers 零依赖：公共前后缀修剪 + 中间段超限退化保护）+ `GET .../versions/:id/diff` + 版本历史「对比当前」（增删着色走 CSS 变量）；单测 7 项
+- [x] **F4 方案整本生产入口**：`POST /solutions/:id/produce-book`（校验启用/含 whole_book 步骤/有待生成章节 → 绑定 current_solution_id → `enqueueProductionJob` 与 /produce 共用原子查重）+ StudioPage「整本生产」按钮；`runSolutionById` 对 whole_book 步骤改跳过留痕（消除"整本模式预留未实现"误导）；**回灌幂等核对**：runProductionChapter 自带快照不含回灌——整本管道第 5 步是唯一回灌点，无重复写入
+- [x] **验证**：typecheck/lint 0 error、vitest 178/178（+12）、db-smoke 7/7、build、dist 双产物
+- [x] 台账：CHANGELOG v0.24.2 段 + versioning §7 行（发布后补 ✅ 状态）

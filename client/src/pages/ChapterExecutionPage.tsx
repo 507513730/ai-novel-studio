@@ -9,7 +9,7 @@ import { novelEditorTheme } from '../editor/theme'
 import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, waitForJob } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
-import type { WorldData } from '../types'
+import type { VersionDiffInfo, WorldData } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
@@ -32,6 +32,8 @@ function countCjk(text: string): number {
 import { CharStateAdd, FactionStateEdit } from './chapter/MemoryInputs'
 import { DebtFixBadge } from './chapter/DebtFixBadge'
 import { ChapterListItem } from './chapter/ChapterListItem'
+import { ReadingView } from './chapter/ReadingView'
+import { BookSearchPanel } from './chapter/BookSearchPanel'
 
 export function ChapterExecutionPage(): React.JSX.Element {
   const { novelId } = useParams()
@@ -100,6 +102,8 @@ const selectedChapterRef = useRef<number | null>(null)
   const hanCount = useMemo(() => (content.match(/[\u4e00-\u9fff]/g) ?? []).length, [content])
   // P27 1-6：正文自动保存节流
   const [focusMode, setFocusMode] = useState(false)
+  // v0.24.2（F1）：阅读/复盘视图模式
+  const [viewMode, setViewMode] = useState<'edit' | 'read'>('edit')
   // A1：选区/光标状态（ref 缓存防 onUpdate 无限重渲染）
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; cursor: number }>({ text: '', cursor: -1 })
   const selectionRef = useRef({ text: '', cursor: -1 })
@@ -110,6 +114,8 @@ const selectedChapterRef = useRef<number | null>(null)
   // A3：版本历史
   const [versions, setVersions] = useState<Array<{ id: number; note: string; createdAt: string; wordCount: number; preview: string }> | null>(null)
   const [showVersions, setShowVersions] = useState(false)
+  // v0.24.2（F3）：版本对比当前 diff（恢复前检视）
+  const [versionDiff, setVersionDiff] = useState<VersionDiffInfo | null>(null)
   // B1：写作上下文可视化
   const [ctxSections, setCtxSections] = useState<Array<{ key: string; label: string; chars: number; tokens: number }> | null>(null)
   const [ctxToggles, setCtxToggles] = useState<Record<string, boolean> | null>(null)
@@ -283,6 +289,8 @@ const selectedChapterRef = useRef<number | null>(null)
   })
   const list = chapters.data?.chapters ?? []
   const chapter = list.find((c) => c.id === selectedChapter)
+  // v0.24.2（F1）：阅读视图上一章/下一章定位
+  const chapterIdx = list.findIndex((c) => c.id === selectedChapter)
   // v0.22.2：正文进度轻提示（剩余/失败章——"点进来不知道该干嘛"的场景引导）
   const chapterStats = useMemo(() => {
     const written = list.filter((c) => c.status === 'written' || c.status === 'reviewed' || c.status === 'done').length
@@ -792,6 +800,7 @@ const selectedChapterRef = useRef<number | null>(null)
       const r = await novelApi.versions(id, selectedChapter)
       setVersions(r.versions)
       setShowVersions(true)
+      setVersionDiff(null)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
     }
@@ -860,6 +869,8 @@ const selectedChapterRef = useRef<number | null>(null)
     humanDeltaRef.current = 0
     setWordStats({ ai: 0, human: 0 })
     setSuggestion(null)
+    // v0.24.2（F3）：切章重置版本 diff
+    setVersionDiff(null)
     void novelApi
       .chapterDetail(id, selectedChapter)
       .then((d) => {
@@ -1011,6 +1022,8 @@ const selectedChapterRef = useRef<number | null>(null)
 
         {resourceTab === 'chapters' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {/* v0.24.2（F2）：书内全文检索 */}
+            <BookSearchPanel novelId={id} onSelectChapter={(cid) => void selectChapter(cid)} />
             {list.map((c) => (
               // P22-C1：memo 化列表项（100+ 章时避免整列表重渲染）
               <ChapterListItem
@@ -1189,6 +1202,14 @@ const selectedChapterRef = useRef<number | null>(null)
             <button onClick={() => void generate()} disabled={streaming || !selectedChapter || contentLoading}>
               {streaming ? '生成中…' : 'AI 生成正文'}
             </button>
+            {/* v0.24.2（F1）：阅读/复盘模式切换（干净排版预览正文，服务抽读验收） */}
+            <button
+              title={viewMode === 'read' ? '返回编辑模式' : '阅读模式：干净排版预览（抽读/复盘）'}
+              disabled={streaming || contentLoading}
+              onClick={() => setViewMode((m) => (m === 'read' ? 'edit' : 'read'))}
+            >
+              {viewMode === 'read' ? '✏️ 编辑' : '📖 阅读'}
+            </button>
             {/* v0.22.2：正文进度轻提示——剩余/失败章一目了然 */}
             {chapterStats.total > 0 && (chapterStats.remaining > 0 || chapterStats.failed > 0) && (
               <span className="muted t-small" style={{ alignSelf: 'center' }}>
@@ -1257,6 +1278,20 @@ const selectedChapterRef = useRef<number | null>(null)
           onInsertAt={insertAt}
           onSave={saveContent}
         />
+        {viewMode === 'read' ? (
+          <ReadingView
+            title={chapter?.title ?? '未命名章节'}
+            content={content}
+            hanCount={hanCount}
+            aiWords={statsShow.ai}
+            humanWords={statsShow.human}
+            canPrev={chapterIdx > 0}
+            canNext={chapterIdx >= 0 && chapterIdx < list.length - 1}
+            onPrev={() => { const p = list[chapterIdx - 1]; if (p) void selectChapter(p.id) }}
+            onNext={() => { const n = list[chapterIdx + 1]; if (n) void selectChapter(n.id) }}
+            onBackToEdit={() => setViewMode('edit')}
+          />
+        ) : (
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
           <CodeMirror
             value={content}
@@ -1362,6 +1397,7 @@ const selectedChapterRef = useRef<number | null>(null)
             </div>
           )}
         </div>
+        )}
         <div style={{ padding: '6px 14px', borderTop: '1px solid var(--border)', fontSize: 12 }} className="muted">
           {streamStat && <span style={{ color: 'var(--accent-bright)' }}>{streamStat}</span>}
           {actionMsg && <span style={{ color: 'var(--ok)' }}>{actionMsg}</span>}
@@ -1779,7 +1815,59 @@ const selectedChapterRef = useRef<number | null>(null)
                     >
                       恢复
                     </button>
+                    {/* v0.24.2（F3）：对比当前——恢复前检视差异 */}
+                    <button
+                      className="sm"
+                      disabled={actionBusy !== null}
+                      onClick={() => {
+                        if (!selectedChapter) return
+                        void withBusy(`vdiff-${v.id}`, async () => {
+                          try {
+                            const d = await novelApi.chapterVersionDiff(id, selectedChapter, v.id)
+                            setVersionDiff(d)
+                          } catch (err) {
+                            setActionError(err instanceof Error ? err.message : String(err))
+                          }
+                        })
+                      }}
+                    >
+                      对比当前
+                    </button>
                   </div>
+                  {versionDiff?.versionId === v.id && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        maxHeight: 280,
+                        overflow: 'auto',
+                        fontSize: 11,
+                        lineHeight: 1.6,
+                        background: 'var(--bg)'
+                      }}
+                    >
+                      <div className="muted t-small" style={{ padding: '4px 8px', position: 'sticky', top: 0, background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
+                        v{v.id} vs 当前：+{versionDiff.added} / -{versionDiff.removed}
+                        {versionDiff.degraded ? '（差异过大，仅逐行对照）' : ''}
+                      </div>
+                      {versionDiff.lines.map((l, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            padding: '1px 8px',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-all',
+                            background: l.type === 'add' ? 'var(--ok-soft)' : l.type === 'del' ? 'var(--danger-soft)' : undefined,
+                            color: l.type === 'add' ? 'var(--ok)' : l.type === 'del' ? 'var(--danger)' : 'var(--text-dim)'
+                          }}
+                        >
+                          {l.type === 'add' ? '+ ' : l.type === 'del' ? '- ' : '  '}
+                          {l.text || ' '}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

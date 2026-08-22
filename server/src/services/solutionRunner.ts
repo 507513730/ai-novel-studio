@@ -131,7 +131,7 @@ function buildStepPrompt(
 
 /**
  * 运行方案（chapter 级）。stage 全量执行：post_generate + review 步按声明顺序跑；
- * whole_book 步明确报错（P21 预留：整本模式执行器未实现）。
+ * whole_book 步跳过（v0.24.2 F4：整本生产由「方案 → 一键整本生产」入口驱动，不再报错）。
  */
 export async function runSolutionById(
   db: DatabaseSync,
@@ -145,9 +145,7 @@ export async function runSolutionById(
   if (!solution.enabled) throw new Error(`方案「${solution.name}」已停用`)
   const bookStages = solution.steps.filter((s) => s.stage === 'whole_book')
   if (bookStages.length > 0) {
-    throw new Error(
-      `方案「${solution.name}」包含整本模式步骤（${bookStages.map((s) => s.role).join('、')}）。整本模式执行器尚未实现（P21 预留）。`
-    )
+    console.info(`[solution:${solutionId}] 试运行跳过 ${bookStages.length} 个整本模式步骤——整本生产请使用「方案 → 一键整本生产」`)
   }
 
   const outputs: StepOutput[] = []
@@ -157,6 +155,18 @@ export async function runSolutionById(
   for (let i = 0; i < solution.steps.length; i++) {
     if (opts.signal?.aborted) break
     const step = solution.steps[i]
+    // v0.24.2（F4）：整本模式步骤不属于章节级试运行——跳过并留痕
+    if (step.stage === 'whole_book') {
+      outputs.push({
+        stepIndex: i,
+        role: step.role,
+        stage: step.stage,
+        output: '（整本模式步骤——由「方案 → 一键整本生产」执行，试运行跳过）',
+        ok: true,
+        ms: 0
+      })
+      continue
+    }
     const t0 = Date.now()
     // 条件分支（P21-5c 预留：支持对上一步输出字段长度判断）
     if (step.if && outputs.length > 0) {

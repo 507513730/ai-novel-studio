@@ -338,3 +338,30 @@ export interface Asset {
   status: string
   createdAt: string
 }
+
+/** v0.24.2（F3）：版本 diff——行级对比（对齐 GET .../versions/:versionId/diff 返回） */
+export interface DiffLine {
+  type: 'same' | 'add' | 'del'
+  text: string
+}
+
+export interface VersionDiffInfo {
+  versionId: number
+  note: string
+  createdAt: string
+  lines: DiffLine[]
+  added: number
+  removed: number
+  degraded: boolean
+}
+
+/** v0.24.2（F2）：全书检索结果（对齐 GET /:novelId/search 返回，按类型分组） */
+export interface SearchResults {
+  query: string
+  chapters: Array<{ id: number; title: string; status: string; wordCount: number; snippet: string }>
+  characters: Array<{ id: number; name: string; snippet: string }>
+  world: Array<{ snippet: string }>
+  foreshadows: Array<{ id: number; content: string; status: string }>
+  facts: Array<{ id: number; content: string }>
+  kb: Array<{ id: number; title: string; snippet: string }>
+}

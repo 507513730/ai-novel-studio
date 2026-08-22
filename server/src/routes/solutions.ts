@@ -13,7 +13,7 @@ import {
   type SolutionStep
 } from '../services/solutionAssets'
 import { runSolutionById, summarizeRun } from '../services/solutionRunner'
-import { enqueueTypedJob } from '../services/jobQueue'
+import { enqueueProductionJob, enqueueTypedJob } from '../services/jobQueue'
 import { parseAgentMd } from '../services/solutionAssets'
 
 // ============================================================
@@ -240,6 +240,46 @@ export function createSolutionsRouter(db: DatabaseSync): Router {
       return
     }
     res.status(202).json({ jobId: enq.jobId })
+  })
+
+  // ---------- v0.24.2（F4）：方案一键整本生产 ----------
+  // 校验方案可用 + 含整本模式步骤 → 绑定到书（current_solution_id）→ 入队 production job
+  // （幂等/取消/进度复用整本生产管道——book 绑定是 production.ts 选流水线模式的开关）
+  router.post('/solutions/:id/produce-book', (req, res, next) => {
+    try {
+      const id = Number(req.params.id)
+      const input = z.object({ novelId: z.number().int().positive() }).parse(req.body ?? {})
+      const solution = loadSolution(db, id)
+      if (!solution) {
+        res.status(404).json({ error: 'solution not found' })
+        return
+      }
+      if (!solution.enabled) {
+        res.status(400).json({ error: `方案「${solution.name}」已停用，请先启用` })
+        return
+      }
+      if (!solution.steps.some((s) => s.stage === 'whole_book')) {
+        res.status(400).json({ error: '方案不包含整本模式（whole_book）生产步骤——请添加后使用整本生产' })
+        return
+      }
+      const pending = db
+        .prepare("SELECT COUNT(*) AS c FROM chapter WHERE novel_id = ? AND content = ''")
+        .get(input.novelId) as { c: number }
+      if (Number(pending.c) === 0) {
+        res.status(400).json({ error: '该书没有待生成的章节' })
+        return
+      }
+      // 绑定方案（production 管道按 current_solution_id 决定是否走流水线；覆盖式绑定即用户意图）
+      db.prepare('UPDATE novel SET current_solution_id = ? WHERE id = ?').run(id, input.novelId)
+      const queued = enqueueProductionJob(db, input.novelId)
+      if ('conflict' in queued) {
+        res.status(409).json({ error: '该书已有整本生产任务在运行中' })
+        return
+      }
+      res.status(201).json({ jobId: queued.jobId, pending: Number(pending.c) })
+    } catch (err) {
+      next(err)
+    }
   })
 
   // ---------- 试运行（chapter 级） ----------

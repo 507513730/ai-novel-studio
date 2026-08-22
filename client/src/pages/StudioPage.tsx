@@ -183,6 +183,45 @@ export function StudioPage(): React.JSX.Element {
     }
   }
 
+  // v0.24.2（F4）：方案一键整本生产（草稿先保存 → 绑定方案 → 入队 production job）
+  const [producingBook, setProducingBook] = useState(false)
+  const produceBook = (): void => {
+    if (!draft || !runTarget || !runTarget.novelId) return
+    const novelTitle = novelsList.find((n) => n.id === runTarget.novelId)?.title ?? `#${runTarget.novelId}`
+    setError(null)
+    confirmFn({
+      title: '方案整本生产',
+      message: `把方案「${draft.name}」绑定到《${novelTitle}》并启动整本生产（按方案流水线逐章生成，进度见任务中心）？`,
+      confirmText: '启动',
+      action: () =>
+        void (async () => {
+          setProducingBook(true)
+          try {
+            let id = draft.id
+            if (isNew) {
+              const r = await studioApi.solutionCreate({
+                name: draft.name,
+                description: draft.description,
+                primaryAgentId: draft.primaryAgentId,
+                steps: draft.steps as unknown as Array<Record<string, unknown>>
+              })
+              id = r.id
+              setIsNew(false)
+              setSelectedId(id)
+              await queryClient.invalidateQueries({ queryKey: ['studio-solutions'] })
+            }
+            const r = await studioApi.solutionProduceBook(id, runTarget.novelId)
+            toast('ok', `已启动整本生产（${r.pending} 章待生成），可在任务中心查看进度`)
+            setRunResult({ run: { degraded: false }, summary: `整本生产已入队（job #${r.jobId}），待生成 ${r.pending} 章` })
+          } catch (err) {
+            setError(err instanceof Error ? err.message : String(err))
+          } finally {
+            setProducingBook(false)
+          }
+        })()
+    })
+  }
+
   // 导出/导入
   const exportCurrent = async (): Promise<void> => {
     if (!draft || isNew) return
@@ -618,9 +657,18 @@ export function StudioPage(): React.JSX.Element {
                   <button className="sm primary" disabled={running || !runTarget || runTarget.chapterId <= 0} onClick={() => void runDraft()}>
                     <Play size={13} className="icon-gap" />{running ? '运行中…' : '跑一遍'}
                   </button>
+                  {/* v0.24.2（F4）：方案整本生产入口（绑定方案 → production job） */}
+                  <button
+                    className="sm"
+                    disabled={producingBook || running || !runTarget || runTarget.novelId <= 0}
+                    onClick={produceBook}
+                    title="按方案整本模式步骤逐章生产（绑定到所选小说，任务中心看进度）"
+                  >
+                    <Play size={13} className="icon-gap" />{producingBook ? '启动中…' : '整本生产'}
+                  </button>
                 </div>
                 <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-                  在所选章节上执行完整方案（每步真实调用模型）。整本模式步骤会报错（预留）。
+                  在所选章节上执行完整方案（每步真实调用模型）。整本模式步骤由「整本生产」执行（按方案流水线逐章生产）。
                 </p>
                 {runResult && (
                   <div style={{ marginTop: 10 }}>

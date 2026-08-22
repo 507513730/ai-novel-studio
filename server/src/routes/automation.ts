@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { directorProgress } from '../services/director'
 import { hubChat } from '../services/hub'
-import { enqueueDirectorJob } from '../services/jobQueue'
+import { enqueueDirectorJob, enqueueProductionJob } from '../services/jobQueue'
 
 /** v0.17.0（LOW）：安全 JSON 解析（损坏数据兜底） */
 function safeParseJson(v: unknown): unknown {
@@ -247,27 +247,17 @@ export function createAutomationRouter(db: DatabaseSync): Router {
       }
       // v0.9.0（审查 D）：原子插入防重（INSERT...WHERE NOT EXISTS）——此前 check-then-insert 两步
       // 并发 POST 可双插入（TOCTOU），调度器串行执行时第二个变成空跑
-      const result = db
-        .prepare(
-          `INSERT INTO job (type, status, progress, payload_json)
-           SELECT 'production', 'queued', 0, ?
-           WHERE NOT EXISTS (
-             SELECT 1 FROM job WHERE type = 'production' AND status IN ('queued','running')
-               AND json_extract(payload_json, '$.novelId') = ?
-           )`
-        )
-        .run(
-          JSON.stringify({
-            novelId,
-            ...(input.from !== undefined && input.to !== undefined ? { from: input.from, to: input.to } : {})
-          }),
-          novelId
-        )
-      if (Number(result.changes) === 0) {
+      // v0.24.2（F4）：入队逻辑收编 enqueueProductionJob（与方案整本入口共用）
+      const queued = enqueueProductionJob(
+        db,
+        novelId,
+        input.from !== undefined && input.to !== undefined ? { from: input.from, to: input.to } : undefined
+      )
+      if ('conflict' in queued) {
         res.status(409).json({ error: '生产任务已在运行中' })
         return
       }
-      res.status(201).json({ jobId: Number(result.lastInsertRowid), pending: pending.c })
+      res.status(201).json({ jobId: queued.jobId, pending: pending.c })
     } catch (err) {
       next(err)
     }
