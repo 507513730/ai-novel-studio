@@ -478,7 +478,7 @@ if (PUSH) {
   console.log('  □ CI 通过（gh run list）')
   console.log('  □ Release 资产齐全（gh release view v' + version + '）')
 }
-console.log('  □ test-report.md 追加版本验证记录')
+console.log('  □ 发布级测试报告汇总（release/e2e-report.md 详情轮次——需要时 E2E_REPORT=docs/test-report.md 重跑收集）')
 console.log('  □ 本地安装验证（可选）')
 console.log('  □ 发现问题？→ docs/versioning.md §8 回滚决策树')
 

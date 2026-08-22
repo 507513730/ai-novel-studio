@@ -7,8 +7,9 @@ import { api, apiTry, ok, startRound, finishRound, sleep } from './common.mjs'
 
 const round = Number(process.argv[2] ?? 1)
 const tag = `LB${round}`
-// v0.23.1（批次 B4）：报告路径改为仓库相对（E2E_LB_REPORT 可覆盖）
-const report = process.env.E2E_LB_REPORT ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'longbook-report.md')
+// v0.23.1（批次 B4）：报告路径改为仓库相对（E2E_LB_REPORT 可覆盖）；
+// v0.24.3（文档治理）：默认写入 release/（gitignored）
+const report = process.env.E2E_LB_REPORT ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'release', 'longbook-report.md')
 const append = (line) => appendFileSync(report, line + '\n')
 
 const INSPIRATION = `失业程序员林默偶然获得"物忆"异能：触碰任何旧物即可读取其残留的情感记忆。他在临江古玩街开了一家修复工作室，却卷入三十年前一场伪造国宝的惊天调包案——真品下落不明，师父的遗言指向五个看似无关的器物。随着记忆碎片拼合，他发现自己触碰的不仅是器物，还有死者临死前的真相，而凶手也拥有类似的能力，正在猎杀所有知情者。`

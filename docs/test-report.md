@@ -1,6 +1,6 @@
 # 测试报告（单测 / e2e / 发布验证）
 
-> 本报告为追加式记录（e2e 轮次由 scripts/e2e 追加；版本验证段按发布批次记录）。
+> 本文件为**发布级测试记录**（人工/发布时维护）；e2e 详情轮次默认由 scripts/e2e 写入 `release/e2e-report.md`（gitignored，`E2E_REPORT=docs/test-report.md` 可覆盖回写成发布级记录）。
 > ⚠️ 旧版本验证记录（P20 ~ v0.14.0，2026-08-11~12）在早期编码事故中损坏（0x3F，不可恢复）——
 > 该区间要点以 PLAN §12 / CHANGELOG / git 提交信息为准；v0.14.0 起记录完好。
 

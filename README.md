@@ -1,5 +1,7 @@
 # AI-Novel-Studio · AI 小说创作工作台
 
+**中文** | [English](README.en.md)
+
 <!-- 仓库整理（2026-08-12）：shields badge——版本/CI/License/平台 -->
 ![Release](https://img.shields.io/github/v/release/507513730/ai-novel-studio?label=Release)
 ![CI](https://img.shields.io/github/actions/workflow/status/507513730/ai-novel-studio/release-readiness.yml?branch=main&label=CI)
@@ -7,6 +9,16 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-8A2BE2)
 
 面向长篇小说创作的 **AI 导演式生产系统**（Electron 桌面应用）：从一句灵感推进到完整小说——规划、生成、审核、修复、状态回灌全链路。
+
+<p align="center">
+  <img src="docs/images/novel-list.png" alt="小说列表（书目卡片 + 侧栏导航）" width="720" />
+  <br />
+  <em>书目列表 · 侧栏导航 · 主题化暗色 UI</em>
+  <br /><br />
+  <img src="docs/images/chapter-workbench.png" alt="章节执行（编辑器 + 全书检索 + 执行面板）" width="720" />
+  <br />
+  <em>章节执行 · 书内全文检索 · 阅读模式 · 方案流水线 · 质量/回灌闭环</em>
+</p>
 
 ## 为什么用它？
 
