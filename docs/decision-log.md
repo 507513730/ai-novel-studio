@@ -656,3 +656,10 @@
 - **反向验证**：AI_NovelGenerator Issue #141（审校手动触发被抱怨）验证"会审自动跑"正确；NovelCrafter"功能最强但上手最难"差评 → 演示书/引导（A6）优先于堆功能；Long-Novel-GPT 多窗口并行与成本/限流冲突 → C6 谨慎。
 - **影响**：PLAN.md §2 新增 §2.1 竞品差距 backlog（A1-A7 / B1-B7 / C1-C6 + 不做边界），A3/B5 与既有"未排期"条目并档；纯 docs 改动免发版（AGENTS #57）。
 - **验收**：verify-docs 通过 + typecheck/lint 不回归；来源链接全部在报告 §1（外部链接，docs 相对断链检查不涉及）。
+
+### D106 · 2026-08-23 · 生产管线配置级错误熔断（写书实战纠错批 A，v0.24.3）
+
+- **背景**：续写书 #25《荒古纪》时发现卷 72 有 7 章 status=failed。查 job 28/29（2026-08-12）resultJson：18/18、9/9 章全部失败于同一错误「safeStorage decryptString 解密失败」，但 job 状态仍 done——配置级确定性错误逐章空转，违反 #11 循环熔断；且全失败 job 虚报完成。
+- **修复（本地设计决策）**：① llm.ts 新增 `ConfigError`（路由缺失 / key 未配置 / 解密失败三处抛出；解密失败带 cause 与「设置 → 供应商 重新保存 API Key」指引；候选链控制流不变——解密异常本就冒泡出循环）；② generateChapter 异常复位：ConfigError → 恢复抢占前状态（章首 SELECT 的 status 快照），不再误标 failed；③ runProductionPipeline 每章 catch 与回灌 catch 对 ConfigError 直接上抛熔断（scheduler 捕获 → job failed + 错误消息）；④ scheduler 生产 job 收尾：done=0 且 failed=total 时改判 failed（附摘要），杜绝虚报 done。
+- **测试**：tests/config-circuit.test.ts 4 例（callLlm 分类 ×2 / generateChapter 状态恢复 / 生产整批熔断 + 3 章均保持 planned），全量 182/182。
+- **运维注**：本次解密失败根因是历史密文跨环境复制失效（dev/安装版/便携三库同源复制，DPAPI 密文不通用）——应用内重存 key 即恢复；熔断保证同类问题今后不再污染全书章节状态。

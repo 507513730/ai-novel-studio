@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { generateChapter } from './generate'
 import { callLlmJson } from './jsonSafe'
+import { ConfigError } from './llm'
 import { buildChapterReviewContext, buildBackfillContext, buildFixContext, buildPatchContext, applyPatches } from './context'
 import { writeCharacterStates } from './ledger'
 import { isJobAborted } from './jobQueue'
@@ -309,6 +310,8 @@ export async function runProductionPipeline(
         }
       } catch (err) {
         // v0.8.0（审查 #14）：回灌失败不再静默——不影响主流程但必须可见
+        // v0.24.3：ConfigError 例外——配置级错误上抛熔断整批（否则下一章生成才失败，多空转一章）
+        if (err instanceof ConfigError) throw err
         console.warn(`[production] 回灌失败（第 ${i + 1} 章，评分 ${score}）: ${err instanceof Error ? err.message : String(err)}`)
       }
 
@@ -316,6 +319,10 @@ export async function runProductionPipeline(
       progress.currentAction = `完成（评分 ${score}）`
       onProgress(progress)
     } catch (err) {
+      // v0.24.3（写书实战纠错）：配置级错误（key 解密失败/路由缺失）对每章都是必然失败——
+      // 熔断整批直接上抛（job → failed + 可操作指引），禁止逐章空转标 failed
+      // （历史：任务 28/29 共 27 章被误标 failed 而 job 状态仍为 done）
+      if (err instanceof ConfigError) throw err
       progress.failed += 1
       progress.currentAction = `失败：${err instanceof Error ? err.message.slice(0, 80) : String(err)}`
       db.prepare("UPDATE chapter SET status = 'failed' WHERE id = ?").run(ch.id)

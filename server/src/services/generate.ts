@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { getRouteConfig, callLlm } from './llm'
+import { getRouteConfig, callLlm, ConfigError } from './llm'
 import { buildChapterWriteContext, estimateTokens } from './context'
 import { recordUsage } from './usage'
 import { runTripleReview } from './tripleReview'
@@ -53,7 +53,7 @@ export async function generateChapter(
   // v0.17.0（审查 H2）：抢占后全链路 try/catch——任何异常/空内容都复位状态，杜绝永久卡 'generating'
   try {
   const route = getRouteConfig(db, 'prose')
-  if (!route || !route.apiKeyEncrypted) throw new Error('prose 路由未配置 API Key')
+  if (!route || !route.apiKeyEncrypted) throw new ConfigError('prose 路由未配置 API Key——请在 设置 → 供应商 保存后重试')
 
   // v0.9.2（审查 #25）：独立 OpenAI client 删除——统一走 callLlm 流式
   // （此前 generate 不参与候选链降级/错误分类/重试；body 构造已出现漂移）
@@ -233,10 +233,13 @@ export async function generateChapter(
   return { content, wordCount, aborted, usage: { input: usageInput, output: usageOutput, cacheHit, cacheMiss } }
   } catch (err) {
     // v0.17.0（审查 H2）：异常复位状态（仅复位自己抢占的 generating）
+    // v0.24.3（写书实战纠错）：ConfigError 时章节并未真正尝试生成，
+    // 恢复抢占前状态（chapter.status 为抢占前快照）而非误标 failed
+    const restore = err instanceof ConfigError ? chapter.status : 'failed'
     db.prepare(
-      "UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'generating'"
-    ).run(chapterId)
-    console.warn(`[generate] 章节 ${chapterId} 生成失败 → 置 failed: ${err instanceof Error ? err.message : String(err)}`)
+      "UPDATE chapter SET status = ?, updated_at = datetime('now') WHERE id = ? AND status = 'generating'"
+    ).run(restore, chapterId)
+    console.warn(`[generate] 章节 ${chapterId} 生成失败 → 置 ${restore}: ${err instanceof Error ? err.message : String(err)}`)
     throw err
   }
 }

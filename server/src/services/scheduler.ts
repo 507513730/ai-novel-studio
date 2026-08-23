@@ -158,7 +158,7 @@ async function processJob(db: DatabaseSync, job: JobRecord): Promise<void> {
       })
       finishJob(db, job.id, { progress: 100, status: 'done', resultJson: '{"ok":true}' })
     } else if (job.type === 'production') {
-      await runProductionPipeline(
+      const prodResult = await runProductionPipeline(
         db,
         payload.novelId,
         (p: ProductionProgress) => {
@@ -178,7 +178,17 @@ async function processJob(db: DatabaseSync, job: JobRecord): Promise<void> {
         },
         { from: payload.from, to: payload.to, jobId: job.id }
       )
-      finishJob(db, job.id, { progress: 100, status: 'done' })
+      // v0.24.3（写书实战纠错）：全部章节失败时 job 不得虚报 done——
+      // 任务 28 全 18 章失败仍显示"完成"，用户无从察觉（finishJob 的 final.status 覆盖默认 done）
+      if (prodResult.total > 0 && prodResult.done === 0 && prodResult.failed >= prodResult.total) {
+        finishJob(db, job.id, {
+          progress: 100,
+          status: 'failed',
+          error: `生产结束但全部章节失败（${prodResult.failed}/${prodResult.total}）——多为模型/网络级故障，请检查模型路由与 API Key 后重试`
+        })
+      } else {
+        finishJob(db, job.id, { progress: 100, status: 'done' })
+      }
     } else if (job.type === 'debt-fix') {
       // v0.10.0（批B/I2）：质量债自动修复（每章内部自限轮次，串行执行）
       await fixAllDebts(

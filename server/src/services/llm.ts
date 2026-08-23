@@ -4,6 +4,16 @@ import type { TaskType } from '../db/seed'
 import { decryptSecret } from './keyCrypto'
 import { recordUsage } from './usage'
 
+// v0.24.3（写书实战纠错）：配置级错误（确定性失败：路由缺失 / key 未配置 / key 解密失败）。
+// 历史bug：生产管线遇到解密失败不熔断，18 章被逐个误标 failed 而 job 仍 done（任务 28/29）。
+// 调用方（generate/production）据 instanceof 熔断整批或复位章节状态，禁止逐章空转。
+export class ConfigError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options)
+    this.name = 'ConfigError'
+  }
+}
+
 export interface RouteConfig {
   providerId: number
   providerName: string
@@ -206,9 +216,9 @@ export async function callLlm(
   opts: LlmCallOptions
 ): Promise<LlmResult> {
   const route = getRouteConfig(db, taskType)
-  if (!route) throw new Error(`no model route for task: ${taskType}`)
+  if (!route) throw new ConfigError(`no model route for task: ${taskType}`)
   if (!route.apiKeyEncrypted) {
-    throw new Error(`provider ${route.providerName} has no API key configured`)
+    throw new ConfigError(`供应商「${route.providerName}」未配置 API Key——请在 设置 → 供应商 保存后重试`)
   }
 
   const candidates = buildCandidates(route, activeModelOverride)
@@ -219,7 +229,17 @@ export async function callLlm(
       .prepare('SELECT name, base_url, api_key_encrypted FROM provider WHERE id = ?')
       .get(candidate.providerId) as { name: string; base_url: string; api_key_encrypted: string }
     if (!providerRow?.api_key_encrypted) continue
-    const apiKey = await decryptSecret(providerRow.api_key_encrypted)
+    // v0.24.3：解密失败是环境级确定错误（密文来自旧环境/明文时代），包装为 ConfigError
+    // 让生产管线首个即熔断，并给出可操作指引（历史：任务 28/29 逐章空转 27 次）
+    let apiKey: string
+    try {
+      apiKey = await decryptSecret(providerRow.api_key_encrypted)
+    } catch (err) {
+      throw new ConfigError(
+        `API Key 解密失败（供应商「${providerRow.name}」）——密文可能来自旧环境或备份恢复；请在 设置 → 供应商 重新保存 API Key`,
+        { cause: err }
+      )
+    }
 
     const client = new OpenAI({
       baseURL: providerRow.base_url || undefined,

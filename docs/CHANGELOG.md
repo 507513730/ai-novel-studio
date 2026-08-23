@@ -4,12 +4,21 @@
 
 ## [Unreleased]
 
-### 文档治理（2026-08-22，免发版）
+（暂无）
 
-- **乱码清零**：decision-log 头部 / test-report / calibration-report / audit-report P21 段编码损坏重建或删除（正文数据完好，仅标题/表头损坏）；全库扫描 0 残 0x3F
-- **README 修正**：静态 tests badge → GitHub Actions 状态 badge（动态）；硬编码数字清扫（178+ 测试 / 7 套主题）；补录 v0.24.2 能力
-- **架构对齐**：architecture.md 与实现一致化（RAG 标注条件启用、whole_book 标注已落地 v0.24.2、侧栏 21 项/路由 15 文件等目录数字）
-- **PLAN 归档**：完整实施编年史 → `docs/archive/PLAN-history.md`；根 PLAN.md 精简为当前版（定位/进度/版本记录/遗留）；AGENTS/onboarding 引用同步
+## v0.24.3（2026-08-23）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.24.3.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.24.3-portable-x64.exe`
+
+### 变更（写书实战纠错批 A，详见 decision-log D106）
+
+- **生产管线配置级错误熔断（ConfigError）**：API Key 解密失败 / 路由缺失 / key 未配置等确定性错误，此前生产管线逐章空转——书 #25 生产任务 28/29 曾 18/18、9/9 章全部失败于同一解密错误且章节被误标 failed、job 状态仍 done。现在：llm 层抛 `ConfigError`（解密失败带 cause 与「设置 → 供应商 重新保存 API Key」指引）→ generateChapter 恢复章节抢占前状态（不误标 failed）→ 生产管线首个即熔断上抛（job → failed），落实循环熔断纪律（AGENTS #11）
+- **job 全失败不再虚报 done**：生产 job 结束时若 done=0 且 failed=total，状态改判 failed 并附错误摘要（任务中心可见），杜绝「全部失败却显示完成」
+- 错误消息中文化 + 可操作指引；回灌阶段的 ConfigError 同样上抛（不多空转一章）
+- 测试 182/182（+4：`tests/config-circuit.test.ts` —— ConfigError 分类 / cause 携带 / 章节状态恢复 / 整批熔断不误标）、typecheck/lint 0 error
+- 文档（免发版内容随批）：2026-08-22 文档治理四项（乱码清零/README 修正/架构对齐/PLAN 归档，D104）+ 2026-08-23 竞品差距分析落档（docs/competitive-analysis.md，PLAN §2.1 backlog，D105）
 
 ## v0.24.2（2026-08-22）
 

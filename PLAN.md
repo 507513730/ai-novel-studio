@@ -28,7 +28,7 @@ AI 导演式长篇小说生产系统的桌面版（Electron）。借鉴两个参
 | 测试 | ✅ | vitest 178/178、db-smoke 7/7、typecheck/lint 0 error、e2e R10 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7） |
 | **当前主线** | 📚 | 真实写书（书 #25「帝路十章」）：卷 72 已产 11 章 ≈3.3 万字，剩余 9 章 + 卷 73-75 共 74 章待生产（应用内执行，绑定方案「帝路十章」） |
 
-**版本记录**：最新 v0.24.2（功能批 F：章节阅读/复盘视图 + 全书检索 + 版本 diff + 方案整本生产入口）——之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+**版本记录**：最新 v0.24.3（写书实战纠错批 A：生产管线配置级错误熔断 ConfigError + job 全失败不再虚报 done，D106）；上一版 v0.24.2（功能批 F：章节阅读/复盘视图 + 全书检索 + 版本 diff + 方案整本生产入口）——之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 
 ## 1. 用户已锁定决策（不可再问）
 
