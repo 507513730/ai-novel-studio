@@ -36,7 +36,8 @@
 | 文档 | 说明 |
 |---|---|
 | [architecture.md](architecture.md) | 架构说明：进程模型 / 数据流 / 调度 / 方案运行时 |
-| [decision-log.md](decision-log.md) | 决策日志（D1-D103+，含背景/证据/影响） |
+| [competitive-analysis.md](competitive-analysis.md) | 竞品差距分析（2026-08-23：商业 8 款 + 开源 5 项；长板确认 / A·B·C 三档差距 / 不做边界 / 反向教训） |
+| [decision-log.md](decision-log.md) | 决策日志（D1-D105+，含背景/证据/影响） |
 | [archive/PLAN-history.md](archive/PLAN-history.md) | 完整实施编年史（P0-P30+ 阶段清单与版本记录，append-only；2026-08-22 自 PLAN.md 归档） |
 | 根目录 [PLAN.md](../PLAN.md) | 当前计划精简版（定位/进度/版本记录/遗留 backlog） |
 

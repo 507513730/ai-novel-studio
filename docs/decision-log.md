@@ -648,3 +648,11 @@
   - ③ 架构对齐：RAG 检索链路标"条件启用预留"（与 PLAN §9.2 / D51 一致）；whole_book 改"v0.24.2 已落地（方案→一键整本生产）"；侧栏 21 项 / pages 33 / workspace 8 / routes 15；决策索引链接修正。
   - ④ PLAN 归档：完整编年史 → `docs/archive/PLAN-history.md`（原样 + 归档头说明）；新 PLAN.md 精简版（定位/进度/版本记录/遗留/文档索引 ≈87 行）；verify-docs（`plan.includes('v'+version)`）与新 PLAN"版本记录"行兼容，无需改校验逻辑；AGENTS #5/#17/#56 与 onboarding 引用同步更新。
 - **验收**：verify-docs 10/10；全库扫描无 0x3F 残留（正常"?"字符不在内）；typecheck/lint/test 不回归（docs 改动免发版）。
+
+### D105 · 2026-08-23 · 竞品调研与差距清单（backlog 输入）
+
+- **背景（#61 调研-更新闭环）**：用户要求从网上同类产品提取本产品欠缺（重点是体验与功能）。网络调研商业产品 8 款（Sudowrite / NovelCrafter / NovelAI / Dabble / Squibler / 彩云小梦 / 蛙蛙写作 / 阅文作家助手妙笔）+ GitHub 开源 5 项（AI_NovelGenerator / Long-Novel-GPT / NovelWriter_public / gpt-story-genius / JasonXuDeveloper-Writer），对照仓库代码逐项核实后落档 `docs/competitive-analysis.md`。
+- **核心结论（本地判断 + 来源见报告）**：① 生成管线完成度（执行面隔离 job 队列 / 审核-修复-回灌闭环 / BYOK 任务级路由 / 拆书证据引用）领先全部调研对象，不追；② 差距集中在两层——**体验层**（多候选分支生成、快捷词、写作统计、轻量校对、DOCX 导出、演示书引导 = A 档 7 项）与**一致性基建最后一公里**（TF-IDF 检索器已实现但未接入生成上下文 = B1，全竞品以 Lorebook 式关键词触发/向量检索保一致性的最大共识；写法示例动态检索 = B2）；③ 存量书稿接续创作（导入连载稿→转工作书）是 Sudowrite/阅文均有而我们路径不通的刚需（B3）。
+- **反向验证**：AI_NovelGenerator Issue #141（审校手动触发被抱怨）验证"会审自动跑"正确；NovelCrafter"功能最强但上手最难"差评 → 演示书/引导（A6）优先于堆功能；Long-Novel-GPT 多窗口并行与成本/限流冲突 → C6 谨慎。
+- **影响**：PLAN.md §2 新增 §2.1 竞品差距 backlog（A1-A7 / B1-B7 / C1-C6 + 不做边界），A3/B5 与既有"未排期"条目并档；纯 docs 改动免发版（AGENTS #57）。
+- **验收**：verify-docs 通过 + typecheck/lint 不回归；来源链接全部在报告 §1（外部链接，docs 相对断链检查不涉及）。
