@@ -6,6 +6,7 @@ import { buildFrozenContext } from '../services/context'
 import { detectAntiAiHits, getBoundStyleRules, extractAntiAiWordsFromRules } from '../services/styleEngine'
 // v0.21.0（审查 M8 残）：统一 import JSON_FORMAT（此前本地副本与 prompts/index.ts 重复）
 import { JSON_FORMAT } from '../prompts'
+import { isFixWarranted } from '../services/reviewPolicy'
 
 // ============================================================
 // P5 多智能体：Agent 管理 + 团队协作端点
@@ -400,9 +401,10 @@ export function createAgentsRouter(db: DatabaseSync): Router {
       const highCount = mergedIssues.filter((i) => i.severity === 'high').length + ooc.issues.filter((i) => i.severity === 'high').length
 
       // P20（M4）：评审结果落库（chapter.review_json 合并，下游修复/重审可消费）
+      // v0.24.4（D107）：needsFix 统一走 isFixWarranted（原 avgScore<75 与单章口径不一致）
       const persistedReview = {
         score: avgScore,
-        needsFix: avgScore < 75,
+        needsFix: isFixWarranted(avgScore, [...mergedIssues, ...ooc.issues]),
         strengths: [],
         issues: [...mergedIssues, ...ooc.issues],
         team: {

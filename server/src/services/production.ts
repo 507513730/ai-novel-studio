@@ -8,6 +8,7 @@ import { isJobAborted } from './jobQueue'
 import { runProductionChapter } from './solutionRunner'
 import { parseSolutionSteps } from './solutionAssets'
 import { getAutoFixEnabled } from './appSettings'
+import { isFixWarranted } from './reviewPolicy'
 
 // ============================================================
 // 整本批量生产 pipeline（PLAN §7.2 / P2）
@@ -150,9 +151,10 @@ export async function runProductionPipeline(
       )
 
       // 3. 低分修复（P2.1 修复 #4：真 patch_first 局部补丁，失败降级整章重写）
+      // v0.24.4（D107）：触发条件改 isFixWarranted——60-74 仅 medium/low 不再自动修（登记质量债），省 2-3 次 LLM/章
       let finalContent = gen.content
       let score = review.score
-      if (review.score < 75 && review.issues.length > 0) {
+      if (isFixWarranted(review.score, review.issues)) {
         progress.currentAction = `修复（评分 ${review.score}）`
         onProgress(progress)
         try {
