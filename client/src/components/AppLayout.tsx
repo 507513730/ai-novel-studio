@@ -24,7 +24,9 @@ import {
   Database,
   Braces,
   WandSparkles,
-  Bot
+  Bot,
+  BarChart3,
+  Hammer
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { novelApi } from '../api'
@@ -103,6 +105,7 @@ export function AppLayout(): React.JSX.Element {
         { to: '/studio', label: '创造工坊', icon: WandSparkles },
         { to: '/tasks', label: '任务中心', icon: ListChecks, badge: failedCount > 0 ? `F${failedCount}` : undefined },
         { to: '/follow-ups', label: '导演跟进', icon: Workflow },
+        { to: bookPath(novelId, '/stats'), label: '写作统计', icon: BarChart3, requiresNovel: true },
         { to: '/hub', label: '创作中枢', icon: Brain },
         { to: '/director', label: '自动导演', icon: Clapperboard },
         { to: '/chapters', label: '章节执行', icon: BookOpenText }
@@ -118,6 +121,7 @@ export function AppLayout(): React.JSX.Element {
         { to: '/prompt-workbench', label: '提示词工作台', icon: Braces },
         { to: '/book-analysis', label: '拆书', icon: Search },
         { to: '/genres', label: '流派管理', icon: Tags },
+        { to: '/forge', label: '要素工坊', icon: Hammer },
         { to: bookPath(novelId, '/'), label: '工作台（设定/世界/角色）', icon: PanelLeft, requiresNovel: true },
                { to: '/anti-ai', label: '反 AI 规则', icon: ShieldCheck },
         { to: '/base-characters', label: '基础角色库', icon: UsersRound },

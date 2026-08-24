@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useToast } from '../../components/Toast'
 import { useConfirm } from '../../components/ConfirmDialog'
-import { THEMES, applyTheme, getStoredTheme, type ThemeKey } from '../../utils/theme'
+import { THEMES, applyTheme, getStoredTheme, type ThemePreference } from '../../utils/theme'
 import { SERIF_FONTS, UI_FONTS, applyFonts, getStoredFonts, DEFAULTS, type FontSettings } from '../../utils/fonts'
 import { SHORTCUT_ACTIONS, getStoredShortcuts, saveShortcut, resetShortcuts, eventToCombo, formatCombo, type ShortcutAction, type ShortcutBinding } from '../../utils/shortcuts'
 
@@ -166,7 +166,7 @@ function ShortcutPanel(): React.JSX.Element {
 
 export function AppearancePanel(): React.JSX.Element {
   const { toast } = useToast()
-  const [current, setCurrent] = useState<ThemeKey>(getStoredTheme())
+  const [current, setCurrent] = useState<ThemePreference>(getStoredTheme())
   // v0.22.0（审查 ALOW）：themed confirm 统一——备份恢复/清除数据
   const [confirmFn, confirmDialog] = useConfirm()
   return (
@@ -176,9 +176,31 @@ export function AppearancePanel(): React.JSX.Element {
       <ShortcutPanel />
       <h2>主题</h2>
       <p className="muted t-small">
-        选择界面配色（灵感来自 FeelFish 色板与参考项目浅色风格）。主题即时生效并记住选择。
+        选择界面配色（灵感来自 FeelFish 色板与参考项目浅色风格；「跟随系统」自动映射 深色=墨蓝 / 浅色=纸张）。主题即时生效并记住选择。
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+        {/* v0.24.4（A7）：跟随系统偏好 */}
+        <button
+          onClick={() => {
+            applyTheme('system')
+            setCurrent('system')
+          }}
+          style={{
+            padding: 12,
+            borderRadius: 'var(--radius-m)',
+            background: 'var(--bg-card)',
+            border: `1px solid ${current === 'system' ? 'var(--accent)' : 'var(--border)'}`,
+            cursor: 'pointer',
+            textAlign: 'left'
+          }}
+        >
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <span style={{ width: 28, height: 28, borderRadius: 6, background: '#0e0f13', border: '1px solid rgba(255,255,255,0.15)' }} />
+            <span style={{ width: 28, height: 28, borderRadius: 6, background: '#f6f8f5' }} />
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text)' }}>跟随系统</div>
+          <div className="muted t-small">{current === 'system' ? '✓ 当前' : 'system'}</div>
+        </button>
         {THEMES.map((t) => (
           <button
             key={t.key}

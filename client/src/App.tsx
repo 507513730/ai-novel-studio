@@ -32,6 +32,8 @@ const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then((m) => ({ 
 const PromptWorkbenchPage = lazy(() => import('./pages/PromptWorkbenchPage').then((m) => ({ default: m.PromptWorkbenchPage })))
 const StudioPage = lazy(() => import('./pages/StudioPage').then((m) => ({ default: m.StudioPage })))
 const AgentsLibraryPage = lazy(() => import('./pages/AgentsLibraryPage').then((m) => ({ default: m.AgentsLibraryPage })))
+const StatsPage = lazy(() => import('./pages/StatsPage').then((m) => ({ default: m.StatsPage })))
+const ForgePage = lazy(() => import('./pages/ForgePage').then((m) => ({ default: m.ForgePage })))
 
 // P22-C2：骨架屏（路由懒加载 fallback，替代纯文字）
 function PageFallback(): React.JSX.Element {
@@ -195,6 +197,8 @@ export function App(): React.JSX.Element {
           <Route path="/anti-ai" element={<Suspense fallback={<PageFallback />}><AntiAiPage /></Suspense>} />
           <Route path="/base-characters" element={<Suspense fallback={<PageFallback />}><BaseCharactersPage /></Suspense>} />
           <Route path="/follow-ups" element={<Suspense fallback={<PageFallback />}><FollowUpsPage /></Suspense>} />
+          <Route path="/novels/:novelId/stats" element={<Suspense fallback={<PageFallback />}><StatsPage /></Suspense>} />
+          <Route path="/forge" element={<Suspense fallback={<PageFallback />}><ForgePage /></Suspense>} />
           <Route path="/style-engine" element={<Suspense fallback={<PageFallback />}><StyleEnginePage /></Suspense>} />
           <Route path="/book-analysis" element={<Suspense fallback={<PageFallback />}><BookAnalysisPage /></Suspense>} />
           <Route path="/genres" element={<Suspense fallback={<PageFallback />}><GenresPage /></Suspense>} />

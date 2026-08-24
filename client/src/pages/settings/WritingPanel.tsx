@@ -5,7 +5,7 @@ import { useToast } from '../../components/Toast'
 import { applyFonts, getStoredFonts, type FontSettings } from '../../utils/fonts'
 
 export function WritingPanel(): React.JSX.Element {  const { toast } = useToast()
-  const [settings, setSettings] = useState<{ lang: string; format: string; writingMode: string } | null>(null)
+  const [settings, setSettings] = useState<{ lang: string; format: string; writingMode: string; quickWords: Record<string, string> } | null>(null)
   // P22-B：排版状态（同步 fonts 工具，即时生效）
   const [typeIndent, setTypeIndent] = useState(getStoredFonts().indent)
   const [typeLineHeight, setTypeLineHeight] = useState(getStoredFonts().lineHeight)
@@ -21,11 +21,12 @@ export function WritingPanel(): React.JSX.Element {  const { toast } = useToast(
     void apiFetch('/settings/writing')
       .then((d) => {
         if (alive) {
-          const v = d as { lang?: string; format?: string; writingMode?: string }
+          const v = d as { lang?: string; format?: string; writingMode?: string; quickWords?: Record<string, string> }
           setSettings((prev) => ({
             lang: String(v.lang ?? prev?.lang ?? ''),
             format: String(v.format ?? prev?.format ?? ''),
-            writingMode: String(v.writingMode ?? prev?.writingMode ?? '')
+            writingMode: String(v.writingMode ?? prev?.writingMode ?? ''),
+            quickWords: v.quickWords ?? prev?.quickWords ?? {}
           }))
         }
       })
@@ -117,6 +118,18 @@ export function WritingPanel(): React.JSX.Element {  const { toast } = useToast(
         </label>
       </div>
 
+      {/* v0.24.4（A2）：快捷词/文本扩展——编辑器输入 ";" 触发词 弹补全，选择即展开 */}
+      <h3 style={{ fontSize: 13, margin: '12px 0 4px' }}>快捷词</h3>
+      <p className="muted t-small" style={{ margin: '0 0 6px' }}>
+        码字宏：编辑器里输入 <code>;触发词</code> 弹出补全，Enter/Tab 展开为长文本（如 <code>;zn</code> → 主角名）。触发词必须以「;」开头。
+      </p>
+      <QuickWordsEditor
+        dict={settings.quickWords}
+        onSave={(next) => {
+          setSettings((prev) => (prev ? { ...prev, quickWords: next } : prev))
+        }}
+      />
+
       {/* v0.18.0：联网查找（零 key——Wikipedia；知识库联网搜索 + 世界观生成可选注入） */}
       <h3 style={{ fontSize: 13, margin: '12px 0 4px' }}>联网查找</h3>
       <div className="col gap-2" style={{ fontSize: 12 }}>
@@ -125,6 +138,83 @@ export function WritingPanel(): React.JSX.Element {  const { toast } = useToast(
           开启后：知识库页可「联网搜索」导入设定资料（Wikipedia 中文优先，零 key）；生成世界观时自动注入相关联网资料。
           失败/离线静默降级，不影响正常创作。
         </p>
+      </div>
+    </div>
+  )
+}
+
+// v0.24.4（A2）：快捷词编辑器（词典 CRUD，PATCH /settings/writing）
+function QuickWordsEditor({
+  dict,
+  onSave
+}: {
+  dict: Record<string, string>
+  onSave: (next: Record<string, string>) => void
+}): React.JSX.Element {
+  const { toast } = useToast()
+  const [keyDraft, setKeyDraft] = useState('')
+  const [valueDraft, setValueDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const cases = Object.keys(dict).length
+  const save = async (next: Record<string, string>): Promise<void> => {
+    setBusy(true)
+    try {
+      await apiFetch('/settings/writing', { method: 'PATCH', body: JSON.stringify({ quickWords: next }) })
+      onSave(next)
+      toast('ok', `快捷词已保存（${Object.keys(next).length} 条）`)
+    } catch (e) {
+      toast('error', `保存失败：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const add = (): void => {
+    const k = keyDraft.trim()
+    const v = valueDraft.trim()
+    if (!k.startsWith(';')) {
+      toast('error', '触发词必须以「;」开头')
+      return
+    }
+    if (!v) {
+      toast('error', '展开文本不能为空')
+      return
+    }
+    const next = { ...dict, [k]: v.slice(0, 500) }
+    if (Object.keys(next).length > 50) {
+      toast('error', '快捷词最多 50 条')
+      return
+    }
+    setKeyDraft('')
+    setValueDraft('')
+    void save(next)
+  }
+  return (
+    <div className="col" style={{ gap: 6, fontSize: 12 }}>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <input style={{ width: 120 }} placeholder="触发词（;开头）" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} />
+        <input style={{ flex: '1 1 220px' }} placeholder="展开文本（≤500 字）" value={valueDraft} onChange={(e) => setValueDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add() }} />
+        <button className="sm primary" disabled={busy} onClick={add}>+ 添加</button>
+      </div>
+      {cases === 0 && <p className="muted t-small">还没有快捷词。示例：<code>;zn</code> → 主角名、<code>;fd</code> → 场景里反复出现的修饰语。</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {Object.entries(dict).map(([k, v]) => (
+          <div key={k} className="row" style={{ gap: 8, background: 'var(--bg-card)', borderRadius: 6, padding: '4px 8px' }}>
+            <code style={{ minWidth: 70 }}>{k}</code>
+            <span className="muted" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+            <button
+              className="sm"
+              disabled={busy}
+              title="删除"
+              onClick={() => {
+                const next = { ...dict }
+                delete next[k]
+                void save(next)
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   )

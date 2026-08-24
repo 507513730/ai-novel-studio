@@ -365,3 +365,22 @@ export interface SearchResults {
   facts: Array<{ id: number; content: string }>
   kb: Array<{ id: number; title: string; snippet: string }>
 }
+
+/** v0.24.4（A3）：书级写作统计（对齐 GET /:novelId/stats 返回） */
+export interface NovelStats {
+  novelId: number
+  title: string
+  total: {
+    chapters: number
+    words: number
+    aiWords: number
+    humanWords: number
+    written: number
+    failed: number
+  }
+  byStatus: Array<{ status: string; count: number; words: number }>
+  byVolume: Array<{ id: number; title: string; orderIndex: number; count: number; words: number }>
+  reviewScores: Array<{ chapterId: number; title: string; score: number }>
+  pendingDebts: number
+  usage: { calls: number; tokens: number; cost: number }
+}

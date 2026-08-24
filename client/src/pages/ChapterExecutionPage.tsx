@@ -3,10 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
+import { autocompletion } from '@codemirror/autocomplete'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Annotation, type AnnotationType } from '@codemirror/state'
 import { novelEditorTheme } from '../editor/theme'
-import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, waitForJob } from '../api'
+import { makeQuickWordSource } from '../utils/quickWords'
+import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, waitForJob, apiFetch } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
 import type { VersionDiffInfo, WorldData } from '../types'
@@ -287,6 +289,13 @@ const selectedChapterRef = useRef<number | null>(null)
     queryKey: ['chapters', id],
     queryFn: () => novelApi.chapters(id)
   })
+  // v0.24.4（A2）：快捷词词典（编辑器 ";" 补全）——设置页维护，60s 缓存
+  const writingSettings = useQuery({
+    queryKey: ['writing-settings'],
+    queryFn: () => apiFetch('/settings/writing') as Promise<{ quickWords?: Record<string, string> }>,
+    staleTime: 60_000
+  })
+  const quickWords = writingSettings.data?.quickWords ?? {}
   const list = chapters.data?.chapters ?? []
   const chapter = list.find((c) => c.id === selectedChapter)
   // v0.24.2（F1）：阅读视图上一章/下一章定位
@@ -665,8 +674,7 @@ const selectedChapterRef = useRef<number | null>(null)
     }
   }
 
-  const runReview = async (): Promise<void> => {
-    if (!selectedChapter) return
+  const runReview = async (): Promise<void> => {    if (!selectedChapter) return
     setActionError(null)
     setActionMsg('审核中…')
     try {
@@ -675,6 +683,23 @@ const selectedChapterRef = useRef<number | null>(null)
       const score = r.review.score as number
       setActionMsg(`审核完成：${score} 分${(r.review.needsFix as boolean) ? '，需要修复' : ''}`)
       await invalidate()
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // v0.24.4（A4）：轻量本地校对（确定性检查 + 单次语义 extraction，可选传当前编辑器内容）
+  const [proofreadIssues, setProofreadIssues] = useState<
+    Array<{ type: string; location: string; problem: string; suggestion: string }> | null
+  >(null)
+  const runProofread = async (): Promise<void> => {
+    if (!selectedChapter) return
+    setActionError(null)
+    setProofreadIssues(null)
+    try {
+      const r = await novelApi.proofread(id, selectedChapter, content || undefined)
+      setProofreadIssues(r.issues)
+      setActionMsg(`校对完成：${r.issues.length} 条${r.localCount > 0 ? `（${r.localCount} 条本地确定性问题）` : ''}`)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
     }
@@ -936,11 +961,11 @@ const selectedChapterRef = useRef<number | null>(null)
       .finally(() => setEditingTitle(false))
   }
 
-  const exportLink = (format: 'txt' | 'md' | 'epub'): string => novelApi.exportUrl(id, format)
+  const exportLink = (format: 'txt' | 'md' | 'epub' | 'docx'): string => novelApi.exportUrl(id, format)
 
   // P9 B7：导出改为 fetch 下载（校验响应，成功/失败真实反馈）
   const [exportBusy, setExportBusy] = useState<string | null>(null)
-  const exportChapter = async (format: 'txt' | 'md' | 'epub'): Promise<void> => {
+  const exportChapter = async (format: 'txt' | 'md' | 'epub' | 'docx'): Promise<void> => {
     if (exportBusy) return
     setExportBusy(format)
     try {
@@ -1265,6 +1290,10 @@ const selectedChapterRef = useRef<number | null>(null)
             <button className="sm" style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }} disabled={exportBusy !== null} onClick={() => void exportChapter('epub')}>
               {exportBusy === 'epub' ? '导出中…' : 'EPUB'}
             </button>
+            {/* v0.24.4（A5）：DOCX 导出（投稿平台事实标准） */}
+            <button className="sm" style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }} disabled={exportBusy !== null} onClick={() => void exportChapter('docx')}>
+              {exportBusy === 'docx' ? '导出中…' : 'DOCX'}
+            </button>
           </div>
         </div>
         <SelectionToolbar
@@ -1307,7 +1336,8 @@ const selectedChapterRef = useRef<number | null>(null)
             }}
             height="100%"
             theme={novelEditorTheme}
-            extensions={[markdown()]}
+            // v0.24.4（A2）：快捷词补全（";触发词" → 展开文本，设置页维护词典）
+            extensions={[markdown(), autocompletion({ override: [makeQuickWordSource(quickWords)] })]}
             style={{ height: '100%' }}
             ref={editorRef}
           />
@@ -1494,6 +1524,35 @@ const selectedChapterRef = useRef<number | null>(null)
           >
             {actionBusy === 'review' ? '审核中…' : 'AI 审核'}
           </button>
+          {/* v0.24.4（A4）：轻量本地校对——确定性检查零 token + 单次语义 extraction */}
+          <button
+            onClick={() => void withBusy('proofread', runProofread)}
+            disabled={actionBusy !== null || !selectedChapter || !content}
+          >
+            {actionBusy === 'proofread' ? '校对中…' : '本地校对'}
+          </button>
+          {proofreadIssues !== null && (
+            <div className="panel col" style={{ padding: 10, background: 'var(--bg-panel)', gap: 6 }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <strong className="t-small">校对结果（{proofreadIssues.length} 条）</strong>
+                <button className="sm" onClick={() => setProofreadIssues(null)}>关闭</button>
+              </div>
+              {proofreadIssues.length === 0 && (
+                <p className="muted t-small">未发现明显问题 ✓（检查：重复词/乱码/错别字/称谓一致性）</p>
+              )}
+              {proofreadIssues.map((p, i) => (
+                <div key={i} className="row" style={{ gap: 6, fontSize: 11, alignItems: 'flex-start' }}>
+                  <span className="badge" style={{ color: p.type === 'mojibake' ? 'var(--danger)' : p.type === 'repeat' ? 'var(--warn)' : 'var(--accent-bright)' }}>
+                    {p.type === 'typo' ? '错别字' : p.type === 'name' ? '称谓' : p.type === 'repeat' ? '重复词' : p.type === 'mojibake' ? '乱码' : '语病'}
+                  </span>
+                  <div className="col" style={{ gap: 2, flex: 1 }}>
+                    <span style={{ color: 'var(--text)' }}>{p.problem}</span>
+                    <span className="muted" style={{ wordBreak: 'break-all' }}>「{p.location}」 → {p.suggestion}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {/* P21-3：跑创作方案（工坊定义的 agent 流水线）+ P30：以方案生产正文（whole_book 步骤） */}
           <div className="col gap-2">
             <div className="row gap-2">

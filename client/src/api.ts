@@ -3,6 +3,7 @@ import type {
   ChapterSummary,
   CharacterData,
   NovelDetail,
+  NovelStats,
   NovelSummary,
   SearchResults,
   VersionDiffInfo,
@@ -112,7 +113,7 @@ export const novelApi = {
     js(`/novels/${id}/framing/field`, { method: 'POST', body: JSON.stringify({ field }) }),
   macro: (id: number): Promise<{ macro: Record<string, unknown> }> =>
     js(`/novels/${id}/macro`, { method: 'POST' }),
-  exportUrl: (id: number, format: 'txt' | 'md' | 'epub'): string =>
+  exportUrl: (id: number, format: 'txt' | 'md' | 'epub' | 'docx'): string =>
     `${getApiBaseUrl()}/novels/${id}/export?format=${format}`,
 
   // P11-3：流派管理
@@ -205,10 +206,20 @@ export const novelApi = {
   // v0.24.2（F2）：书内全文检索
   search: (id: number, q: string): Promise<SearchResults> =>
     j(`/novels/${id}/search?q=${encodeURIComponent(q)}`),
+  // v0.24.4（A3）：书级写作统计聚合
+  novelStats: (id: number): Promise<NovelStats> => j(`/novels/${id}/stats`),
+  // v0.24.4（B5）：伏笔/事实账本
+  novelForeshadows: (id: number): Promise<{
+    foreshadows: Array<{ id: number; content: string; status: string; chapterId: number | null; chapterTitle: string | null }>
+    facts: Array<{ id: number; content: string; chapterId: number | null; chapterTitle: string | null }>
+  }> => j(`/novels/${id}/foreshadows`),
   fix: (id: number, chapterId: number): Promise<{ fixed: boolean; round: number; content: string; rescore?: { score: number; needsFix: boolean; passed: boolean } }> =>
     js(`/novels/${id}/chapters/${chapterId}/fix`, { method: 'POST' }),
   backfill: (id: number, chapterId: number): Promise<Record<string, unknown>> =>
     js(`/novels/${id}/chapters/${chapterId}/backfill`, { method: 'POST' }),
+  // v0.24.4（A4）：轻量本地校对
+  proofread: (id: number, chapterId: number, content?: string): Promise<{ issues: Array<{ type: string; location: string; problem: string; suggestion: string }>; localCount: number }> =>
+    js(`/novels/${id}/chapters/${chapterId}/proofread`, { method: 'POST', body: JSON.stringify(content !== undefined ? { content } : {}) }),
   confirmState: (id: number, characterStates: Array<{ name: string; state: string }>): Promise<{ ok: boolean }> =>
     j(`/novels/${id}/confirm-state`, { method: 'POST', body: JSON.stringify({ characterStates }) }),
   pending: (id: number): Promise<{ pendingFacts: Array<{ id: number; content: string; chapterId: number }>; pendingCharacters: Array<{ id: number; name: string; profile: Record<string, string> }> }> =>

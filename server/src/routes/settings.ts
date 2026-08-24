@@ -393,14 +393,21 @@ export function createSettingsRouter(db: DatabaseSync): Router {
   })
 
 
-  // ---------- P19：写作偏好（语言 / 格式 / 写作模式） ----------
+  // ---------- P19：写作偏好（语言 / 格式 / 写作模式 / v0.24.4 快捷词） ----------
   router.get('/writing', (_req, res) => {
     const rows = db.prepare('SELECT key, value FROM app_settings').all() as Array<{ key: string; value: string }>
     const map = new Map(rows.map((r) => [r.key, r.value]))
+    let quickWords: Record<string, string> = {}
+    try {
+      quickWords = JSON.parse(map.get('quickWords') ?? '{}') as Record<string, string>
+    } catch {
+      quickWords = {}
+    }
     res.json({
       lang: map.get('lang') ?? 'simplified',
       format: map.get('format') ?? 'paragraph',
-      writingMode: map.get('writingMode') ?? 'standard'
+      writingMode: map.get('writingMode') ?? 'standard',
+      quickWords
     })
   })
 
@@ -410,13 +417,19 @@ export function createSettingsRouter(db: DatabaseSync): Router {
         .object({
           lang: z.enum(['simplified', 'traditional']).optional(),
           format: z.enum(['paragraph', 'longSentence']).optional(),
-          writingMode: z.enum(['focused', 'standard', 'free']).optional()
+          writingMode: z.enum(['focused', 'standard', 'free']).optional(),
+          // v0.24.4（A2）：快捷词词典（触发词 → 展开文本；触发词以 ";" 开头，≤50 条）
+          quickWords: z
+            .record(z.string().min(1).max(32), z.string().min(1).max(500))
+            .refine((o) => Object.keys(o).length <= 50, { message: '快捷词最多 50 条' })
+            .optional()
         })
         .parse(req.body ?? {})
       const upsert = db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
       if (input.lang !== undefined) upsert.run('lang', input.lang)
       if (input.format !== undefined) upsert.run('format', input.format)
       if (input.writingMode !== undefined) upsert.run('writingMode', input.writingMode)
+      if (input.quickWords !== undefined) upsert.run('quickWords', JSON.stringify(input.quickWords))
       res.json({ ok: true })
     } catch (err) {
       next(err)

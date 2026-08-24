@@ -10,6 +10,8 @@ import { getBoundStyleRules } from '../services/styleEngine'
 import { updateSmartContext } from '../services/smartContext'
 import { fixChapterOnce } from '../services/debtFix'
 import { diffLines } from '../services/diff'
+import { deriveNeedsFix } from '../services/reviewPolicy'
+import { detectLocalIssues } from '../services/proofread'
 
 export function createChapterExecutionRouter(db: DatabaseSync): Router {
   const router = Router()
@@ -220,6 +222,8 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
       const goal = JSON.parse(chapter.goal_json || '{}') as { scenes?: unknown }
       const sceneCount = Array.isArray(goal.scenes) ? goal.scenes.length : 0
       const review = await performReview(novelId, chapterId, chapter.content)
+      // v0.24.4（D107）：needsFix 服务端推导（LLM 恒 true 不可用）——展示与自动修复行为一致
+      review.needsFix = deriveNeedsFix(review.score, review.issues)
       if (sceneCount > 0 && sceneCount < 3) {
         review.issues.push({
           severity: 'high',
@@ -259,6 +263,73 @@ export function createChapterExecutionRouter(db: DatabaseSync): Router {
         content: r.content,
         rescore: { score: r.score, needsFix: !r.passed, passed: r.passed }
       })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- v0.24.4（A4）：轻量本地校对（确定性检查零 token + 单次 extraction 语义检查） ----------
+  router.post('/:novelId/chapters/:chapterId/proofread', async (req, res, next) => {
+    try {
+      const novelId = Number(req.params.novelId)
+      const chapterId = Number(req.params.chapterId)
+      const input = z.object({ content: z.string().max(30000).optional() }).parse(req.body ?? {})
+      const chapter = db
+        .prepare('SELECT title, content FROM chapter WHERE id = ? AND novel_id = ?')
+        .get(chapterId, novelId) as { title: string; content: string } | undefined
+      if (!chapter) {
+        res.status(404).json({ error: 'chapter not found' })
+        return
+      }
+      const content = input.content ?? chapter.content
+      if (!content.trim()) {
+        res.status(400).json({ error: '章节无正文' })
+        return
+      }
+      // 1) 确定性检查（零 token）
+      const local = detectLocalIssues(content)
+      // 2) 语义检查（extraction 单次调用：错别字/称谓一致性）
+      let semantic: Array<{ type: string; location: string; problem: string; suggestion: string }> = []
+      try {
+        const r = await callLlmJson<{
+          issues: Array<{ type: 'typo' | 'name' | 'grammar'; location: string; problem: string; suggestion: string }>
+        }>(
+          db,
+          'extraction',
+          {
+            novelId,
+            messages: [
+              {
+                role: 'user',
+                content: `你是文字校对。检查以下的章节正文（首 6000 字），只报真实问题：错别字（type=typo）、称谓/人名不一致（type=name，如同一人物两种译名）、明显语病（type=grammar）。每条给出原文位置片段与修改建议。没有问题时输出空数组。\n\n章节名：${chapter.title}\n\n【正文】\n${content.slice(0, 6000)}\n\n请输出 JSON：{"issues":[{"type":"typo|name|grammar","location":"原文片段","problem":"问题说明","suggestion":"修改建议"}]}`
+              }
+            ],
+            maxTokens: 2048
+          },
+          (obj) => {
+            const arr = (obj as { issues?: unknown }).issues
+            if (!Array.isArray(arr)) return null
+            return {
+              issues: arr
+                .map((x) => {
+                  const i = x as Record<string, unknown>
+                  return {
+                    type: String(i.type ?? 'grammar') as 'typo' | 'name' | 'grammar',
+                    location: String(i.location ?? ''),
+                    problem: String(i.problem ?? ''),
+                    suggestion: String(i.suggestion ?? '')
+                  }
+                })
+                .filter((i) => i.location && i.problem)
+            }
+          },
+          'proofread'
+        )
+        semantic = r.issues
+      } catch {
+        // 语义检查失败静默降级（本地检查已覆盖确定性问题）
+      }
+      res.json({ issues: [...local.map((i) => ({ ...i, type: i.type })), ...semantic], localCount: local.length })
     } catch (err) {
       next(err)
     }

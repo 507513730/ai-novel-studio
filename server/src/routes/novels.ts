@@ -134,6 +134,183 @@ export function createNovelsRouter(db: DatabaseSync): Router {
     })
   })
 
+  // ---------- v0.24.4（A6）：载入演示书（新用户一键看到成品管线的完整小书，零 LLM） ----------
+  router.post('/import-demo', (_req, res, next) => {
+    try {
+      const existing = db.prepare("SELECT id FROM novel WHERE title = '演示书 · 物忆图鉴'").get() as { id: number } | undefined
+      if (existing) {
+        res.status(409).json({ error: '演示书已存在', novelId: existing.id })
+        return
+      }
+      db.exec('BEGIN')
+      try {
+        const n = db
+          .prepare("INSERT INTO novel (title, inspiration, status, genre, framing_json, guidance) VALUES (?, ?, 'draft', '都市', ?, '主角名保持「林默」')")
+          .run(
+            '演示书 · 物忆图鉴',
+            '一位古董修复师能读取器物记忆，卷入三十年前的调包疑案。',
+            JSON.stringify({ title: '物忆图鉴', sellingPoint: '物忆异能 × 古董悬疑', genre: '都市', coreSetting: '临江古玩街，修复工作室', mainline: '调包案真相与物忆来源', first30: '前三章完成入局与钩子', readerFeeling: '悬念拉满，暖色底色' })
+          )
+        const novelId = Number(n.lastInsertRowid)
+        db.prepare('INSERT INTO world (novel_id, manual_json, factions_json) VALUES (?, ?, ?)').run(
+          novelId,
+          JSON.stringify({
+            核心设定: { 物忆: '触碰旧物即可读取其残留的情感记忆', 限制: '每次触碰消耗精神，越久越难抽离' },
+            地点: { 临江古玩街: '主角工作室所在，黄昏最热闹' }
+          }),
+          JSON.stringify([{ name: '陈记漆器铺', currentState: '城南老字号，三十年前曾为神秘客户定制楠木盒' }])
+        )
+        const v = db.prepare("INSERT INTO volume (novel_id, title, order_index, strategy_json) VALUES (?, '第一卷 · 古玩街', 0, '{}')").run(novelId)
+        const volId = Number(v.lastInsertRowid)
+        const demoChapters = [
+          ['第一章 · 黄昏来访客', '神秘女子携楠木盒上门，林默触碰记忆碎片，卷入调包案。', '油灯在桌上静静燃着。他伸手碰了碰灯罩，指尖传来一阵温热。\n\n那是一只楠木盒。灰色风衣的女人说，她父亲临终前只留下一句话：找临江古玩街那个修古董的年轻人。\n\n林默的手刚碰到盒盖，整条街的灯火都暗了一瞬。记忆像潮水涌来——钟表店的指针声、深夜撬开陈列柜的声响，还有一句压低的声音："东西不在明面上。埋在……"\n\n画面断了。他猛地缩回手。这只盒子里装过的东西，被人替换过。而且，替换它的人知道他迟早会打开它。'],
+          ['第二章 · 怀表压痕', '盒内怀表压痕指向城南漆器铺；修表匠老陈的怀表在同一晚重新走字。', '夜里十一点，林默把盒子翻来覆去看了十几遍。\n\n盒盖内侧的云纹不是刻上去的，是暗金漆描的——这样的工艺，临江只有两家铺子做得出来。一家三十年前倒了，另一家在城南。\n\n他摊开笔记本写下第一行：盒面云纹 · 城南 · 陈记漆器。\n\n手机在这时亮了。是老陈发来的微信："小林，明天帮我看看那块怀表？坏了二十年，最近突然走字了。你说怪不怪。"\n\n林默盯着屏幕，脊背一阵发凉。那只盒子里，也有一块怀表的压痕——很深，像被放了很久很久。'],
+          ['第三章 · 城南漆器铺', '雨夜探铺，云纹笔法对上暗语，调包案第一块拼图落位。', '城南的雨下了一整夜。\n\n林默站在陈记漆器铺的旧招牌下，伞沿滴水。铺子卷帘门拉了一半，里面透出昏黄的灯。\n\n老师傅不说话，只把一张旧订单推过来——三十年前，有人订过一只楠木盒，要求盒内衬绒布，尺寸正好放得下一块怀表。\n\n"东西不在明面上。"老师傅压低声音，"埋在……"话断在这里，他摇了摇头，指指天花板。\n\n林默抬头。阁楼里，有什么东西在昏暗里透出一点光。']
+        ]
+        for (const [title, summary, content] of demoChapters) {
+          const c = db
+            .prepare("INSERT INTO chapter (novel_id, volume_id, title, summary, goal_json, content, status, word_count, ai_words) VALUES (?, ?, ?, ?, '{}', ?, 'written', ?, ?)")
+            .run(novelId, volId, title, summary, content, (content.match(/[\u4e00-\u9fff]/g) ?? []).length, (content.match(/[\u4e00-\u9fff]/g) ?? []).length)
+          db.prepare("INSERT INTO foreshadow (novel_id, chapter_id, content, status) VALUES (?, ?, ?, 'laid')").run(novelId, Number(c.lastInsertRowid), '阁楼之光：埋着的东西很可能就是真品')
+        }
+        for (const [name, profile] of [
+          ['林默', JSON.stringify({ 主角: '物忆修复师，冷静谨慎', 能力: '触碰旧物读取记忆', 目标: '查明调包案' })],
+          ['老陈', JSON.stringify({ 配角: '修表匠，掌故多', 立场: '知情但有所保留' })]
+        ]) {
+          db.prepare("INSERT INTO character (novel_id, name, profile_json, status) VALUES (?, ?, ?, 'confirmed')").run(novelId, name, profile)
+        }
+        db.exec('COMMIT')
+        res.status(201).json({ novelId, title: '演示书 · 物忆图鉴' })
+      } catch (err) {
+        db.exec('ROLLBACK')
+        throw err
+      }
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- v0.24.4（A3 写作统计面板）：书级写作洞察聚合（零新增表——全部由现有数据推导） ----------
+  router.get('/:id/stats', (req, res, next) => {
+    try {
+      const novelId = Number(req.params.id)
+      const novel = db.prepare('SELECT id, title FROM novel WHERE id = ?').get(novelId) as { id: number; title: string } | undefined
+      if (!novel) {
+        res.status(404).json({ error: 'novel not found' })
+        return
+      }
+      const total = db
+        .prepare(
+          `SELECT COUNT(*) AS chapters,
+                  COALESCE(SUM(word_count), 0) AS words,
+                  COALESCE(SUM(ai_words), 0) AS aiWords,
+                  COALESCE(SUM(human_words), 0) AS humanWords,
+                  COALESCE(SUM(CASE WHEN content != '' THEN 1 ELSE 0 END), 0) AS written,
+                  COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed
+           FROM chapter WHERE novel_id = ?`
+        )
+        .get(novelId) as { chapters: number; words: number; aiWords: number; humanWords: number; written: number; failed: number }
+      const byStatus = db
+        .prepare(
+          `SELECT status, COUNT(*) AS count, COALESCE(SUM(word_count), 0) AS words
+           FROM chapter WHERE novel_id = ? GROUP BY status`
+        )
+        .all(novelId) as Array<{ status: string; count: number; words: number }>
+      const byVolume = db
+        .prepare(
+          `SELECT v.id, v.title, v.order_index AS orderIndex,
+                  COUNT(c.id) AS count, COALESCE(SUM(c.word_count), 0) AS words
+           FROM volume v LEFT JOIN chapter c ON c.volume_id = v.id
+           WHERE v.novel_id = ? GROUP BY v.id ORDER BY v.order_index`
+        )
+        .all(novelId) as Array<{ id: number; title: string; orderIndex: number; count: number; words: number }>
+      // 审核分分布（review_json.score——"低分全量触发修复链"级问题可一眼看出）
+      const reviewRows = db
+        .prepare("SELECT id, title, review_json FROM chapter WHERE novel_id = ? AND review_json IS NOT NULL AND review_json != '' ORDER BY id")
+        .all(novelId) as Array<{ id: number; title: string; review_json: string }>
+      let reviewScores: Array<{ chapterId: number; title: string; score: number }> = []
+      try {
+        reviewScores = reviewRows
+          .map((r) => ({ chapterId: r.id, title: r.title, score: Number((JSON.parse(r.review_json) as { score?: number }).score ?? 0) }))
+          .filter((r) => Number.isFinite(r.score) && r.score > 0)
+      } catch {
+        reviewScores = []
+      }
+      const debts = db
+        .prepare(
+          `SELECT COUNT(DISTINCT chapter_id) AS count FROM quality_debt
+           WHERE resolved = 0 AND chapter_id IN (SELECT id FROM chapter WHERE novel_id = ?)`
+        )
+        .get(novelId) as { count: number }
+      const usage = db
+        .prepare(
+          `SELECT COUNT(*) AS calls,
+                  COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens,
+                  COALESCE(SUM(cost_estimate), 0) AS cost
+           FROM usage_log WHERE novel_id = ?`
+        )
+        .get(novelId) as { calls: number; tokens: number; cost: number }
+      res.json({
+        novelId,
+        title: novel.title,
+        total: {
+          chapters: Number(total.chapters),
+          words: Number(total.words),
+          aiWords: Number(total.aiWords),
+          humanWords: Number(total.humanWords),
+          written: Number(total.written),
+          failed: Number(total.failed)
+        },
+        byStatus,
+        byVolume,
+        reviewScores,
+        pendingDebts: Number(debts.count),
+        usage: { calls: Number(usage.calls), tokens: Number(usage.tokens), cost: Number(usage.cost) }
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- v0.24.4（B5 伏笔看板）：伏笔/事实账本聚合（README 记忆面同源） ----------
+  router.get('/:id/foreshadows', (req, res, next) => {
+    try {
+      const novelId = Number(req.params.id)
+      const novel = db.prepare('SELECT id FROM novel WHERE id = ?').get(novelId) as { id: number } | undefined
+      if (!novel) {
+        res.status(404).json({ error: 'novel not found' })
+        return
+      }
+      const foreshadows = db
+        .prepare(
+          `SELECT f.id, f.content, f.status, f.chapter_id AS chapterId,
+                  c.title AS chapterTitle
+           FROM foreshadow f LEFT JOIN chapter c ON c.id = f.chapter_id
+           WHERE f.novel_id = ? ORDER BY f.id`
+        )
+        .all(novelId) as Array<{ id: number; content: string; status: string; chapterId: number | null; chapterTitle: string | null }>
+      const facts = db
+        .prepare(
+          `SELECT f.id, f.content, f.chapter_id AS chapterId, c.title AS chapterTitle
+           FROM fact f LEFT JOIN chapter c ON c.id = f.chapter_id
+           WHERE f.novel_id = ? AND f.confirmed = 1 ORDER BY f.id DESC LIMIT 100`
+        )
+        .all(novelId) as Array<{ id: number; content: string; chapterId: number | null; chapterTitle: string | null }>
+      res.json({
+        foreshadows: foreshadows.map((f) => ({
+          id: f.id,
+          content: f.content,
+          status: f.status,
+          chapterId: f.chapterId,
+          chapterTitle: f.chapterTitle
+        })),
+        facts: facts.map((f) => ({ id: f.id, content: f.content, chapterId: f.chapterId, chapterTitle: f.chapterTitle }))
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   router.patch('/:id', (req, res, next) => {
     try {
       const id = Number(req.params.id)

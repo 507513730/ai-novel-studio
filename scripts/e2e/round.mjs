@@ -180,8 +180,8 @@ export async function t2() {
     const ctx = await api(`/novels/${novelId}/chapters/${firstCh.id}/context-preview`)
     ok(Array.isArray(ctx.sections) && ctx.sections.length > 0, '写作上下文预览')
   }
-  // 导出（3 格式）
-  for (const fmt of ['txt', 'md', 'epub']) {
+  // 导出（4 格式；v0.24.4 A5 加 DOCX）
+  for (const fmt of ['txt', 'md', 'epub', 'docx']) {
     const r = await fetch(`http://127.0.0.1:3000/api/novels/${novelId}/export?format=${fmt}`)
     ok(r.ok && (await r.text()).length > 100, `导出 ${fmt.toUpperCase()}`)
   }

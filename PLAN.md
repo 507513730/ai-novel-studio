@@ -28,7 +28,7 @@ AI 导演式长篇小说生产系统的桌面版（Electron）。借鉴两个参
 | 测试 | ✅ | vitest 178/178、db-smoke 7/7、typecheck/lint 0 error、e2e R10 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7） |
 | **当前主线** | 📚 | 真实写书（书 #25「帝路十章」）：卷 72 完成（18 章 47,112 字）+ 卷 73 完成（25 章 66,852 字），全书累计 43 章 ≈11.4 万字；剩卷 74-75 共 49 章待产（应用内执行，绑定方案「帝路十章」） |
 
-**版本记录**：最新 v0.24.3（写书实战纠错批 A：生产管线配置级错误熔断 ConfigError + job 全失败不再虚报 done，D106）；上一版 v0.24.2（功能批 F：章节阅读/复盘视图 + 全书检索 + 版本 diff + 方案整本生产入口）——之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+**版本记录**：最新 v0.24.4（非写书清单批 B：审核基线校准 + 写作统计/伏笔账本 + 快捷词 + 本地校对 + DOCX 导出 + 拖拽导入/跟随系统主题 + 网文要素工坊 + 演示书，D108/D109）；上一版 v0.24.3（写书实战纠错批 A：生产管线配置级错误熔断 ConfigError + job 全失败不再虚报 done，D106）——之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 
 ## 1. 用户已锁定决策（不可再问）
 
@@ -49,9 +49,9 @@ AI 导演式长篇小说生产系统的桌面版（Electron）。借鉴两个参
 | pro 模型切换验证 | 等用户通知 | deepseek-v4-pro 正式版上线后一键切换审核路由 |
 | 本地方案市场 | 预留 | `solutionAssets` 本地目录市场未实现（P21-4），仅 GitHub 市场；竞品对应 C4 |
 | 方案步骤 maxTokens 智能分配 | 预留 | audit-report P21 待办 |
-| 写作统计面板 / 灵感箱 / 角色关系图 | 未排期 | 2026-08-22 文档评审建议 + 2026-08-23 竞品调研并档（统计面板=A3、关系图并入 B5 伏笔看板），等写书主线收官 |
-| e2e 测试报告写入位置 | 待优化 | 现追加写入 docs/test-report.md（建议迁 release/，CI artifact 化） |
-| 审核评分基线校准 | backlog | 2026-08-23 写书实战观察（D106 批次）：flash 审核普遍打 25-72 分，卷 73 全 25 章触发修复链（每章 6+ 次 LLM 调用，成本/时长 ≈2×）；需校准审核 prompt 基线或分级阈值（≥75 免修现形同虚设） |
+| 写作统计面板 / 灵感箱 / 角色关系图 | ✅ 部分完成 | 2026-08-24 D109：统计面板 + 伏笔看板已落地（/novels/:id/stats + foreshadows）；灵感箱未做（建书已含灵感输入，优先级低）；角色关系图依赖关系数据（B5 已并账本视图，关系图待回灌关系提取） |
+| e2e 测试报告写入位置 | ✅ 已完成 | 已迁 release/（gitignored）；CI artifact 化待 e2e 入 CI 时启用 |
+| 审核评分基线校准 | ✅ 已完成 | 2026-08-24 D108：实测基线（高质量 85 / 中等 45-55 / 低 30）→ reviewPolicy isFixWarranted（<60 必修；60-74 有 high 才修；仅 medium/low 登记软债）+ needsFix 服务端推导 + SYSTEM_REVIEW 评分锚点——中等档免修省 2-3 次 LLM/章 |
 | 文档治理（乱码/数字漂移/架构对齐） | ✅ 已完成 | 2026-08-22 四大项：乱码清零、README 修正、architecture 对齐、PLAN 归档 |
 
 ### 2.1 竞品差距 backlog（2026-08-23 调研，详情见 [docs/competitive-analysis.md](docs/competitive-analysis.md)）

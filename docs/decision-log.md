@@ -663,3 +663,17 @@
 - **修复（本地设计决策）**：① llm.ts 新增 `ConfigError`（路由缺失 / key 未配置 / 解密失败三处抛出；解密失败带 cause 与「设置 → 供应商 重新保存 API Key」指引；候选链控制流不变——解密异常本就冒泡出循环）；② generateChapter 异常复位：ConfigError → 恢复抢占前状态（章首 SELECT 的 status 快照），不再误标 failed；③ runProductionPipeline 每章 catch 与回灌 catch 对 ConfigError 直接上抛熔断（scheduler 捕获 → job failed + 错误消息）；④ scheduler 生产 job 收尾：done=0 且 failed=total 时改判 failed（附摘要），杜绝虚报 done。
 - **测试**：tests/config-circuit.test.ts 4 例（callLlm 分类 ×2 / generateChapter 状态恢复 / 生产整批熔断 + 3 章均保持 planned），全量 182/182。
 - **运维注**：本次解密失败根因是历史密文跨环境复制失效（dev/安装版/便携三库同源复制，DPAPI 密文不通用）——应用内重存 key 即恢复；熔断保证同类问题今后不再污染全书章节状态。
+
+### D108 · 2026-08-24 · 审核评分基线校准（v0.24.4，写书成本≈2× 修正）
+
+- **背景**：写书实战观察（D106 批次）——flash 审核普遍打 25-72 分，卷 73 全 25 章触发修复链（每章 6+ 次 LLM 调用，成本/时长 ≈2×）；生产管道触发条件 `score<75 && issues>0` 使 75 分免修线形同虚设。
+- **实测基线**（#61 查证闭环；官方 DeepSeek 直连 flash，临时库 3 档正文 × 2 次，共 6 次调用）：高质量章 **85/85** · 中等章 **45/55** · 低质量章 **30/30**。结论：① 评分区分度良好（85/50/30 三档清晰）——但 `SYSTEM_REVIEW` 原文"严格审核"无评分标尺；② **LLM 返回的 needsFix 恒 true**（85 分章也是 true）——字段不可用，逻辑此前从不消费它，仅展示误导；③ severity=high 是比原始分数更可靠的质量信号。
+- **决策（本地设计，阈值基于实测）**：新建 `services/reviewPolicy.ts` 统一策略——`isFixWarranted(score, issues)`：**<60 必修；60-74 有 high 才修；60-74 仅 medium/low 登记质量债不自动修**；`needsFix` 一律服务端推导（deriveNeedsFix，展示=行为）。接入 production 管道（触发条件）、单章 review 端点、团队审核（原 avgScore<75 口径不一致）。`SYSTEM_REVIEW` 补评分标尺锚点（85-100/70-84/55-69/0-54 语义 + needsFix 判定说明）——新库生效，既有库经提示词工作台手动同步。
+- **预期收益**：中等档无硬伤章免修 → 每章省 2-3 次调用；高/低质量档行为不变。
+- **验收**：单测 +5（review-policy.test.ts）369/369 + typecheck/lint 0 err + e2e T2 审核断言不受影响（无分数阈值断言）。
+
+### D109 · 2026-08-24 · 非写书清单批 B（竞品 A/B 档 + 新手引导，v0.24.4 预备）
+
+- **范围**（竞品分析 A 档 7 项中 5 项 + B 档 2 项落地；A1 多候选生成成本敏感缓、B6/B7/C 档结构性远期不改）：A3 写作统计面板（/stats：字数/AI 占比/卷分布/审核分分布/成本/伏笔账本——零新增表全由现有数据推导，新增 GET /:novelId/stats + /:novelId/foreshadows）；A2 快捷词（`;触发词` → 展开文本；app_settings 键 quickWords + CodeMirror autocompletion 源 + 设置页管理；@codemirror/autocomplete 显式声明）；A4 轻量本地校对（确定性检查零 token：重复词/叠词豁免/乱码半全角 + 单次 extraction 语义检查，POST .../proofread，降级静默）；A5 DOCX 导出（零新依赖——jszip 3.10.1 继承依赖组装 OOXML，T2 e2e 加断言）；A7 文件拖拽导入 + 主题跟随系统（system 偏好 → 深=墨蓝/浅=纸张）；B4 网文要素工坊（/forge：人名/地名/门派/功法/宝物/金手指/桥段批量生成 + 一键入知识库）；B5 伏笔看板（并入统计页，记忆面同源）；A6 演示书（POST /novels/import-demo：1 卷 3 章 + 角色 + 世界观 + 伏笔，零 LLM，空态一键载入）。
+- **测试基线修正（重要发现）**：`.worktrees/` 协作者重构副本导致 vitest 双跑——先前 364/74 实为主库 41 文件 + worktree 副本双算；新增 vitest.config.ts（include tests/** + exclude .worktrees）后真实基线 **198/41**（+16：review-policy 5 / stats 2 / quick-words 4 / proofread 5）。仓库文档/报告中的 364 数字应理解为双算值。
+- **验收**：typecheck/lint 0 err + vitest 198/198（单库）+ e2e R12（官方直连，含 DOCX 导出断言）。

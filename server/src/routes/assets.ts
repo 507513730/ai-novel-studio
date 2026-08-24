@@ -22,6 +22,58 @@ const ASSET_TYPES = ['knowledge', 'world', 'mode', 'style', 'genre', 'base-chara
 export function createAssetsRouter(db: DatabaseSync): Router {
   const router = Router()
 
+  // ---------- v0.24.4（B4 网文要素生成器）：人名/地名/门派/功法/宝物/金手指 批量生成 ----------
+  router.post('/forge/generate', async (req, res, next) => {
+    try {
+      const input = z
+        .object({
+          genre: z.string().min(1).max(30),
+          categories: z.array(z.enum(['人名', '地名', '门派', '功法', '宝物', '金手指', '桥段'])).min(1).max(7),
+          count: z.number().int().min(3).max(15).default(8),
+          style: z.string().max(200).default('')
+        })
+        .parse(req.body ?? {})
+      const prompt = [
+        `你是网文设定要素生成器。为「${input.genre}」题材批量生成${input.categories.join('、')}，每类 ${input.count} 个。`,
+        input.style ? `风格要求：${input.style}` : '',
+        '要素要成体系：人名与姓氏/身份呼应，门派与功法风格一致，宝物与金手指有等级感，桥段给出触发方式与兑现点。',
+        `请输出 JSON：{"items":[{"category":"人名","list":[{"name":"..","desc":"20 字以内的定位/背景"}]}]}`
+      ].join('\n')
+      const r = await callLlmJson<{ items: Array<{ category: string; list: Array<{ name: string; desc: string }> }> }>(
+        db,
+        'extraction',
+        {
+          novelId: 0,
+          messages: [{ role: 'user', content: prompt }],
+          maxTokens: 4096
+        },
+        (obj) => {
+          const arr = (obj as { items?: unknown }).items
+          if (!Array.isArray(arr) || arr.length === 0) return null
+          return {
+            items: arr
+              .map((x) => {
+                const i = x as Record<string, unknown>
+                return {
+                  category: String(i.category ?? ''),
+                  list: Array.isArray(i.list)
+                    ? (i.list as Array<Record<string, unknown>>)
+                        .map((l) => ({ name: String(l.name ?? ''), desc: String(l.desc ?? '') }))
+                        .filter((l) => l.name)
+                    : []
+                }
+              })
+              .filter((i) => i.category && i.list.length > 0)
+          }
+        },
+        'forge-generate'
+      )
+      res.json({ items: r.items })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // ---------- 文件上传解析（base64，避免 multipart 依赖） ----------
   router.post('/import/file', async (req, res, next) => {
     try {

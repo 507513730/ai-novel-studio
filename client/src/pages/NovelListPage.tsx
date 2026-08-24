@@ -3,7 +3,7 @@ import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import type { NovelSummary } from '../types'
-import { novelApi } from '../api'
+import { novelApi, apiFetch } from '../api'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 // v0.23.1（批次 B6）：主角名提取统一 utils（此前双实现且正则漂移）
@@ -18,6 +18,8 @@ export function NovelListPage(): React.JSX.Element {
   const [hardReqs, setHardReqs] = useState('')
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
+  // v0.24.4（A6）：演示书载入
+  const [demoBusy, setDemoBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // P13 F1：主题化确认框
   const [confirmDelete, deleteDialog] = useConfirm()
@@ -134,8 +136,28 @@ export function NovelListPage(): React.JSX.Element {
             <div style={{ fontSize: 40, marginBottom: 12 }}>📚</div>
             <div style={{ fontSize: 15, marginBottom: 6 }}>还没有小说</div>
             <div className="muted t-small">
-              在上方输入一句灵感，AI 自动导演会帮你完成开书、设定与第一卷规划。
+              在上方输入一句灵感，AI 自动导演会帮你完成开书、设定与第一卷规划；或先载入演示书看看成品管线。
             </div>
+            {/* v0.24.4（A6）：演示书——零 LLM 的成品样例（1 卷 3 章 + 角色 + 世界观 + 伏笔） */}
+            <button
+              className="primary"
+              style={{ marginTop: 12 }}
+              disabled={demoBusy}
+              onClick={() => void (async () => {
+                setDemoBusy(true)
+                try {
+                  await apiFetch('/novels/import-demo', { method: 'POST' })
+                  toast('ok', '演示书已载入，可在「章节执行」浏览')
+                  await queryClient.invalidateQueries({ queryKey: ['novels'] })
+                } catch (e) {
+                  toast('error', e instanceof Error ? e.message : String(e))
+                } finally {
+                  setDemoBusy(false)
+                }
+              })()}
+            >
+              {demoBusy ? '载入中…' : '📖 载入演示书'}
+            </button>
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>

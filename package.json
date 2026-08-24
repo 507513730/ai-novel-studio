@@ -1,6 +1,6 @@
 {
   "name": "ai-novel-studio",
-  "version": "0.24.3",
+  "version": "0.24.4",
   "description": "AI 小说创作工作台 - AI Novel Production Engine Desktop",
   "main": "out/main/index.js",
   "author": "ai-novel-studio",
@@ -25,6 +25,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.1",

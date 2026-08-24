@@ -2,13 +2,20 @@ import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 
+// v0.24.4（A5）：jszip 最小接口（DOCX OOXML 组装用）
+interface JSZipLike {
+  file(name: string, content: string): void
+  folder(name: string): { file(name: string, content: string): void } | null
+  generateAsync(opts: { type: string }): Promise<Buffer>
+}
+
 export function createExportRouter(db: DatabaseSync): Router {
   const router = Router()
 
   router.get('/:novelId/export', async (req, res, next) => {
     try {
       const novelId = Number(req.params.novelId)
-      const format = z.enum(['txt', 'md', 'epub']).parse(req.query.format ?? 'txt')
+      const format = z.enum(['txt', 'md', 'epub', 'docx']).parse(req.query.format ?? 'txt')
       const novel = db.prepare('SELECT title, inspiration, framing_json FROM novel WHERE id = ?').get(novelId) as
         | { title: string; inspiration: string; framing_json: string }
         | undefined
@@ -59,6 +66,60 @@ export function createExportRouter(db: DatabaseSync): Router {
         const buf = Buffer.from(parts.join('\n'), 'utf-8')
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}.md`)
+        res.send(buf)
+        return
+      }
+
+      // DOCX（v0.24.4 A5：零新依赖——jszip 组装 OOXML；投稿平台事实标准）
+      if (format === 'docx') {
+        // D42：utilityProcess 下 CJS 包动态 import 双层 default（jszip .default 为 function——按"非 function 且有 default 即解包"通用处理）
+        let jszipMod = (await import('jszip')) as unknown
+        while (jszipMod && typeof jszipMod !== 'function' && (jszipMod as { default?: unknown }).default !== undefined) {
+          jszipMod = (jszipMod as { default: unknown }).default
+        }
+        const JSZipCtor = jszipMod as unknown as { new (): JSZipLike }
+        if (typeof JSZipCtor !== 'function') {
+          throw new Error('jszip 未正确加载（导出结构异常）')
+        }
+        const xmlEscape = (s: string): string =>
+          s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\r\n?/g, '\n')
+        const para = (text: string, heading = false): string => {
+          const pPr = heading
+            ? '<w:pPr><w:spacing w:before="240" w:after="120"/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:pPr>'
+            : '<w:pPr><w:spacing w:line="360" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr>'
+          const rPr = heading ? '<w:rPr><w:b/><w:sz w:val="28"/></w:rPr>' : ''
+          return `<w:p>${pPr}<w:r>${rPr}<w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r></w:p>`
+        }
+        const bodyParts: string[] = [para(title, true)]
+        if (novel.inspiration) bodyParts.push(para(`灵感：${novel.inspiration}`))
+        for (const c of chapters) {
+          bodyParts.push(para(c.title || '（未命名章节）', true))
+          // 正文空行分段（与 txt/md 语义一致）
+          for (const seg of c.content.split(/\n{2,}/)) {
+            for (const line of seg.split('\n')) bodyParts.push(para(line))
+          }
+        }
+        const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>${bodyParts.join('')}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body>
+</w:document>`
+        const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`
+        const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`
+        const zip = new JSZipCtor()
+        zip.file('[Content_Types].xml', contentTypes)
+        zip.file('_rels/.rels', rels)
+        zip.folder('word')?.file('document.xml', documentXml)
+        const buf = await zip.generateAsync({ type: 'nodebuffer' })
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}.docx`)
         res.send(buf)
         return
       }

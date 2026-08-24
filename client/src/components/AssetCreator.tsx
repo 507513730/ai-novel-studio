@@ -123,7 +123,18 @@ export function AssetCreator({ type, typeLabel, placeholder, maxLen, onSave, onS
       </div>
 
       {mode === 'upload' && (
-        <div>
+        // v0.24.4（A7）：文件拖拽导入（拖到区域即解析）
+        <div
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+          onDrop={(e) => {
+            e.preventDefault()
+            const f = e.dataTransfer.files?.[0]
+            if (f) void handleFile(f)
+          }}
+          style={{ border: '2px dashed var(--border)', borderRadius: 8, padding: 14, textAlign: 'center', cursor: 'pointer' }}
+        >
+          <Upload size={16} className="muted" />
+          <p className="muted t-small" style={{ margin: '4px 0 8px' }}>拖拽文件到这里，或点击选择</p>
           <input
             type="file"
             accept=".txt,.md,.markdown,.epub"
