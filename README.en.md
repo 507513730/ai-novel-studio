@@ -95,7 +95,7 @@ docs/          architecture / changelog / decisions / versioning / audit
 ## Testing
 
 - `pnpm test`: vitest unit tests (patches/director/SSE abort/cost estimation/model override/world rendering/solution assets/guidance/constraints/memory/review regression/word counting/version diff/full-text search, 178+)
-- `node scripts/e2e/round.mjs <n>`: full-feature e2e (T1 config / T2 creation chain / T3 assets / T4 director)
+- `node scripts/e2e/round.mjs <n>`: full-feature e2e (T1 config / T2 creation chain / T3 assets / T4 director / T5 feature regression)
 - `node scripts/check-docs.mjs`: docs health check (mojibake + broken relative links) — enforced by CI
 
 ## Contributing

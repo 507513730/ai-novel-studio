@@ -43,8 +43,9 @@ for (const f of files) {
     fail(`乱码嫌疑（5+ 连续 ?，第 ${line} 行附近）: ${f}——请重建或删除损坏段`)
   }
 
-  // 2) 相对链接存在性
-  const lines = text.split('\n')
+  // 2) 相对链接存在性（跳过 fenced code blocks——计划类文档常在代码块里给 markdown 示例）
+  const noFence = text.replace(/```[\s\S]*?```/g, '')
+  const lines = noFence.split('\n')
   for (let i = 0; i < lines.length; i++) {
     const re = /\[[^\]]*\]\(([^)\s]+)\)/g
     let m
