@@ -101,28 +101,10 @@
 .prose h2 { font-size: var(--fs-20); font-weight: 600; line-height: 1.35; margin: var(--sp-5) 0 var(--sp-3); }
 .prose h3 { font-size: var(--fs-18); font-weight: 600; margin: var(--sp-4) 0 var(--sp-2); }
 
-/* P22-A：打包开源字体（OFL）——霞鹜文楷 / 思源宋体 / 思源黑体 */
-@font-face {
-  font-family: 'LXGW WenKai';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('./assets/fonts/lxgw-wenkai-500.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Noto Serif SC';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./assets/fonts/noto-serif-sc-400.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Noto Sans SC';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./assets/fonts/noto-sans-sc-400.woff2') format('woff2');
-}
+/* P22-A：打包开源字体（OFL）——霞鹜文楷 / 思源宋体 / 思源黑体
+ * v0.25.0（审查 L3）：@font-face 已移至 ./assets/fonts.css，首屏渲染后异步加载
+ * （9.5MB 字体不再阻塞首屏关键路径），见 main.tsx。
+ */
 
 /* ============================================================
  * P13 F0：多主题（学习 FeelFish 色板）

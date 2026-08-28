@@ -46,3 +46,8 @@ ReactDOM.createRoot(rootEl).render(
     </ErrorBoundary>
   </React.StrictMode>
 )
+
+// v0.25.0（审查 L3）：字体异步加载——3 个 woff2 合计 9.5MB，
+// 此前随 index.css 同步进入首屏关键路径。首屏完成后再拉取，期间由
+// `font-display: swap` 用系统字体兜底渲染，到位后平滑替换。
+void import('./assets/fonts.css').catch(() => undefined)

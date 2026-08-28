@@ -1,0 +1,28 @@
+/* P22-A：打包开源字体（OFL）——霞鹜文楷 / 思源宋体 / 思源黑体
+ *
+ * v0.25.0（审查 L3）：从 index.css 拆出并改为按需异步加载。
+ * 三个 woff2 合计 9.5MB（其中霞鹜文楷 6.9MB），此前随 index.css 同步进入首屏
+ * 关键路径。现由 main.tsx 在首屏渲染后动态 import，Vite 会把它拆成独立 CSS chunk
+ * 与字体资源；`font-display: swap` 保证加载期间正文先用系统字体渲染，到位后平滑替换。
+ */
+@font-face {
+  font-family: 'LXGW WenKai';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/lxgw-wenkai-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/noto-serif-sc-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/noto-sans-sc-400.woff2') format('woff2');
+}
