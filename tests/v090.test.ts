@@ -125,7 +125,8 @@ describe('v0.9.0 A-17 isCustom 保留（审查 #17）', () => {
     await withServer(makeApp(db, [['/api/settings', createSettingsRouter(db)]]), async (base) => {
       const res = await fetch(`${base}/api/settings/providers/${builtin.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        // v0.25.0（审查 M3）：全请求强制 X-App-Token——本用例已配置 SERVER_TOKEN，须带上
+        headers: { 'Content-Type': 'application/json', 'X-App-Token': 't' },
         body: JSON.stringify({ name: '改名' })
       })
       expect(res.status).toBe(200)

@@ -36,8 +36,11 @@ function getDataDir(): string {
 
 ipcMain.handle('get-server-url', () => lastServerUrl)
 // P20（S1）：renderer 请求 token（sendSync 同步返回）
+// v0.25.0（审查 L4）：sender 校验——此前无校验，注入的 iframe 理论上可经 preload 索取 token，
+// 从而绕过服务端 null-Origin 的 token 防线。主窗口尚未赋值时（preload 引导竞态）放行，
+// 窗口就绪后限定主窗口顶层 frame。
 ipcMain.on('get-server-token', (event) => {
-  event.returnValue = SERVER_TOKEN
+  event.returnValue = mainWindow && !isTrustedSender(event) ? '' : SERVER_TOKEN
 })
 
 // P13 F0：主题联动（nativeTheme 同步 + titleBarOverlay 配色）
@@ -64,12 +67,24 @@ ipcMain.handle('theme-set', (event, theme: string) => {
   return true
 })
 
+// v0.25.0（审查 L4）：布尔版 sender 校验（供 ipcMain.on 使用，不抛错）
+// 结构类型兼容 IpcMainInvokeEvent 与 IpcMainEvent（两者均含 sender / senderFrame）
+interface SenderEvent {
+  sender: Electron.WebContents
+  senderFrame?: Electron.WebFrameMain | null
+}
+
 // v0.17.0（审查 M19）：破坏性 IPC 只接受主窗口顶层 frame（XSS 注入 iframe 无法绕过）
-function assertTrustedSender(event: Electron.IpcMainInvokeEvent): void {
+function isTrustedSender(event: SenderEvent): boolean {
   const w = mainWindow
-  const fromMain = w !== null && event.sender === w.webContents
-  const topFrame = !event.senderFrame || event.senderFrame.top === w?.webContents.mainFrame
-  if (!fromMain || !topFrame) {
+  if (w === null) return false
+  const fromMain = event.sender === w.webContents
+  const topFrame = !event.senderFrame || event.senderFrame.top === w.webContents.mainFrame
+  return fromMain && topFrame
+}
+
+function assertTrustedSender(event: Electron.IpcMainInvokeEvent): void {
+  if (!isTrustedSender(event)) {
     throw new Error('untrusted sender')
   }
 }
