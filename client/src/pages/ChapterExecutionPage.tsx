@@ -1,41 +1,47 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import CodeMirror from '@uiw/react-codemirror'
-import { markdown } from '@codemirror/lang-markdown'
-import { autocompletion } from '@codemirror/autocomplete'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Annotation, type AnnotationType } from '@codemirror/state'
-import { novelEditorTheme } from '../editor/theme'
-import { makeQuickWordSource } from '../utils/quickWords'
-import { novelApi, generateChapterSse, styleApi, studioApi, assetsApi, authHeaders, waitForJob, apiFetch } from '../api'
+import { novelApi, generateChapterSse, studioApi, assetsApi, authHeaders, waitForJob, apiFetch } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
-import type { VersionDiffInfo, WorldData } from '../types'
+import type { VersionDiffInfo } from '../types'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
-import { BookOpenText, Users, Map, Scale, Pin, Wand2 } from 'lucide-react'
 import { estimateCost, estimateTokens, fmtCost } from '../utils/costEstimate'
 // v0.23.1（批次 B6）：主角名提取统一 utils（此前双实现且正则漂移）
 import { extractProtagonistName } from '../utils/protagonist'
+// v0.25.0（审查 S1）：UI 面板全部分拆至 ./chapter/——
+// 本文件只保留章节生产链路的状态与动作编排（生成/审核/修复/回灌/版本/方案）
+import {
+  countCjk,
+  type ChapterVersion,
+  type CtxSection,
+  type MemoryData,
+  type PendingData,
+  type ProofreadIssue,
+  type ResourceDetail
+} from './chapter/types'
+import { DebtFixBadge } from './chapter/DebtFixBadge'
+import { ReadingView } from './chapter/ReadingView'
+import { ResourcePanel } from './chapter/ResourcePanel'
+import { ChapterToolbar, EditorPane, type ExportFormat } from './chapter/EditorArea'
+import {
+  BackfillResultPanel,
+  ContextPanel,
+  PendingPanel,
+  ProgressMatrix,
+  ProofreadPanel,
+  ResourceDetailPanel
+} from './chapter/ChapterPanels'
+import { MemoryPanel, ReviewResultPanel } from './chapter/ReviewPanel'
+import { VersionHistoryPanel, type VersionActions } from './chapter/VersionHistoryPanel'
 
 // v0.19.0：AI 写入标记（字数分离：区分 AI 插入与人工输入）
 const aiWrite = Annotation.define<boolean>()
-
-/** 中文字符计数（字数分离口径：与 word_count 一致） */
-function countCjk(text: string): number {
-  return (text.match(/[\u4e00-\u9fff]/g) ?? []).length
-}
-
-// v0.23.1（批次 E1）：叶子组件拆出至 ./chapter/（记忆面输入/质量债徽标/章节列表项）——
-// 编辑器/流式/动作面板与页面状态强耦合，保留本文件（后续按面板再拆）
-import { CharStateAdd, FactionStateEdit } from './chapter/MemoryInputs'
-import { DebtFixBadge } from './chapter/DebtFixBadge'
-import { ChapterListItem } from './chapter/ChapterListItem'
-import { ReadingView } from './chapter/ReadingView'
-import { BookSearchPanel } from './chapter/BookSearchPanel'
 
 export function ChapterExecutionPage(): React.JSX.Element {
   const { novelId } = useParams()
@@ -60,7 +66,7 @@ const selectedChapterRef = useRef<number | null>(null)
   const [reviewResult, setReviewResult] = useState<Record<string, unknown> | null>(null)
   const [backfillResult, setBackfillResult] = useState<Record<string, unknown> | null>(null)
   const [showPending, setShowPending] = useState(false)
-  const [pending, setPending] = useState<{ pendingFacts: Array<{ id: number; content: string }>; pendingCharacters: Array<{ id: number; name: string; profile: Record<string, string> }> } | null>(null)
+  const [pending, setPending] = useState<PendingData | null>(null)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
   const abortRef = useRef<AbortController | null>(null)
   // P9 A1：正文加载/保存防护
@@ -109,53 +115,17 @@ const selectedChapterRef = useRef<number | null>(null)
   // A1：选区/光标状态（ref 缓存防 onUpdate 无限重渲染）
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; cursor: number }>({ text: '', cursor: -1 })
   const selectionRef = useRef({ text: '', cursor: -1 })
-  // A2：标题内联编辑
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleDraft, setTitleDraft] = useState('')
-  const titleSubmittedRef = useRef(false)
+  // A2：标题内联编辑态已随 ChapterToolbar 拆出（工具条自持 editingTitle/titleDraft）
   // A3：版本历史
-  const [versions, setVersions] = useState<Array<{ id: number; note: string; createdAt: string; wordCount: number; preview: string }> | null>(null)
+  const [versions, setVersions] = useState<ChapterVersion[] | null>(null)
   const [showVersions, setShowVersions] = useState(false)
   // v0.24.2（F3）：版本对比当前 diff（恢复前检视）
   const [versionDiff, setVersionDiff] = useState<VersionDiffInfo | null>(null)
   // B1：写作上下文可视化
-  const [ctxSections, setCtxSections] = useState<Array<{ key: string; label: string; chars: number; tokens: number }> | null>(null)
+  const [ctxSections, setCtxSections] = useState<CtxSection[] | null>(null)
   const [ctxToggles, setCtxToggles] = useState<Record<string, boolean> | null>(null)
-  // D1：左栏资源树（章节/角色/设定/规则 分组）
-  const [resourceTab, setResourceTab] = useState<'chapters' | 'characters' | 'world' | 'rules'>('chapters')
-  const [resourceChars, setResourceChars] = useState<Array<{ id: number; name: string; status: string; profile: Record<string, unknown> }> | null>(null)
-  const [resourceWorld, setResourceWorld] = useState<WorldData | null>(null)
-  const [resourceRules, setResourceRules] = useState<Array<{ id: number; name: string; features: Array<Record<string, unknown>> }> | null>(null)
-  const [resourceDetail, setResourceDetail] = useState<{ title: string; body: string } | null>(null)
-  const [resourceLoading, setResourceLoading] = useState(false)
-  const [resourceError, setResourceError] = useState<string | null>(null)
-
-  // D1：加载资源（角色/设定/规则）（P9 B5：loading + 错误 + 重试三态）
-  const loadResourceTab = async (tab: 'chapters' | 'characters' | 'world' | 'rules'): Promise<void> => {
-    setResourceTab(tab)
-    setResourceDetail(null)
-    setResourceError(null)
-    try {
-      if (tab === 'characters' && !resourceChars) {
-        setResourceLoading(true)
-        const r = await novelApi.characters(id)
-        setResourceChars(r.characters)
-      } else if (tab === 'world' && !resourceWorld) {
-        setResourceLoading(true)
-        const r = await novelApi.world(id)
-        // v0.17.0（审查 A29）：消除 `as unknown as Record` 双转型——状态直接持 WorldData 类型
-        setResourceWorld(r.world)
-      } else if (tab === 'rules' && !resourceRules) {
-        setResourceLoading(true)
-        const r = await styleApi.list(id)
-        setResourceRules(r.assets)
-      }
-    } catch (err) {
-      setResourceError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setResourceLoading(false)
-    }
-  }
+  // D1：资源详情浮层（左栏资源树与版本「查看」共用；树本身的状态随 ResourcePanel 拆出）
+  const [resourceDetail, setResourceDetail] = useState<ResourceDetail | null>(null)
 
   const updateSelectionInfo = (): void => {
     const view = editorRef.current?.view
@@ -296,7 +266,10 @@ const selectedChapterRef = useRef<number | null>(null)
     staleTime: 60_000
   })
   const quickWords = writingSettings.data?.quickWords ?? {}
-  const list = chapters.data?.chapters ?? []
+  // v0.25.0（审查 L1）：memo 化——此前 `?? []` 每次渲染都产生新数组引用，
+  // 导致依赖 list 的 useMemo（chapterStats）与 useEffect（初始选中）每渲染都重跑
+  // （ESLint react-hooks/exhaustive-deps 已告警 2 处）
+  const list = useMemo(() => chapters.data?.chapters ?? [], [chapters.data])
   const chapter = list.find((c) => c.id === selectedChapter)
   // v0.24.2（F1）：阅读视图上一章/下一章定位
   const chapterIdx = list.findIndex((c) => c.id === selectedChapter)
@@ -689,9 +662,7 @@ const selectedChapterRef = useRef<number | null>(null)
   }
 
   // v0.24.4（A4）：轻量本地校对（确定性检查 + 单次语义 extraction，可选传当前编辑器内容）
-  const [proofreadIssues, setProofreadIssues] = useState<
-    Array<{ type: string; location: string; problem: string; suggestion: string }> | null
-  >(null)
+  const [proofreadIssues, setProofreadIssues] = useState<ProofreadIssue[] | null>(null)
   const runProofread = async (): Promise<void> => {
     if (!selectedChapter) return
     setActionError(null)
@@ -767,11 +738,7 @@ const selectedChapterRef = useRef<number | null>(null)
   }
 
   // v0.20.0：记忆面（角色状态/势力状态/待确认事实——显式查看与手动修正）
-  const [memory, setMemory] = useState<{
-    characters: Array<{ name: string; states: string[] }>
-    factions: Array<{ name: string; currentState: string }>
-    pendingFacts: Array<{ id: number; content: string }>
-  } | null>(null)
+  const [memory, setMemory] = useState<MemoryData | null>(null)
   const [showMemory, setShowMemory] = useState(false)
   const [memoryBusy, setMemoryBusy] = useState(false)
   const loadMemory = async (): Promise<void> => {
@@ -941,24 +908,17 @@ const selectedChapterRef = useRef<number | null>(null)
     setActionError(null)
   }
 
-  // P9 B8：标题内联保存（单一提交入口 + 失败提示）
-  const saveTitle = (): void => {
-    const t = titleDraft.trim()
-    if (!t || !selectedChapter || t === chapter?.title) {
-      setEditingTitle(false)
-      return
+  // P9 B8：标题保存（由 ChapterToolbar 提交时调用；编辑态由工具条自持）
+  const saveTitle = async (t: string): Promise<void> => {
+    if (!selectedChapter || t === chapter?.title) return
+    try {
+      await novelApi.chapterPatch(id, selectedChapter, { title: t })
+      await invalidate()
+      setActionMsg('标题已更新')
+      setTimeout(() => setActionMsg(null), 2000)
+    } catch (err) {
+      toast('error', `标题保存失败：${err instanceof Error ? err.message : String(err)}`)
     }
-    void novelApi
-      .chapterPatch(id, selectedChapter, { title: t })
-      .then(() => invalidate())
-      .then(() => {
-        setActionMsg('标题已更新')
-        setTimeout(() => setActionMsg(null), 2000)
-      })
-      .catch((err) => {
-        toast('error', `标题保存失败：${err instanceof Error ? err.message : String(err)}`)
-      })
-      .finally(() => setEditingTitle(false))
   }
 
   const exportLink = (format: 'txt' | 'md' | 'epub' | 'docx'): string => novelApi.exportUrl(id, format)
@@ -988,6 +948,100 @@ const selectedChapterRef = useRef<number | null>(null)
     }
   }
 
+  // P12 A3：本章进度矩阵信号（从现有状态推导，不新增请求）
+  const progressSegments = useMemo<Array<[string, boolean]>>(() => {
+    const taskReady = Boolean(chapter?.goal && Object.keys(chapter.goal).length > 0)
+    const contextReady = ctxSections !== null
+    const draftStarted = content.trim().length > 0
+    const draftSaved =
+      ['written', 'reviewed', 'done'].includes(chapter?.status ?? '') ||
+      savedContentRef.current.trim().length > 0
+    const reviewed = reviewResult !== null || ['reviewed', 'done'].includes(chapter?.status ?? '')
+    const reviewable = ['reviewed', 'done'].includes(chapter?.status ?? '')
+    return [
+      ['任务单', taskReady],
+      ['上下文', contextReady],
+      ['草稿', draftStarted],
+      ['保存', draftSaved],
+      ['审核', reviewed],
+      ['修复', fixDoneRef.current],
+      ['回灌', backfillDoneRef.current || reviewResult !== null],
+      ['快照', snapshotDoneRef.current],
+      ['可审', reviewable]
+    ]
+  }, [chapter, ctxSections, content, reviewResult])
+
+  // v0.15.0：反馈沉淀——把引导句固定为书级硬约束（导演/方案/生成/修复全链生效）
+  const pinGuidance = (): void => {
+    const t = guidanceDraft.trim()
+    if (!t) return
+    void (async () => {
+      const d = await novelApi.detail(id)
+      const cur = d.novel.constraints ?? []
+      const next = cur.filter((c) => c.text !== t)
+      const canon = extractProtagonistName(t)
+      next.push({
+        // v0.23.1（批次 B6）：约束 id 补随机后缀（同毫秒多次固定不撞 id）
+        id: `c${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        text: t,
+        level: 'must' as const,
+        enabled: true,
+        createdAt: new Date().toISOString(),
+        ...(canon ? { keyword: canon, replaceWith: canon } : {})
+      })
+      await novelApi.patch(id, { constraints: next })
+      setGuidanceDraft('')
+    })().catch(() => undefined)
+  }
+
+  // A3：版本历史动作（数据操作留在本页，呈现交给 VersionHistoryPanel）
+  const versionActions: VersionActions = {
+    view: (v) => {
+      if (!selectedChapter) return
+      void withBusy(`vview-${v.id}`, async () => {
+        try {
+          const r = await novelApi.chapterVersionDetail(id, selectedChapter, v.id)
+          setResourceDetail({ title: `版本 #${v.id}（${v.note} · ${v.createdAt}）`, body: r.version.content })
+        } catch (err) {
+          setActionError(err instanceof Error ? err.message : String(err))
+        }
+      })
+    },
+    restore: (v) => {
+      if (!selectedChapter) return
+      confirmFn({
+        title: '恢复版本',
+        message: `恢复为版本 #${v.id}？当前内容会先存入新版本，然后被替换。`,
+        confirmText: '恢复',
+        danger: true,
+        action: () =>
+          void withBusy(`vrestore-${v.id}`, async () => {
+            try {
+              const r = await novelApi.chapterVersionRestore(id, selectedChapter, v.id)
+              setContent(r.content)
+              savedContentRef.current = r.content
+              dirtyRef.current = false
+              setActionMsg(`已恢复版本 #${v.id}（${r.wordCount} 字），原内容已存为新版本`)
+              await invalidate()
+            } catch (err) {
+              setActionError(err instanceof Error ? err.message : String(err))
+            }
+          })
+      })
+    },
+    diff: (v) => {
+      if (!selectedChapter) return
+      void withBusy(`vdiff-${v.id}`, async () => {
+        try {
+          const d = await novelApi.chapterVersionDiff(id, selectedChapter, v.id)
+          setVersionDiff(d)
+        } catch (err) {
+          setActionError(err instanceof Error ? err.message : String(err))
+        }
+      })
+    }
+  }
+
   return (
     <>
       {chapterPromptElement}
@@ -997,993 +1051,374 @@ const selectedChapterRef = useRef<number | null>(null)
           🖊 专注模式 · Ctrl+Shift+F 退出 · Esc 退出
         </div>
       )}
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
-      {/* 左：资源树（D1：章节/角色/设定/规则 分组） */}
-      <div style={{ width: 260, borderRight: '1px solid var(--border)', padding: 12, overflowY: 'auto', background: 'var(--bg-panel)', display: focusMode ? 'none' : undefined }}>
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-          <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-            {(
-              [
-                ['chapters', '章节', BookOpenText],
-                ['characters', '角色', Users],
-                ['world', '设定', Map],
-                ['rules', '规则', Scale]
-              ] as Array<['chapters' | 'characters' | 'world' | 'rules', string, typeof BookOpenText]>
-            ).map(([k, label, Icon]) => (
-              <button
-                key={k}
-                className={`nav-tab${resourceTab === k ? ' active' : ''}`}
-                onClick={() => void loadResourceTab(k)}
-              >
-                <Icon size={12} className="icon-gap" />
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="row" style={{ gap: 4 }}>
-            {/* P23（N2）：手动新建章节 */}
-            <button
-              className="sm"
-              title="手动新建空章节（可改标题后生成正文）"
-              onClick={() => {
-                void askChapterTitle({ title: '新章节标题（留空自动编号）', defaultValue: '' }).then((t) => {
-                  if (t === null) return
-                  setActionError(null)
-                  void withBusy('chapter-create', async () => {
-                    const r = await assetsApi.chapterCreate(id, { title: t.trim() || undefined })
-                    setActionMsg(`已创建章节 #${r.id}（空章，可编辑标题或直接生成）`)
-                    await invalidate()
-                  })
-                })
-              }}
-            >
-              + 章节
-            </button>
-            <button className="sm" onClick={() => navigate(`/novels/${id}`)}>
-              工作台
-            </button>
-          </div>
-        </div>
-
-        {resourceTab === 'chapters' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {/* v0.24.2（F2）：书内全文检索 */}
-            <BookSearchPanel novelId={id} onSelectChapter={(cid) => void selectChapter(cid)} />
-            {list.map((c) => (
-              // P22-C1：memo 化列表项（100+ 章时避免整列表重渲染）
-              <ChapterListItem
-                key={c.id}
-                c={c}
-                selected={selectedChapter === c.id}
-                onSelect={() => void selectChapter(c.id)}
-              />
-            ))}
-            {chapters.isLoading && <p className="muted t-small">加载中…</p>}
-            {chapters.isError && (
-              <p className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
-                加载失败：{String(chapters.error)}
-              </p>
-            )}
-            {!chapters.isLoading && !chapters.isError && list.length === 0 && (
-              <p className="muted t-small">还没有章节，请先在工作台生成章节清单。</p>
-            )}
-          </div>
-        )}
-
-        {resourceTab === 'characters' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {resourceLoading && <p className="muted t-small">加载中…</p>}
-            {resourceError && (
-              <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
-                加载失败：{resourceError}
-                <button className="sm ml-2" onClick={() => void loadResourceTab('characters')}>重试</button>
-              </div>
-            )}
-            {resourceChars?.map((c) => (
-              <div
-                key={c.id}
-                // v0.17.0（审查 A21）：可点击 div 补键盘可达（参考 ChapterListItem 模式）
-                role="button"
-                tabIndex={0}
-                onClick={() => setResourceDetail({ title: c.name, body: Object.entries(c.profile).map(([k, v]) => `${k}：${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join('\n') })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setResourceDetail({ title: c.name, body: Object.entries(c.profile).map(([k, v]) => `${k}：${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join('\n') })
-                  }
-                }}
-                style={{ padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'var(--bg-card)' }}
-              >
-                {c.name}
-                <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>{c.status === 'pending' ? '待确认' : '正式'}</span>
-              </div>
-            ))}
-            {resourceChars === null && !resourceLoading && !resourceError && (
-              <p className="muted t-small">点击上方「👤 角色」加载</p>
-            )}
-          </div>
-        )}
-
-        {resourceTab === 'world' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {resourceLoading && <p className="muted t-small">加载中…</p>}
-            {resourceError && (
-              <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
-                加载失败：{resourceError}
-                <button className="sm ml-2" onClick={() => void loadResourceTab('world')}>重试</button>
-              </div>
-            )}
-            {resourceWorld && Object.entries(resourceWorld.manual ?? {}).map(([k, v]) => (
-              <div
-                key={k}
-                role="button"
-                tabIndex={0}
-                onClick={() => setResourceDetail({ title: k, body: String(v) })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setResourceDetail({ title: k, body: String(v) })
-                  }
-                }}
-                style={{ padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'var(--bg-card)' }}
-              >                {k}
-              </div>
-            ))}
-            {resourceWorld === null && !resourceLoading && !resourceError && (
-              <p className="muted t-small">点击上方「🌍 设定」加载</p>
-            )}
-          </div>
-        )}
-
-        {resourceTab === 'rules' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {resourceLoading && <p className="muted t-small">加载中…</p>}
-            {resourceError && (
-              <div className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
-                加载失败：{resourceError}
-                <button className="sm ml-2" onClick={() => void loadResourceTab('rules')}>重试</button>
-              </div>
-            )}
-            {resourceRules?.map((r) => (
-              <div
-                key={r.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setResourceDetail({ title: r.name, body: (r.features as Array<Record<string, unknown>>).map((f) => `✓ ${String(f.name)}：${String(f.description ?? '')}`).join('\n') })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setResourceDetail({ title: r.name, body: (r.features as Array<Record<string, unknown>>).map((f) => `✓ ${String(f.name)}：${String(f.description ?? '')}`).join('\n') })
-                  }
-                }}
-                style={{ padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'var(--bg-card)' }}
-              >
-                {r.name}
-              </div>
-            ))}
-            {resourceRules === null && !resourceLoading && !resourceError && (
-              <p className="muted t-small">点击上方「📐 规则」加载</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 中：编辑器 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div className="row" style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', justifyContent: 'space-between' }}>
-          <div className="row">
-            {editingTitle && selectedChapter ? (
-              <input
-                style={{ width: 240 }}
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onBlur={() => {
-                  // P9 B8：Enter 已提交则跳过 blur 双发
-                  if (titleSubmittedRef.current) {
-                    titleSubmittedRef.current = false
-                    return
-                  }
-                  void saveTitle()
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.currentTarget.blur()
-                    titleSubmittedRef.current = true
-                    void saveTitle()
-                  } else if (e.key === 'Escape') {
-                    setEditingTitle(false)
-                  }
-                }}
-                autoFocus
-              />
-            ) : (
-              <strong
-                style={{ cursor: 'pointer' }}
-                title="点击编辑标题"
-                onClick={() => {
-                  setTitleDraft(chapter?.title ?? '')
-                  setEditingTitle(true)
-                }}
-              >
-                {chapter?.title ?? '选择章节'}
-              </strong>
-            )}
-            {chapter?.summary && <span className="muted t-small">{chapter.summary}</span>}
-            <span className="muted t-small">｜{hanCount} 字</span>
-            {/* v0.19.0：人类/AI 字数分离（NovelCraft 学习——你的字 vs AI 贡献） */}
-            {/* v0.22.0（审查 N1）：覆盖语义——AI 字数=当前内容 AI 来源字数（整章生成/重生/修复按本次覆盖，不超当前字数）；我的=人工输入累计（增量累加，删除不降） */}
-            <span
-              className="muted t-small"
-              style={{ color: 'var(--ok)', cursor: 'help' }}
-              title="AI 字数：当前内容中 AI 来源（整章生成/重生/修复按本次覆盖，不超当前字数）。我的字数：人工输入累计（增量累加，删除不降）。"
-            >
-              ｜我的 {statsShow.human.toLocaleString()} · AI {statsShow.ai.toLocaleString()}
-            </span>
-          </div>
-          <div className="row flex-wrap">
-            <button onClick={() => void saveContent().catch(() => undefined)} disabled={saving || contentLoading || streaming}>
-              {saving ? '保存中…' : '保存'}
-            </button>
-            <button onClick={() => void generate()} disabled={streaming || !selectedChapter || contentLoading}>
-              {streaming ? '生成中…' : 'AI 生成正文'}
-            </button>
-            {/* v0.24.2（F1）：阅读/复盘模式切换（干净排版预览正文，服务抽读验收） */}
-            <button
-              title={viewMode === 'read' ? '返回编辑模式' : '阅读模式：干净排版预览（抽读/复盘）'}
-              disabled={streaming || contentLoading}
-              onClick={() => setViewMode((m) => (m === 'read' ? 'edit' : 'read'))}
-            >
-              {viewMode === 'read' ? '✏️ 编辑' : '📖 阅读'}
-            </button>
-            {/* v0.22.2：正文进度轻提示——剩余/失败章一目了然 */}
-            {chapterStats.total > 0 && (chapterStats.remaining > 0 || chapterStats.failed > 0) && (
-              <span className="muted t-small" style={{ alignSelf: 'center' }}>
-                进度 {chapterStats.written}/{chapterStats.total} 章
-                {chapterStats.remaining > 0 ? ` · 剩 ${chapterStats.remaining} 章待生产` : ''}
-                {chapterStats.failed > 0 ? ` · ⚠ ${chapterStats.failed} 章失败可重试` : ''}
-              </span>
-            )}
-            <input
-              style={{ flex: '1 1 200px', minWidth: 180 }}
-              placeholder="可选：对本次生成的额外要求（如：本章要引入新反派伏笔、节奏放慢写细节）…"
-              value={guidanceDraft}
-              disabled={streaming}
-              onChange={(e) => setGuidanceDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !streaming) void generate() }}
-            />
-            {/* v0.15.0：反馈沉淀——把这句要求固定为硬约束（全链生效） */}
-            <button
-              className="sm"
-              title="把这句话设为书级硬约束（导演/方案/生成/修复全链强制生效）"
-              disabled={streaming || !guidanceDraft.trim()}
-              onClick={() => {
-                const t = guidanceDraft.trim()
-                if (!t) return
-                void (async () => {
-                  const d = await novelApi.detail(id)
-                  const cur = d.novel.constraints ?? []
-                  const list = cur.filter((c) => c.text !== t)
-                  const canon = extractProtagonistName(t)
-                  list.push({
-                    // v0.23.1（批次 B6）：约束 id 补随机后缀（同毫秒多次固定不撞 id）
-                    id: `c${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                    text: t,
-                    level: 'must' as const,
-                    enabled: true,
-                    createdAt: new Date().toISOString(),
-                    ...(canon ? { keyword: canon, replaceWith: canon } : {})
-                  })
-                  await novelApi.patch(id, { constraints: list })
-                  setGuidanceDraft('')
-                })().catch(() => undefined)
-              }}
-            >
-              <Pin size={12} /> 固定为约束
-            </button>
-            <span style={{ margin: '0 8px', color: 'var(--border)' }}>|</span>
-            <button className="sm" style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }} disabled={exportBusy !== null} onClick={() => void exportChapter('txt')}>
-              {exportBusy === 'txt' ? '导出中…' : 'TXT'}
-            </button>
-            <button className="sm" style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }} disabled={exportBusy !== null} onClick={() => void exportChapter('md')}>
-              {exportBusy === 'md' ? '导出中…' : 'MD'}
-            </button>
-            <button className="sm" style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }} disabled={exportBusy !== null} onClick={() => void exportChapter('epub')}>
-              {exportBusy === 'epub' ? '导出中…' : 'EPUB'}
-            </button>
-            {/* v0.24.4（A5）：DOCX 导出（投稿平台事实标准） */}
-            <button className="sm" style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }} disabled={exportBusy !== null} onClick={() => void exportChapter('docx')}>
-              {exportBusy === 'docx' ? '导出中…' : 'DOCX'}
-            </button>
-          </div>
-        </div>
-        <SelectionToolbar
+      <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+        {/* 左：资源树（v0.25.0：拆至 ResourcePanel，其加载状态不再触发整页重渲染） */}
+        <ResourcePanel
           novelId={id}
-          chapterId={selectedChapter ?? 0}
-          hasSelection={selectionInfo.text.length > 0}
-          selectionText={selectionInfo.text}
-          cursorPos={selectionInfo.cursor}
-          editorText={content}
-          onApplySelection={applySelection}
-          onInsertAt={insertAt}
-          onSave={saveContent}
+          hidden={focusMode}
+          chapters={list}
+          loading={chapters.isLoading}
+          error={chapters.isError ? chapters.error : null}
+          selectedChapter={selectedChapter}
+          onSelectChapter={(cid) => void selectChapter(cid)}
+          onShowDetail={setResourceDetail}
+          onNewChapter={() => {
+            void askChapterTitle({ title: '新章节标题（留空自动编号）', defaultValue: '' }).then((t) => {
+              if (t === null) return
+              setActionError(null)
+              void withBusy('chapter-create', async () => {
+                const r = await assetsApi.chapterCreate(id, { title: t.trim() || undefined })
+                setActionMsg(`已创建章节 #${r.id}（空章，可编辑标题或直接生成）`)
+                await invalidate()
+              })
+            })
+          }}
+          onOpenWorkspace={() => navigate(`/novels/${id}`)}
         />
-        {viewMode === 'read' ? (
-          <ReadingView
-            title={chapter?.title ?? '未命名章节'}
-            content={content}
+
+        {/* 中：编辑器 */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <ChapterToolbar
+            title={chapter?.title ?? '选择章节'}
+            summary={chapter?.summary}
             hanCount={hanCount}
-            aiWords={statsShow.ai}
             humanWords={statsShow.human}
-            canPrev={chapterIdx > 0}
-            canNext={chapterIdx >= 0 && chapterIdx < list.length - 1}
-            onPrev={() => { const p = list[chapterIdx - 1]; if (p) void selectChapter(p.id) }}
-            onNext={() => { const n = list[chapterIdx + 1]; if (n) void selectChapter(n.id) }}
-            onBackToEdit={() => setViewMode('edit')}
+            aiWords={statsShow.ai}
+            stats={chapterStats}
+            saving={saving}
+            streaming={streaming}
+            contentLoading={contentLoading}
+            hasChapter={selectedChapter !== null}
+            guidance={guidanceDraft}
+            onGuidanceChange={setGuidanceDraft}
+            onSave={() => void saveContent().catch(() => undefined)}
+            onGenerate={() => void generate()}
+            viewMode={viewMode}
+            onToggleViewMode={() => setViewMode((m) => (m === 'edit' ? 'read' : 'edit'))}
+            onPinGuidance={pinGuidance}
+            exportBusy={exportBusy}
+            onExport={(f: ExportFormat) => void exportChapter(f)}
+            onSaveTitle={saveTitle}
           />
-        ) : (
-        <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-          <CodeMirror
-            value={content}
-            editable={!streaming}
-            onChange={(v) => {
-              dirtyRef.current = true
-              setContent(v)
-            }}
-            onUpdate={(u) => {
-              updateSelectionInfo()
-              // v0.19.0：人工输入统计（AI 来源已在 dispatch 侧累计）
-              trackHumanWords(u as never)
-            }}
-            height="100%"
-            theme={novelEditorTheme}
-            // v0.24.4（A2）：快捷词补全（";触发词" → 展开文本，设置页维护词典）
-            extensions={[markdown(), autocompletion({ override: [makeQuickWordSource(quickWords)] })]}
-            style={{ height: '100%' }}
-            ref={editorRef}
+          <SelectionToolbar
+            novelId={id}
+            chapterId={selectedChapter ?? 0}
+            hasSelection={selectionInfo.text.length > 0}
+            selectionText={selectionInfo.text}
+            cursorPos={selectionInfo.cursor}
+            editorText={content}
+            onApplySelection={applySelection}
+            onInsertAt={insertAt}
+            onSave={saveContent}
           />
-          {/* v0.19.0：光标续写建议浮层（Cmd/Ctrl+J 生成 → Tab 插入 / Esc 关闭） */}
-          {(suggestion || sugBusy) && !streaming && selectedChapter && (
-            <div
-              style={{
-                position: 'absolute',
-                left: 8,
-                right: 8,
-                bottom: 8,
-                zIndex: 20,
-                background: 'var(--bg-panel)',
-                border: '1px solid var(--accent)',
-                borderRadius: 'var(--radius-m)',
-                boxShadow: 'var(--shadow-lg)',
-                padding: '8px 12px'
+          {viewMode === 'read' ? (
+            <ReadingView
+              title={chapter?.title ?? '未命名章节'}
+              content={content}
+              hanCount={hanCount}
+              aiWords={statsShow.ai}
+              humanWords={statsShow.human}
+              canPrev={chapterIdx > 0}
+              canNext={chapterIdx >= 0 && chapterIdx < list.length - 1}
+              onPrev={() => {
+                const p = list[chapterIdx - 1]
+                if (p) void selectChapter(p.id)
               }}
-            >
-              {sugBusy && !suggestion ? (
-                <div className="row" style={{ gap: 8, fontSize: 12, color: 'var(--text-dim)' }}>
-                  <Wand2 size={13} /> 正在生成续写建议…
-                </div>
-              ) : suggestion ? (
-                <div className="col" style={{ gap: 6 }}>
-                  <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-                    <Wand2 size={13} color="var(--accent-bright)" />
-                    <strong style={{ fontSize: 12 }}>AI 续写建议</strong>
-                    <span className="muted t-small">（{countCjk(suggestion.text)} 字）</span>
-                    <span style={{ flex: 1 }} />
-                    <button className="sm primary" onClick={acceptSuggestion}>Tab 插入</button>
-                    <button className="sm" onClick={() => void suggestContinue()}>↻ 再生成</button>
-                    <button className="sm" onClick={() => setSuggestion(null)}>Esc 关闭</button>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      lineHeight: 1.7,
-                      color: 'var(--text)',
-                      maxHeight: 96,
-                      overflow: 'auto',
-                      whiteSpace: 'pre-wrap',
-                      padding: '6px 8px',
-                      background: 'var(--bg-card)',
-                      borderRadius: 6
-                    }}
-                  >
-                    {suggestion.text}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )}
-          {/* P10：空状态引导（参考项目：编辑器空置时给引导） */}
-          {!contentLoading && !streaming && !content && selectedChapter && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'none',
-                zIndex: 5
+              onNext={() => {
+                const n = list[chapterIdx + 1]
+                if (n) void selectChapter(n.id)
               }}
-            >
-              <div
-                className="panel"
-                style={{
-                  background: 'var(--bg-panel)',
-                  maxWidth: 380,
-                  padding: '20px 24px',
-                  textAlign: 'center',
-                  pointerEvents: 'auto',
-                  boxShadow: 'var(--shadow-lg)'
-                }}
-              >
-                <div style={{ fontSize: 16, marginBottom: 8 }}>📝 本章还没有正文</div>
-                <div className="muted" style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 14 }}>
-                  点击下方按钮，AI 将根据本章任务单、写作上下文与角色账本生成正文。
-                  {chapter?.summary ? <><br />本章概要：{chapter.summary}</> : null}
-                </div>
-                <button className="primary" onClick={() => void generate()} disabled={actionBusy !== null}>
-                  ✍️ 生成正文
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        )}
-        <div style={{ padding: '6px 14px', borderTop: '1px solid var(--border)', fontSize: 12 }} className="muted">
-          {streamStat && <span style={{ color: 'var(--accent-bright)' }}>{streamStat}</span>}
-          {actionMsg && <span style={{ color: 'var(--ok)' }}>{actionMsg}</span>}
-          {actionError && <span style={{ color: 'var(--danger)' }}>{actionError}</span>}
-        </div>
-      </div>
-
-      {/* 右：动作面板（P10：推荐动作卡 + 分区） */}
-      <div style={{ width: 320, borderLeft: '1px solid var(--border)', padding: 12, overflowY: 'auto', background: 'var(--bg-panel)', display: focusMode ? 'none' : undefined }}>
-        <h2 style={{ fontSize: 15, marginBottom: 12 }}>执行面板</h2>
-
-        {/* P12 A3：本章进度矩阵（信号从现有状态推导） */}
-        {selectedChapter && (() => {
-          const taskReady = Boolean(chapter?.goal && Object.keys(chapter.goal).length > 0)
-          const contextReady = ctxSections !== null
-          const draftStarted = content.trim().length > 0
-          const draftSaved = ['written', 'reviewed', 'done'].includes(chapter?.status ?? '') || savedContentRef.current.trim().length > 0
-          const reviewed = reviewResult !== null || ['reviewed', 'done'].includes(chapter?.status ?? '')
-          const repaired = fixDoneRef.current
-          const backfilled = backfillDoneRef.current || reviewResult !== null
-          const snapshotted = snapshotDoneRef.current
-          const reviewable = ['reviewed', 'done'].includes(chapter?.status ?? '')
-          const segs: Array<[string, boolean]> = [
-            ['任务单', taskReady],
-            ['上下文', contextReady],
-            ['草稿', draftStarted],
-            ['保存', draftSaved],
-            ['审核', reviewed],
-            ['修复', repaired],
-            ['回灌', backfilled],
-            ['快照', snapshotted],
-            ['可审', reviewable]
-          ]
-          const doneCount = segs.filter(([, v]) => v).length
-          return (
-            <div className="panel" style={{ background: 'var(--bg-card)', padding: 12, marginBottom: 12 }}>
-              <div className="row justify-between">
-                <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>本章进度</span>
-                <span style={{ fontSize: 12, color: 'var(--accent-bright)' }}>{doneCount}/{segs.length}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                {segs.map(([label, done]) => (
-                  <div key={label} title={`${label}${done ? ' ✓' : ''}`} className="flex-1">
-                    <div
-                      style={{
-                        height: 4,
-                        borderRadius: 2,
-                        background: done ? 'var(--ok)' : 'var(--bg-input)',
-                        transition: 'background 200ms'
-                      }}
-                    />
-                    <div style={{ fontSize: 9, color: done ? 'var(--ok)' : 'var(--text-faint)', marginTop: 3, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      {label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* 推荐动作卡：当前最该做的事 */}
-        <div className="panel" style={{ background: 'var(--bg-card)', padding: 14, marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>当前推荐</div>
-          {streaming ? (
-            <button className="danger" style={{ width: '100%' }} onClick={cancelGenerate} disabled={actionBusy !== null}>
-              取消生成（保留已生成部分）
-            </button>
+              onBackToEdit={() => setViewMode('edit')}
+            />
           ) : (
-            <button
-              className="primary"
-              style={{ width: '100%', padding: '10px 14px', fontSize: 14 }}
-              onClick={() => void generate()}
-              disabled={!selectedChapter || actionBusy !== null || contentLoading}
-            >
-              {contentLoading ? '正文加载中…' : streaming ? '生成中…' : '✍️ 生成正文'}
-            </button>
+            <EditorPane
+              content={content}
+              onContentChange={(v) => {
+                dirtyRef.current = true
+                setContent(v)
+              }}
+              onEditorUpdate={(u) => {
+                updateSelectionInfo()
+                // v0.19.0：人工输入统计（AI 来源已在 dispatch 侧累计）
+                trackHumanWords(u as never)
+              }}
+              streaming={streaming}
+              contentLoading={contentLoading}
+              hasChapter={selectedChapter !== null}
+              summary={chapter?.summary}
+              quickWords={quickWords}
+              suggestion={suggestion}
+              sugBusy={sugBusy}
+              onAcceptSuggestion={acceptSuggestion}
+              onRegenerateSuggestion={() => void suggestContinue()}
+              onCloseSuggestion={() => setSuggestion(null)}
+              onGenerate={() => void generate()}
+              busy={actionBusy !== null}
+              editorRef={editorRef}
+            />
           )}
-          <div className="muted" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
-            {streaming
-              ? '生成中可随时取消，已生成部分会保留在编辑器中'
-              : selectedChapter
-                ? '根据写作上下文与本章任务单生成本章正文'
-                : '请先在左侧选择章节'}
+          <div style={{ padding: '6px 14px', borderTop: '1px solid var(--border)', fontSize: 12 }} className="muted">
+            {streamStat && <span style={{ color: 'var(--accent-bright)' }}>{streamStat}</span>}
+            {actionMsg && <span style={{ color: 'var(--ok)' }}>{actionMsg}</span>}
+            {actionError && <span style={{ color: 'var(--danger)' }}>{actionError}</span>}
           </div>
         </div>
 
-        {/* 分区：质量与连续性 */}
-        <div style={{ fontSize: 12, color: 'var(--text-faint)', margin: '12px 0 6px' }}>质量与连续性</div>
-        <div className="col gap-2">
-          <button
-            onClick={() => void withBusy('review', () => runReview())}
-            disabled={actionBusy !== null || !selectedChapter || !content}
-          >
-            {actionBusy === 'review' ? '审核中…' : 'AI 审核'}
-          </button>
-          {/* v0.24.4（A4）：轻量本地校对——确定性检查零 token + 单次语义 extraction */}
-          <button
-            onClick={() => void withBusy('proofread', runProofread)}
-            disabled={actionBusy !== null || !selectedChapter || !content}
-          >
-            {actionBusy === 'proofread' ? '校对中…' : '本地校对'}
-          </button>
-          {proofreadIssues !== null && (
-            <div className="panel col" style={{ padding: 10, background: 'var(--bg-panel)', gap: 6 }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <strong className="t-small">校对结果（{proofreadIssues.length} 条）</strong>
-                <button className="sm" onClick={() => setProofreadIssues(null)}>关闭</button>
-              </div>
-              {proofreadIssues.length === 0 && (
-                <p className="muted t-small">未发现明显问题 ✓（检查：重复词/乱码/错别字/称谓一致性）</p>
-              )}
-              {proofreadIssues.map((p, i) => (
-                <div key={i} className="row" style={{ gap: 6, fontSize: 11, alignItems: 'flex-start' }}>
-                  <span className="badge" style={{ color: p.type === 'mojibake' ? 'var(--danger)' : p.type === 'repeat' ? 'var(--warn)' : 'var(--accent-bright)' }}>
-                    {p.type === 'typo' ? '错别字' : p.type === 'name' ? '称谓' : p.type === 'repeat' ? '重复词' : p.type === 'mojibake' ? '乱码' : '语病'}
-                  </span>
-                  <div className="col" style={{ gap: 2, flex: 1 }}>
-                    <span style={{ color: 'var(--text)' }}>{p.problem}</span>
-                    <span className="muted" style={{ wordBreak: 'break-all' }}>「{p.location}」 → {p.suggestion}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* P21-3：跑创作方案（工坊定义的 agent 流水线）+ P30：以方案生产正文（whole_book 步骤） */}
-          <div className="col gap-2">
-            <div className="row gap-2">
-              <select
-                style={{ flex: 1, fontSize: 12 }}
-                value={solutionId ?? ''}
-                disabled={actionBusy !== null || !selectedChapter}
-                onChange={(e) => setSolutionId(Number(e.target.value) || null)}
-              >
-                <option value="">方案流水线（可选）…</option>
-                {(solutionsForRun.data?.solutions ?? []).map((s) => (
-                  <option key={Number(s.id)} value={Number(s.id)}>{String(s.name)}（{Array.isArray(s.steps) ? (s.steps as unknown[]).length : 0} 步）</option>
-                ))}
-              </select>
-              <button
-                className="sm primary"
-                disabled={actionBusy !== null || !selectedChapter || !content || !solutionId}
-                onClick={() => void withBusy('solution-run', () => runSolutionOnChapter())}
-              >
-                {actionBusy === 'solution-run' ? '运行中…' : '跑方案'}
+        {/* 右：动作面板（P10：推荐动作卡 + 分区） */}
+        <div
+          style={{
+            width: 320,
+            borderLeft: '1px solid var(--border)',
+            padding: 12,
+            overflowY: 'auto',
+            background: 'var(--bg-panel)',
+            display: focusMode ? 'none' : undefined
+          }}
+        >
+          <h2 style={{ fontSize: 15, marginBottom: 12 }}>执行面板</h2>
+
+          {/* P12 A3：本章进度矩阵 */}
+          {selectedChapter && <ProgressMatrix segments={progressSegments} />}
+
+          {/* 推荐动作卡：当前最该做的事 */}
+          <div className="panel" style={{ background: 'var(--bg-card)', padding: 14, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>当前推荐</div>
+            {streaming ? (
+              <button className="danger" style={{ width: '100%' }} onClick={cancelGenerate} disabled={actionBusy !== null}>
+                取消生成（保留已生成部分）
               </button>
-              {/* P30：以方案生产正文（whole_book 步骤接力，空章节专用） */}
+            ) : (
               <button
-                className="sm"
-                style={{ color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
-                disabled={actionBusy !== null || !selectedChapter || content !== '' || !solutionId}
-                title="用方案的章节生产步骤接力生成正文（需空章节）"
-                onClick={() => confirmFn({ title: '方案接力生产', message: '用方案步骤接力生产正文（将替换本章内容）？', confirmText: '生产', danger: true, action: () => void withBusy('solution-produce', () => produceWithSolution()) })}
+                className="primary"
+                style={{ width: '100%', padding: '10px 14px', fontSize: 14 }}
+                onClick={() => void generate()}
+                disabled={!selectedChapter || actionBusy !== null || contentLoading}
               >
-                {actionBusy === 'solution-produce' ? '流水线生产中…' : '以方案生产正文'}
+                {contentLoading ? '正文加载中…' : streaming ? '生成中…' : '✍️ 生成正文'}
               </button>
-            </div>
-            {/* v0.10.0（批B/I2）：质量债自动修复徽标——整本生产后待修复章节 + 一键触发 */}
-            <DebtFixBadge novelId={id} />
-            {solutionRunSummary && (
-              <div className="muted" style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto', background: 'var(--bg-panel)', borderRadius: 6, padding: 6 }}>
-                {solutionRunSummary}
-              </div>
             )}
-          </div>
-          <button
-            onClick={() => void withBusy('fix', () => fix())}
-            disabled={actionBusy !== null || !selectedChapter || !content}
-          >
-            {actionBusy === 'fix' ? '修复中…' : '修复 + 重审（限 2 轮）'}
-          </button>
-          <button
-            onClick={() => void withBusy('backfill', () => backfill())}
-            disabled={actionBusy !== null || !selectedChapter || !content}
-          >
-            {actionBusy === 'backfill' ? '回灌中…' : '状态回灌提取'}
-          </button>
-          <button onClick={() => void withBusy('pending', () => loadPending())} disabled={actionBusy !== null}>
-            {actionBusy === 'pending' ? '加载中…' : '待确认区'}
-          </button>
-          {/* v0.20.0：记忆面（状态机显式查看/修正） */}
-          <button onClick={() => void loadMemory()} disabled={actionBusy !== null || memoryBusy}>
-            {memoryBusy ? '加载中…' : '记忆面'}
-          </button>
-        </div>
-
-        {/* 分区：快照与上下文 */}
-        <div style={{ fontSize: 12, color: 'var(--text-faint)', margin: '12px 0 6px' }}>快照与上下文</div>
-        <div className="col gap-2">
-          <button
-            onClick={() => void withBusy('versions', () => loadVersions())}
-            disabled={actionBusy !== null || !selectedChapter}
-          >
-            {actionBusy === 'versions' ? '加载中…' : '版本历史'}
-          </button>
-          <button
-            onClick={() => void withBusy('snapshot', () => snapshotNow())}
-            disabled={actionBusy !== null || !selectedChapter || !content}
-          >
-            {actionBusy === 'snapshot' ? '快照中…' : '存快照'}
-          </button>
-          <button
-            onClick={() => void withBusy('context', () => loadContextPreview())}
-            disabled={actionBusy !== null || !selectedChapter}
-          >
-            {actionBusy === 'context' ? '加载中…' : '写作上下文'}
-          </button>
-        </div>
-
-        {reviewResult && (
-          <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row justify-between">
-              <strong>审核结果</strong>
-              <span className="badge">评分 {String(reviewResult.score)}</span>
+            <div className="muted" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
+              {streaming
+                ? '生成中可随时取消，已生成部分会保留在编辑器中'
+                : selectedChapter
+                  ? '根据写作上下文与本章任务单生成本章正文'
+                  : '请先在左侧选择章节'}
             </div>
-            {Array.isArray(reviewResult.issues) && (reviewResult.issues as Array<Record<string, unknown>>).length > 0 && (
-              <>
-                {/* P19 ⑧：优先优化建议（severity 排序 top 3，一键采纳重写） */}
-                <div style={{ marginTop: 10, fontSize: 12 }}>
-                  <span style={{ fontWeight: 600, color: 'var(--accent-bright)' }}>优先优化建议（按优先级）</span>
-                  <ol style={{ margin: '6px 0 0 18px', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {(reviewResult.issues as Array<Record<string, unknown>>)
-                      .slice()
-                      .sort((a, b) => {
-                        const w: Record<string, number> = { high: 0, medium: 1, low: 2 }
-                        return (w[String(a.severity)] ?? 3) - (w[String(b.severity)] ?? 3)
-                      })
-                      .slice(0, 3)
-                      .map((issue, i) => (
-                        <li key={i}>
-                          {String(issue.problem)} <span className="muted">→ {String(issue.suggestion)}</span>
-                        </li>
-                      ))}
-                  </ol>
-                </div>
+          </div>
+
+          {/* 分区：质量与连续性 */}
+          <div style={{ fontSize: 12, color: 'var(--text-faint)', margin: '12px 0 6px' }}>质量与连续性</div>
+          <div className="col gap-2">
+            <button
+              onClick={() => void withBusy('review', () => runReview())}
+              disabled={actionBusy !== null || !selectedChapter || !content}
+            >
+              {actionBusy === 'review' ? '审核中…' : 'AI 审核'}
+            </button>
+            {/* v0.24.4（A4）：轻量本地校对——确定性检查零 token + 单次语义 extraction */}
+            <button
+              onClick={() => void withBusy('proofread', runProofread)}
+              disabled={actionBusy !== null || !selectedChapter || !content}
+            >
+              {actionBusy === 'proofread' ? '校对中…' : '本地校对'}
+            </button>
+            {proofreadIssues !== null && (
+              <ProofreadPanel issues={proofreadIssues} onClose={() => setProofreadIssues(null)} />
+            )}
+            {/* P21-3：跑创作方案 + P30：以方案生产正文 */}
+            <div className="col gap-2">
+              <div className="row gap-2">
+                <select
+                  style={{ flex: 1, fontSize: 12 }}
+                  value={solutionId ?? ''}
+                  disabled={actionBusy !== null || !selectedChapter}
+                  onChange={(e) => setSolutionId(Number(e.target.value) || null)}
+                >
+                  <option value="">方案流水线（可选）…</option>
+                  {(solutionsForRun.data?.solutions ?? []).map((s) => (
+                    <option key={Number(s.id)} value={Number(s.id)}>
+                      {String(s.name)}（{Array.isArray(s.steps) ? (s.steps as unknown[]).length : 0} 步）
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="sm primary"
+                  disabled={actionBusy !== null || !selectedChapter || !content || !solutionId}
+                  onClick={() => void withBusy('solution-run', () => runSolutionOnChapter())}
+                >
+                  {actionBusy === 'solution-run' ? '运行中…' : '跑方案'}
+                </button>
                 <button
                   className="sm"
-                  style={{ marginTop: 10, color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
-                  disabled={streaming || actionBusy !== null}
-                  onClick={() => {
-                    const top = (reviewResult.issues as Array<Record<string, unknown>>)
-                      .slice()
-                      .sort((a, b) => {
-                        const w: Record<string, number> = { high: 0, medium: 1, low: 2 }
-                        return (w[String(a.severity)] ?? 3) - (w[String(b.severity)] ?? 3)
-                      })
-                      .slice(0, 3)
-                    const advice = top
-                      .map((i) => `${String(i.location)}：${String(i.problem)}（建议：${String(i.suggestion)}）`)
-                      .join('；')
-                    confirmFn({ title: '采纳建议重写', message: `将按以下建议重新生成本章（当前内容会被替换）：\n\n${advice.slice(0, 300)}`, confirmText: '重写', danger: true, action: () => { setGuidanceDraft(advice); void generate() } })
+                  style={{ color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
+                  disabled={actionBusy !== null || !selectedChapter || content !== '' || !solutionId}
+                  title="用方案的章节生产步骤接力生成正文（需空章节）"
+                  onClick={() =>
+                    confirmFn({
+                      title: '方案接力生产',
+                      message: '用方案步骤接力生产正文（将替换本章内容）？',
+                      confirmText: '生产',
+                      danger: true,
+                      action: () => void withBusy('solution-produce', () => produceWithSolution())
+                    })
+                  }
+                >
+                  {actionBusy === 'solution-produce' ? '流水线生产中…' : '以方案生产正文'}
+                </button>
+              </div>
+              {/* v0.10.0（批B/I2）：质量债自动修复徽标 */}
+              <DebtFixBadge novelId={id} />
+              {solutionRunSummary && (
+                <div
+                  className="muted"
+                  style={{
+                    fontSize: 11,
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: 120,
+                    overflowY: 'auto',
+                    background: 'var(--bg-panel)',
+                    borderRadius: 6,
+                    padding: 6
                   }}
                 >
-                  采纳建议并重写
-                </button>
-                <div style={{ marginTop: 10, borderTop: '1px solid var(--border)' }}>
-                  {(reviewResult.issues as Array<Record<string, unknown>>).map((issue, i) => (
-                    <div key={i} style={{ marginTop: 8, fontSize: 12, paddingTop: 8 }}>
-                      <span className="badge" style={issue.severity === 'high' ? { color: 'var(--danger)', background: 'var(--danger-soft)' } : {}}>
-                        {String(issue.severity)}
-                      </span>
-                      <div style={{ marginTop: 4 }}>{String(issue.problem)}</div>
-                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>建议：{String(issue.suggestion)}</div>
-                    </div>
-                  ))}
+                  {solutionRunSummary}
                 </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {backfillResult && (
-          <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <strong>回灌提取（待确认）</strong>
-            {Array.isArray(backfillResult.characterStates) && (backfillResult.characterStates as Array<{ name: string; state: string }>).length > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12 }}>
-                {backfillResult.characterStates.map((cs, i) => (
-                  <div key={i} style={{ marginBottom: 4 }}>• {cs.name}：{cs.state}</div>
-                ))}
-              </div>
-            )}
-            {Array.isArray(backfillResult.newFacts) && (backfillResult.newFacts as Array<{ content: string }>).length > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12 }}>
-                <span className="muted">新事实：</span>
-                {backfillResult.newFacts.map((f, i) => <div key={i}>• {f.content}</div>)}
-              </div>
-            )}
-            {Array.isArray(backfillResult.foreshadows) && (backfillResult.foreshadows as Array<{ content: string }>).length > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12 }}>
-                <span className="muted">新伏笔：</span>
-                {backfillResult.foreshadows.map((f, i) => <div key={i}>• {f.content}</div>)}
-              </div>
-            )}
-            <button className="primary" style={{ marginTop: 10 }} disabled={actionBusy !== null} onClick={() => void confirmStates()}>
-              确认角色状态入账
+              )}
+            </div>
+            <button
+              onClick={() => void withBusy('fix', () => fix())}
+              disabled={actionBusy !== null || !selectedChapter || !content}
+            >
+              {actionBusy === 'fix' ? '修复中…' : '修复 + 重审（限 2 轮）'}
+            </button>
+            <button
+              onClick={() => void withBusy('backfill', () => backfill())}
+              disabled={actionBusy !== null || !selectedChapter || !content}
+            >
+              {actionBusy === 'backfill' ? '回灌中…' : '状态回灌提取'}
+            </button>
+            <button onClick={() => void withBusy('pending', () => loadPending())} disabled={actionBusy !== null}>
+              {actionBusy === 'pending' ? '加载中…' : '待确认区'}
+            </button>
+            {/* v0.20.0：记忆面（状态机显式查看/修正） */}
+            <button onClick={() => void loadMemory()} disabled={actionBusy !== null || memoryBusy}>
+              {memoryBusy ? '加载中…' : '记忆面'}
             </button>
           </div>
-        )}
 
-        {showPending && (
-          <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row justify-between">
-              <strong>待确认区</strong>
-              <button onClick={() => setShowPending(false)} style={{ fontSize: 12, padding: '2px 6px' }}>关闭</button>
-            </div>
-            {pending && pending.pendingFacts.length > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12 }}>
-                <span className="muted">未确认事实：</span>
-                {pending.pendingFacts.map((f) => <div key={f.id}>• {f.content}</div>)}
-              </div>
-            )}
-            {pending && pending.pendingCharacters.length > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12 }}>
-                <span className="muted">待确认角色：</span>
-                {pending.pendingCharacters.map((c) => <div key={c.id}>• {c.name}</div>)}
-              </div>
-            )}
-            {pending && pending.pendingFacts.length === 0 && pending.pendingCharacters.length === 0 && (
-              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>暂无待确认项</p>
-            )}
+          {/* 分区：快照与上下文 */}
+          <div style={{ fontSize: 12, color: 'var(--text-faint)', margin: '12px 0 6px' }}>快照与上下文</div>
+          <div className="col gap-2">
+            <button
+              onClick={() => void withBusy('versions', () => loadVersions())}
+              disabled={actionBusy !== null || !selectedChapter}
+            >
+              {actionBusy === 'versions' ? '加载中…' : '版本历史'}
+            </button>
+            <button
+              onClick={() => void withBusy('snapshot', () => snapshotNow())}
+              disabled={actionBusy !== null || !selectedChapter || !content}
+            >
+              {actionBusy === 'snapshot' ? '快照中…' : '存快照'}
+            </button>
+            <button
+              onClick={() => void withBusy('context', () => loadContextPreview())}
+              disabled={actionBusy !== null || !selectedChapter}
+            >
+              {actionBusy === 'context' ? '加载中…' : '写作上下文'}
+            </button>
           </div>
-        )}
 
-        {/* v0.20.0：记忆面面板（角色状态/势力状态/待确认事实——可手动修正） */}
-        {showMemory && (
-          <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row justify-between">
-              <strong>记忆面</strong>
-              <button onClick={() => setShowMemory(false)} style={{ fontSize: 12, padding: '2px 6px' }}>关闭</button>
-            </div>
-            <div className="muted" style={{ fontSize: 11, margin: '6px 0' }}>
-              状态机显式视图——AI 回灌与手动修正共用同一账本；可增删角色状态、修正势力状态。
-            </div>
-            {memory && (
-              <>
-                <div style={{ fontSize: 12, marginTop: 8 }}>
-                  <span className="muted">角色状态：</span>
-                  {memory.characters.filter((c) => c.states.length > 0).length === 0 && (
-                    <span className="muted">（暂无——运行「状态回灌提取」后生成）</span>
-                  )}
-                  {memory.characters
-                    .filter((c) => c.states.length > 0)
-                    .map((c) => (
-                      <div key={c.name} className="row" style={{ gap: 6, flexWrap: 'wrap', padding: '3px 0', alignItems: 'center' }}>
-                        <strong style={{ minWidth: 90 }}>{c.name}</strong>
-                        {c.states.map((s) => (
-                          <span key={s} className="badge" style={{ background: 'var(--accent-soft)', color: 'var(--accent-bright)' }}>
-                            {s}
-                            <button
-                              style={{ marginLeft: 4, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}
-                              disabled={memoryPatchBusy}
-                              onClick={() => void patchCharState(c.name, s, true)}
-                              title="删除此状态"
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        ))}
-                        <CharStateAdd name={c.name} disabled={memoryPatchBusy} onAdd={(s) => void patchCharState(c.name, s, false)} />
-                      </div>
-                    ))}
-                </div>
-                <div style={{ fontSize: 12, marginTop: 10 }}>
-                  <span className="muted">势力状态：</span>
-                  {memory.factions.length === 0 && <span className="muted">（世界观未生成势力）</span>}
-                  {memory.factions.map((f) => (
-                    <div key={f.name} className="row" style={{ gap: 6, flexWrap: 'wrap', padding: '3px 0', alignItems: 'center' }}>
-                      <strong style={{ minWidth: 90 }}>{f.name}</strong>
-                      <span className="muted">{f.currentState || '（无）'}</span>
-                      <FactionStateEdit
-                        current={f.currentState}
-                        disabled={memoryPatchBusy}
-                        onSave={(s) => void patchFactionState(f.name, s)}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div style={{ fontSize: 12, marginTop: 10 }}>
-                  <span className="muted">待确认事实（{memory.pendingFacts.length}）：</span>
-                  {memory.pendingFacts.map((f) => <div key={f.id}>• {f.content}</div>)}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+          {reviewResult && (
+            <ReviewResultPanel
+              review={reviewResult}
+              streaming={streaming}
+              busy={actionBusy !== null}
+              onAdopt={(advice) => {
+                confirmFn({
+                  title: '采纳建议重写',
+                  message: `将按以下建议重新生成本章（当前内容会被替换）：\n\n${advice.slice(0, 300)}`,
+                  confirmText: '重写',
+                  danger: true,
+                  action: () => {
+                    setGuidanceDraft(advice)
+                    void generate()
+                  }
+                })
+              }}
+            />
+          )}
 
-        {showVersions && (
-          <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row justify-between">
-              <strong>版本历史</strong>
-              <button onClick={() => setShowVersions(false)} style={{ fontSize: 12, padding: '2px 6px' }}>关闭</button>
+          {backfillResult && (
+            <BackfillResultPanel
+              result={backfillResult}
+              busy={actionBusy !== null}
+              onConfirm={() => void confirmStates()}
+            />
+          )}
+
+          {showPending && <PendingPanel pending={pending} onClose={() => setShowPending(false)} />}
+
+          {showMemory && (
+            <MemoryPanel
+              memory={memory}
+              patchBusy={memoryPatchBusy}
+              onPatchCharState={(name, state, remove) => void patchCharState(name, state, remove)}
+              onPatchFactionState={(name, state) => void patchFactionState(name, state)}
+              onClose={() => setShowMemory(false)}
+            />
+          )}
+
+          {showVersions && (
+            <VersionHistoryPanel
+              versions={versions}
+              versionDiff={versionDiff}
+              busy={actionBusy !== null}
+              streaming={streaming}
+              actions={versionActions}
+              onClose={() => setShowVersions(false)}
+            />
+          )}
+
+          {ctxSections && ctxToggles && (
+            <ContextPanel
+              sections={ctxSections}
+              toggles={ctxToggles}
+              onToggle={(key) =>
+                setCtxToggles((prev) => ({ ...(prev ?? {}), [key]: !(prev?.[key] ?? true) }))
+              }
+              onClose={() => {
+                setCtxSections(null)
+                setCtxToggles(null)
+              }}
+            />
+          )}
+
+          {resourceDetail && (
+            <ResourceDetailPanel detail={resourceDetail} onClose={() => setResourceDetail(null)} />
+          )}
+
+          {/* D2：AI 对话侧栏（折叠） */}
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🤖 AI 对话（对话即创作）</summary>
+            <div
+              style={{
+                marginTop: 8,
+                height: 320,
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                overflow: 'hidden',
+                background: 'var(--bg-card)'
+              }}
+            >
+              <HubChat novelId={id} />
             </div>
-            {versions && versions.length === 0 && (
-              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>暂无版本（生成正文时会自动存快照）</p>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-              {versions?.map((v) => (
-                <div key={v.id} style={{ fontSize: 12, padding: '6px 10px', background: 'var(--bg-panel)', borderRadius: 6 }}>
-                  <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
-                    <span className="badge">#{v.id}</span>
-                    <span className="muted t-small">{v.note} · {v.createdAt} · {v.wordCount} 字</span>
-                  </div>
-                  <div className="muted" style={{ fontSize: 11, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {v.preview}
-                  </div>
-                  {/* P20（U1）：查看全文 + 恢复此版本（版本历史可用了） */}
-                  <div className="row" style={{ gap: 6, marginTop: 6 }}>
-                    <button
-                      className="sm"
-                      disabled={actionBusy !== null}
-                      onClick={() => {
-                        if (!selectedChapter) return
-                        void withBusy(`vview-${v.id}`, async () => {
-                          try {
-                            const r = await novelApi.chapterVersionDetail(id, selectedChapter, v.id)
-                            setResourceDetail({ title: `版本 #${v.id}（${v.note} · ${v.createdAt}）`, body: r.version.content })
-                          } catch (err) {
-                            setActionError(err instanceof Error ? err.message : String(err))
-                          }
-                        })
-                      }}
-                    >
-                      查看
-                    </button>
-                    <button
-                      className="sm"
-                      style={{ color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
-                      disabled={actionBusy !== null || streaming}
-                      onClick={() => {
-                        if (!selectedChapter) return
-                        confirmFn({ title: '恢复版本', message: `恢复为版本 #${v.id}？当前内容会先存入新版本，然后被替换。`, confirmText: '恢复', danger: true, action: () => void withBusy(`vrestore-${v.id}`, async () => {
-                          try {
-                            const r = await novelApi.chapterVersionRestore(id, selectedChapter, v.id)
-                            setContent(r.content)
-                            savedContentRef.current = r.content
-                            dirtyRef.current = false
-                            setActionMsg(`已恢复版本 #${v.id}（${r.wordCount} 字），原内容已存为新版本`)
-                            await invalidate()
-                          } catch (err) {
-                            setActionError(err instanceof Error ? err.message : String(err))
-                          }
-                        }) })
-                      }}
-                    >
-                      恢复
-                    </button>
-                    {/* v0.24.2（F3）：对比当前——恢复前检视差异 */}
-                    <button
-                      className="sm"
-                      disabled={actionBusy !== null}
-                      onClick={() => {
-                        if (!selectedChapter) return
-                        void withBusy(`vdiff-${v.id}`, async () => {
-                          try {
-                            const d = await novelApi.chapterVersionDiff(id, selectedChapter, v.id)
-                            setVersionDiff(d)
-                          } catch (err) {
-                            setActionError(err instanceof Error ? err.message : String(err))
-                          }
-                        })
-                      }}
-                    >
-                      对比当前
-                    </button>
-                  </div>
-                  {versionDiff?.versionId === v.id && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        border: '1px solid var(--border)',
-                        borderRadius: 6,
-                        maxHeight: 280,
-                        overflow: 'auto',
-                        fontSize: 11,
-                        lineHeight: 1.6,
-                        background: 'var(--bg)'
-                      }}
-                    >
-                      <div className="muted t-small" style={{ padding: '4px 8px', position: 'sticky', top: 0, background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
-                        v{v.id} vs 当前：+{versionDiff.added} / -{versionDiff.removed}
-                        {versionDiff.degraded ? '（差异过大，仅逐行对照）' : ''}
-                      </div>
-                      {versionDiff.lines.map((l, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            padding: '1px 8px',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-all',
-                            background: l.type === 'add' ? 'var(--ok-soft)' : l.type === 'del' ? 'var(--danger-soft)' : undefined,
-                            color: l.type === 'add' ? 'var(--ok)' : l.type === 'del' ? 'var(--danger)' : 'var(--text-dim)'
-                          }}
-                        >
-                          {l.type === 'add' ? '+ ' : l.type === 'del' ? '- ' : '  '}
-                          {l.text || ' '}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+          </details>
+        </div>
       </div>
-        )}
-
-        {ctxSections && ctxToggles && (
-          <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row justify-between">
-              <strong>写作上下文（生成时注入）</strong>
-              <button onClick={() => { setCtxSections(null); setCtxToggles(null) }} style={{ fontSize: 12, padding: '2px 6px' }}>关闭</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-              {ctxSections.map((s) => (
-                <label key={s.key} className="row" style={{ fontSize: 12, cursor: 'pointer', justifyContent: 'space-between' }}>
-                  <span className="row gap-2">
-                    <input
-                      type="checkbox"
-                      checked={ctxToggles[s.key] ?? true}
-                      // v0.17.0（审查 A28）：消除 `prev!` 非空断言（面板渲染前已保证非空，仍做兜底）
-                      onChange={() => setCtxToggles((prev) => ({ ...(prev ?? {}), [s.key]: !(prev?.[s.key] ?? true) }))}
-                    />
-                    {s.key}
-                  </span>
-                  <span className="muted t-small">{Math.round(s.tokens)} tokens</span>
-                </label>
-              ))}
-            </div>
-            <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>
-              取消勾选后，该段不注入生成上下文（可省 token，但可能影响一致性）。勾选改动在下次生成时生效。
-            </p>
-          </div>
-        )}
-
-        {resourceDetail && (
-          <div className="panel" style={{ marginTop: 12, background: 'var(--bg-card)' }}>
-            <div className="row justify-between">
-              <strong className="t3">{resourceDetail.title}</strong>
-              <button onClick={() => setResourceDetail(null)} style={{ fontSize: 12, padding: '2px 6px' }}>✕</button>
-            </div>
-            <div style={{ marginTop: 8, fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, maxHeight: 300, overflowY: 'auto' }}>
-              {resourceDetail.body || '（无内容）'}
-            </div>
-          </div>
-        )}
-
-        {/* D2：AI 对话侧栏（折叠） */}
-        <details style={{ marginTop: 12 }}>
-          <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🤖 AI 对话（对话即创作）</summary>
-          <div style={{ marginTop: 8, height: 320, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-card)' }}>
-            <HubChat novelId={id} />
-          </div>
-        </details>
-      </div>
-    </div>
     </>
   )
 }
 
 // P22-C1 章节列表项已拆至 ./chapter/ChapterListItem.tsx（批次 E1）
+// v0.25.0（审查 S1）：资源树/编辑器/工具条/审核/记忆面/版本/上下文面板一并拆至 ./chapter/
