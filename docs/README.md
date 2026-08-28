@@ -15,7 +15,8 @@
 |---|---|
 | [versioning.md](versioning.md) | 发布操作手册：SemVer / 发布流程 / 合入门禁 / 回滚 |
 | 根目录 [CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献流程：环境 / 提交规范 / PR |
-| 根目录 [AGENTS.md](../AGENTS.md) | 开发纪律（约束 / 决策锁定 / 踩坑教训） |
+| [constraints.md](constraints.md) | **约束速查**（v0.25.0）：把仍生效的约束按 9 个主题归拢，每条标注 A/D 出处。**先读这个**，再按需深入 |
+| 根目录 [AGENTS.md](../AGENTS.md) | 开发纪律全文（39 条硬约束 / 决策锁定 / 踩坑教训） |
 
 ## 📚 参考（Reference）——事实与数据
 
@@ -44,7 +45,7 @@
 ## 使用顺序建议
 
 1. 新用户 → `getting-started.md`（教程）
-2. 新入项目开发 → `PLAN.md`（历史）+ `versioning.md`（流程）+ `AGENTS.md`（纪律）
+2. 新入项目开发 → `constraints.md`（约束速查，一页对齐）+ `PLAN.md`（当前计划）+ `versioning.md`（流程）；需要证据与推导时再查 `AGENTS.md` / `decision-log.md`
 3. 改架构 → 读 `architecture.md` 后同步更新
 4. 发布 → 走 `versioning.md` §3，改 `CHANGELOG.md`
 5. 排查 → `audit-report.md`（已知问题追踪）+ `decision-log.md`（为什么这么做）

@@ -14,7 +14,7 @@
 
 ## 硬性约束（禁止违反）
 1. **零原生依赖**：禁止引入 better-sqlite3 / sqlite-vec / Prisma / 任何需要 electron-rebuild 的包。数据层只用 `node:sqlite` + zod + 手写迁移。
-2. **版本锁定**（已逐一验证，禁止随意升级）：electron 43.3.0、electron-vite 5.0.0、vite **7.3.6（不可用 8）**、react 19.2.8、typescript **5.9.3**、express 5.2.1、zod 4.4.3、**openai SDK（直连，7.4.0）**、@tanstack/react-query 5.101.4、codemirror 栈（@uiw/react-codemirror ^4.25.11 + @codemirror/lang-markdown ^6.5.2）、react-router-dom ^7.9.0、lucide-react ^1.31.0（P11 引入，纯 JS 图标库）、electron-updater ^6.8.9（自更新）、epub2 ^3.0.2（拆书 EPUB 解析）、gpt-tokenizer ^3.4.0（客户端成本预估）、**epub-gen-memory 1.1.2（epub-gen 0.1.0 是 2019 死包，禁用）**、electron-builder 26.15.3。**禁止引入 @langchain/langgraph、@langchain/openai、@langchain/core**（审查结论：LangChain 对 DeepSeek 是负资产——reasoning_content 字段丢失 bug 未修，见 langchainjs #10883；改 openai SDK 直连）。**v0.23.1（批次 B3）：zustand 已移除（全仓库 0 import 的纯死依赖，D98 审查发现）——状态管理现状 = react-query（server state）+ 组件本地 state；再引入全局 store 前须先补决策记录。**
+2. **版本锁定**（已逐一验证，禁止随意升级）：electron **43.4.1（v0.25.0 由 43.3.0 升级——含"沙箱顶层 frame 打开的窗口未继承沙箱限制"等安全修复，与本项目安全模型直接相关，禁止回退）**、electron-vite 5.0.0、vite **7.3.6（不可用 8）**、react 19.2.8、typescript **5.9.3**、express 5.2.1、zod 4.4.3、**openai SDK（直连，7.4.0）**、@tanstack/react-query 5.101.4、codemirror 栈（@uiw/react-codemirror ^4.25.11 + @codemirror/lang-markdown ^6.5.2）、react-router-dom ^7.9.0、lucide-react ^1.31.0（P11 引入，纯 JS 图标库）、electron-updater ^6.8.9（自更新）、epub2 ^3.0.2（拆书 EPUB 解析）、gpt-tokenizer ^3.4.0（客户端成本预估）、**epub-gen-memory 1.1.2（epub-gen 0.1.0 是 2019 死包，禁用）**、electron-builder 26.15.3。**禁止引入 @langchain/langgraph、@langchain/openai、@langchain/core**（审查结论：LangChain 对 DeepSeek 是负资产——reasoning_content 字段丢失 bug 未修，见 langchainjs #10883；改 openai SDK 直连）。**v0.23.1（批次 B3）：zustand 已移除（全仓库 0 import 的纯死依赖，D98 审查发现）——状态管理现状 = react-query（server state）+ 组件本地 state；再引入全局 store 前须先补决策记录。**
 3. **pnpm 专用**：禁止 npm/yarn。`.npmrc` 已配 pnpm store 目录（本机示例：`store-dir=<你的磁盘根>\.pnpm-store`，按本机调整）+ electron 镜像。
 4. **DeepSeek 参数合法性**（官方核实）：`reasoning_effort` 只有 low/high/max（无 medium）；**thinking 开启时 temperature/top_p/penalty 全部无效**；**V4 默认 thinking 开——非 thinking 路由必须显式传 `thinking:{type:'disabled'}`，否则温度无效且可能返回空 content**（D12 实测）；`thinking` 参数必须走 `extra_body`；**thinking 模式禁止强制 `tool_choice`**（会 400）；工具调用时 assistant 消息的 `reasoning_content` 必须**原样回传**否则 400（openai-node 无此类型，统一封装 `as any` 存取，不得用 LangChain 转发）。
 5. **前缀冻结**：上下文组装固定序 = 冻结前缀区（系统提示→书级合约→世界观→角色账本）+ 可变区（任务单→前文摘要→RAG）。冻结区变更必须 hash 版本化。
@@ -56,6 +56,8 @@
 35. **发布闭环纪律**（P10 D26）：UI/导航/交互修复交付时，必须重新执行 `pnpm dist` 并验证新安装包（用户拿到的是安装包不是源码）；禁止"代码已修但未打包"状态交付。
 36. **每次改动同步打包（用户强制，2026-08-10 起）**：**任何**代码改动（前端/后端/样式/修复/优化）完成后，必须执行 `pnpm dist` 同步重建 `release\AI-Novel-Studio Setup 0.1.0.exe`（NSIS）与 `release\AI-Novel-Studio-0.1.0-portable-x64.exe`（portable），确认两个产物时间戳已更新；打包失败视为改动未完成。
 37. **IPC 竞态纪律**（P11-1.2/D28）：主进程 → renderer 的单向 `webContents.send` 消息（如 server-ready）在 renderer 未注册监听时发送会**静默丢失**——必须"主动拉取（invoke/handle）+ 缓存补发"双保险；renderer 侧关键启动链路加轮询兜底。
+38. **单文件规模硬约束**（v0.25.0 审查 S1）：组件文件超过 **400 行**或 **12 个 `useState`** 时，**必须先拆分再继续加功能**——禁止在既有大文件上继续追加。教训：`ChapterExecutionPage.tsx` 曾膨胀到 1989 行 / 43 个 `useState`（8 个职责域混杂、零测试覆盖），拆分成本高且易回归。拆分顺序：先抽自定义 hook（纯逻辑、可单测、风险最低），再拆 UI 子组件。
+39. **页面级错误边界**（v0.25.0 审查 L2）：路由页面必须包 `ErrorBoundary` 并传 `resetKey={pathname}`——单页崩溃不得导致整应用白屏（未保存的章节正文会随之丢失）。新增页面时照 `App.tsx` 的 `<Page name="…">` 包装写法。
 
 ## 常用命令
 - `pnpm dev`：开发（electron-vite 三端；dev 固定 AI_NOVEL_PORT=3000，浏览器直连调试）
