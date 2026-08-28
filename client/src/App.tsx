@@ -1,6 +1,6 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import type { BootstrapInfo } from '@shared/types'
 import { SettingsPage } from './pages/SettingsPage'
 import { Onboarding } from './pages/Onboarding'
@@ -11,6 +11,7 @@ import { getApiBaseUrl, setApiBaseUrl, apiFetch } from './api'
 import { initShortcuts } from './utils/shortcuts'
 import { setCnyRate } from './utils/costEstimate'
 import { CommandPalette } from './components/CommandPalette'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 // P20（U4）：路由懒加载（22 页面分包，首屏只载当前页）
 const NovelWorkspacePage = lazy(() => import('./pages/NovelWorkspacePage').then((m) => ({ default: m.NovelWorkspacePage })))
@@ -59,6 +60,19 @@ function PageFallback(): React.JSX.Element {
       </div>
       <style>{`@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
     </div>
+  )
+}
+
+// v0.25.0（审查 L2）：页面级错误边界 + 懒加载兜底。
+// 此前全应用只有 root 一层 ErrorBoundary——任一页面抛错即整应用白屏、只能刷新，
+// 未保存的章节正文随之丢失。现每页独立包裹，路由切换（resetKey=pathname）自动复位，
+// 单页崩溃后仍可经左侧导航切换到其他页面。
+function Page({ name, children }: { name: string; children: React.ReactNode }): React.JSX.Element {
+  const { pathname } = useLocation()
+  return (
+    <ErrorBoundary name={name} resetKey={pathname}>
+      <Suspense fallback={<PageFallback />}>{children}</Suspense>
+    </ErrorBoundary>
   )
 }
 
@@ -186,33 +200,33 @@ export function App(): React.JSX.Element {
       <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} />
       <Routes>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<NovelListPage />} />
-          <Route path="/novels/:novelId" element={<Suspense fallback={<PageFallback />}><NovelWorkspacePage /></Suspense>} />
-          <Route path="/novels/:novelId/chapters" element={<Suspense fallback={<PageFallback />}><ChapterExecutionPage /></Suspense>} />
-          <Route path="/novels/:novelId/director" element={<Suspense fallback={<PageFallback />}><DirectorPage /></Suspense>} />
-          <Route path="/novels/:novelId/hub" element={<Suspense fallback={<PageFallback />}><CreativeHubPage /></Suspense>} />
-          <Route path="/tasks" element={<Suspense fallback={<PageFallback />}><TasksPage /></Suspense>} />
-          <Route path="/titles" element={<Suspense fallback={<PageFallback />}><TitlesPage /></Suspense>} />
-          <Route path="/help" element={<Suspense fallback={<PageFallback />}><HelpPage /></Suspense>} />
-          <Route path="/anti-ai" element={<Suspense fallback={<PageFallback />}><AntiAiPage /></Suspense>} />
-          <Route path="/base-characters" element={<Suspense fallback={<PageFallback />}><BaseCharactersPage /></Suspense>} />
-          <Route path="/follow-ups" element={<Suspense fallback={<PageFallback />}><FollowUpsPage /></Suspense>} />
-          <Route path="/novels/:novelId/stats" element={<Suspense fallback={<PageFallback />}><StatsPage /></Suspense>} />
-          <Route path="/forge" element={<Suspense fallback={<PageFallback />}><ForgePage /></Suspense>} />
-          <Route path="/style-engine" element={<Suspense fallback={<PageFallback />}><StyleEnginePage /></Suspense>} />
-          <Route path="/book-analysis" element={<Suspense fallback={<PageFallback />}><BookAnalysisPage /></Suspense>} />
-          <Route path="/genres" element={<Suspense fallback={<PageFallback />}><GenresPage /></Suspense>} />
-          <Route path="/story-modes" element={<Suspense fallback={<PageFallback />}><StoryModesPage /></Suspense>} />
-          <Route path="/worlds" element={<Suspense fallback={<PageFallback />}><WorldsLibraryPage /></Suspense>} />
-          <Route path="/knowledge" element={<Suspense fallback={<PageFallback />}><KnowledgePage /></Suspense>} />
-          <Route path="/prompt-workbench" element={<Suspense fallback={<PageFallback />}><PromptWorkbenchPage /></Suspense>} />
-          <Route path="/studio" element={<Suspense fallback={<PageFallback />}><StudioPage /></Suspense>} />
-          <Route path="/agents-library" element={<Suspense fallback={<PageFallback />}><AgentsLibraryPage /></Suspense>} />
-          <Route path="/hub" element={<Suspense fallback={<PageFallback />}><CreativeHubPage /></Suspense>} />
+          <Route path="/" element={<Page name="小说列表"><NovelListPage /></Page>} />
+          <Route path="/novels/:novelId" element={<Page name="工作台"><NovelWorkspacePage /></Page>} />
+          <Route path="/novels/:novelId/chapters" element={<Page name="章节执行"><ChapterExecutionPage /></Page>} />
+          <Route path="/novels/:novelId/director" element={<Page name="自动导演"><DirectorPage /></Page>} />
+          <Route path="/novels/:novelId/hub" element={<Page name="创作工坊"><CreativeHubPage /></Page>} />
+          <Route path="/tasks" element={<Page name="任务中心"><TasksPage /></Page>} />
+          <Route path="/titles" element={<Page name="标题工坊"><TitlesPage /></Page>} />
+          <Route path="/help" element={<Page name="帮助"><HelpPage /></Page>} />
+          <Route path="/anti-ai" element={<Page name="反 AI 规则"><AntiAiPage /></Page>} />
+          <Route path="/base-characters" element={<Page name="基础角色库"><BaseCharactersPage /></Page>} />
+          <Route path="/follow-ups" element={<Page name="待办跟进"><FollowUpsPage /></Page>} />
+          <Route path="/novels/:novelId/stats" element={<Page name="写作统计"><StatsPage /></Page>} />
+          <Route path="/forge" element={<Page name="网文要素工坊"><ForgePage /></Page>} />
+          <Route path="/style-engine" element={<Page name="写法引擎"><StyleEnginePage /></Page>} />
+          <Route path="/book-analysis" element={<Page name="拆书分析"><BookAnalysisPage /></Page>} />
+          <Route path="/genres" element={<Page name="流派管理"><GenresPage /></Page>} />
+          <Route path="/story-modes" element={<Page name="推进模式库"><StoryModesPage /></Page>} />
+          <Route path="/worlds" element={<Page name="世界样本库"><WorldsLibraryPage /></Page>} />
+          <Route path="/knowledge" element={<Page name="知识库"><KnowledgePage /></Page>} />
+          <Route path="/prompt-workbench" element={<Page name="提示词工作台"><PromptWorkbenchPage /></Page>} />
+          <Route path="/studio" element={<Page name="智能体工坊"><StudioPage /></Page>} />
+          <Route path="/agents-library" element={<Page name="智能体库"><AgentsLibraryPage /></Page>} />
+          <Route path="/hub" element={<Page name="创作工坊"><CreativeHubPage /></Page>} />
           <Route path="/director" element={<NovelGate title="自动导演" desc="从灵感推进到可写章节（11 阶段）。选择一本书进入。请先创建或选择小说。" target={(n) => `/novels/${n}/director`} />} />
           <Route path="/chapters" element={<NovelGate title="章节执行" desc="逐章生成、审核、修复、回灌。选择一本书进入。请先创建或选择小说。" target={(n) => `/novels/${n}/chapters`} />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/settings/routes" element={<SettingsPage initialTab="routes" />} />
+          <Route path="/settings" element={<Page name="设置"><SettingsPage /></Page>} />
+          <Route path="/settings/routes" element={<Page name="设置"><SettingsPage initialTab="routes" /></Page>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
