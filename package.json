@@ -21,6 +21,9 @@
     "release": "node scripts/release.mjs",
     "calibrate": "node --experimental-strip-types scripts/calibrate.ts",
     "dist": "electron-vite build && electron-builder --win --publish never",
+    "dist:win": "electron-vite build && electron-builder --win --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
+    "dist:linux": "electron-vite build && electron-builder --linux --publish never",
     "dist:dir": "electron-vite build && electron-builder --win --dir",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -95,6 +98,22 @@
         "portable"
       ],
       "icon": "resources/icon-512.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "resources/icon-512.png",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "resources/icon-512.png",
+      "category": "Office"
     },
     "nsis": {
       "oneClick": false,
