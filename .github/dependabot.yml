@@ -1,4 +1,7 @@
 # P26：依赖安全（npm weekly + 自动 PR）
+# v0.24.5（D110）：ignore 对齐 AGENTS #2「版本锁定（已逐一验证，禁止随意升级）」清单——
+# 锁定包一律不自动提 PR（升级需人工评估 + user 批准）；仅未锁定 devDeps 与安全更新走自动流。
+# 安全例外：锁定包出现 CVE 时走手动升级流程（user 批准 + 全量验证），不自动合并。
 version: 2
 updates:
   - package-ecosystem: npm
@@ -9,10 +12,34 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
-    # 大版本破坏性升级不自动开 PR（人工评估，D67 后：vitest 4/typescript 6 均构建失败）
+    # ---- 大版本破坏性升级不自动开 PR（人工评估，D67 后：vitest 4/typescript 6 均构建失败） ----
+    # ---- 版本锁定清单（AGENTS #2；覆盖全部更新类型，升级需人工评估） ----
     ignore:
+      - dependency-name: "electron"
+      - dependency-name: "electron-vite"
+      - dependency-name: "vite"
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
       - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: "express"
+      - dependency-name: "zod"
+      - dependency-name: "openai"
+      - dependency-name: "@tanstack/react-query"
+      - dependency-name: "@uiw/react-codemirror"
+      - dependency-name: "@codemirror/lang-markdown"
+      - dependency-name: "@codemirror/language"
+      - dependency-name: "@codemirror/state"
+      - dependency-name: "@codemirror/view"
+      - dependency-name: "@codemirror/autocomplete"
+      - dependency-name: "react-router-dom"
+      - dependency-name: "lucide-react"
+      - dependency-name: "electron-updater"
+      - dependency-name: "epub2"
+      - dependency-name: "epub-gen-memory"
+      - dependency-name: "gpt-tokenizer"
+      - dependency-name: "electron-builder"
+      - dependency-name: "@vitejs/plugin-react"
+      # 大版本单独拦截（其余小版本允许自动流——可升级项）
       - dependency-name: "vitest"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"

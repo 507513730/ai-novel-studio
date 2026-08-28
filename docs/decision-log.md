@@ -677,3 +677,12 @@
 - **范围**（竞品分析 A 档 7 项中 5 项 + B 档 2 项落地；A1 多候选生成成本敏感缓、B6/B7/C 档结构性远期不改）：A3 写作统计面板（/stats：字数/AI 占比/卷分布/审核分分布/成本/伏笔账本——零新增表全由现有数据推导，新增 GET /:novelId/stats + /:novelId/foreshadows）；A2 快捷词（`;触发词` → 展开文本；app_settings 键 quickWords + CodeMirror autocompletion 源 + 设置页管理；@codemirror/autocomplete 显式声明）；A4 轻量本地校对（确定性检查零 token：重复词/叠词豁免/乱码半全角 + 单次 extraction 语义检查，POST .../proofread，降级静默）；A5 DOCX 导出（零新依赖——jszip 3.10.1 继承依赖组装 OOXML，T2 e2e 加断言）；A7 文件拖拽导入 + 主题跟随系统（system 偏好 → 深=墨蓝/浅=纸张）；B4 网文要素工坊（/forge：人名/地名/门派/功法/宝物/金手指/桥段批量生成 + 一键入知识库）；B5 伏笔看板（并入统计页，记忆面同源）；A6 演示书（POST /novels/import-demo：1 卷 3 章 + 角色 + 世界观 + 伏笔，零 LLM，空态一键载入）。
 - **测试基线修正（重要发现）**：`.worktrees/` 协作者重构副本导致 vitest 双跑——先前 364/74 实为主库 41 文件 + worktree 副本双算；新增 vitest.config.ts（include tests/** + exclude .worktrees）后真实基线 **198/41**（+16：review-policy 5 / stats 2 / quick-words 4 / proofread 5）。仓库文档/报告中的 364 数字应理解为双算值。
 - **验收**：typecheck/lint 0 err + vitest 198/198（单库）+ e2e R12（官方直连，含 DOCX 导出断言）。
+
+### D110 · 2026-08-24 · Dependabot 与版本锁定纪律对齐
+
+- **背景**：Dependabot（P26 落地，weekly）对 AGENTS #2「版本锁定（已逐一验证，禁止随意升级）」清单内的包仍每周开 minor/patch PR（例：electron 43.3.0→43.4.1）——工具与纪律冲突，每周噪音 PR。
+- **处置**：
+  - `dependabot.yml` ignore 对齐锁定清单（electron/vite/react/typescript/express/zod/openai/@tanstack/react-query/codemirror 栈/react-router-dom/lucide-react/electron-updater/epub2/epub-gen-memory/gpt-tokenizer/electron-builder/@vitejs/plugin-react 全类型忽略；vitest/@types/node/eslint-plugin-react-hooks 保留 major 拦截）；锁定包 CVE 例外走人工流程（user 批准 + 全量验证），不自动合并。
+  - 本批低风险 devDeps 手动升级（与 Dependabot PR #6/#7/#8/#10 内容一致，直接本地实施 + lockfile 更新 + 三绿 200/200）：@commitlint/cli 21.2.1→21.2.2、@commitlint/config-conventional 21.2.0→21.2.2（配套一致）、eslint-plugin-react-refresh 0.5.3→0.5.4、typescript-eslint 8.66→8.68（^ 解析）。
+  - **electron 43.3.0→43.4.1（PR #9）不升级**：43 系含 Chromium/Node 更新，打破已验证基线，需全量验证 + 打包冒烟 + e2e + 重发版；与 `AGENTS #2` 冲突。PR 关闭留痕，待下次重大升级评估。
+- **验收**：三绿（typecheck 0 err / lint 0 err / vitest 200/200，升级后重跑）+ PR 全部关闭并注明。

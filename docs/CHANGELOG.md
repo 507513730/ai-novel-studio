@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 依赖治理（2026-08-24，免发版，D110）
+
+- `dependabot.yml` ignore 对齐版本锁定清单（AGENTS #2：electron/vite/react/typescript/openai/zod 等 23 项全类型忽略）——锁定包不再每周开升级 PR（CVE 例外走人工评估）
+- devDeps 小升级（Dependabot PR #6/#7/#8/#10 手动落地 + 三绿）：@commitlint 21.2.2（cli+config 配套）、eslint-plugin-react-refresh 0.5.4、typescript-eslint 8.68
+- electron 43.3.0→43.4.1 关闭（#9）：锁定基线，待重大升级评估
+
 （暂无）
 
 ## v0.24.4（2026-08-24）
