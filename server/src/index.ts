@@ -80,7 +80,8 @@ function start(): void {
     throw new Error('AI_NOVEL_USER_DATA env is required')
   }
   const db = openDatabase(userData)
-  applyMigrations(db)
+  // v0.25.0（审查 M2）：传入库路径——存在待应用迁移时先做迁移前快照
+  applyMigrations(db, join(userData, 'ai-novel-studio.db'))
   seedIfEmpty(db)
   initPromptDb(db)
   startScheduler(db)

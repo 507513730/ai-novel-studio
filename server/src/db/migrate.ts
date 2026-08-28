@@ -1,4 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
+import { copyFileSync, mkdirSync, readdirSync, rmSync, existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
   {
@@ -477,7 +479,44 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
 
 export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
 
-export function applyMigrations(db: DatabaseSync): void {
+// v0.25.0（审查 M2）：迁移前快照保留份数
+const PRE_MIGRATE_KEEP = 3
+
+/**
+ * v0.25.0（审查 M2）：迁移前自动快照。
+ * 此前 applyMigrations 直接改库且无任何回滚点；自动备份在启动 5 分钟后才首次执行，
+ * 而迁移在启动时同步执行——升级过程中一旦迁移异常（或引入破坏性迁移）无快照可回。
+ * 快照失败不阻断迁移（宁可无备份，也不能让应用起不来）。
+ */
+export function snapshotBeforeMigration(db: DatabaseSync, dbPath: string, from: number, to: number): void {
+  try {
+    if (!existsSync(dbPath)) return
+    const dir = join(dirname(dbPath), 'backups')
+    mkdirSync(dir, { recursive: true })
+    // WAL 落主库后再复制；内存库 / 非 WAL 模式不支持该 pragma，忽略即可
+    try {
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    } catch {
+      /* ignore */
+    }
+    const now = new Date()
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+    const target = join(dir, `pre-migrate-v${from}-to-v${to}-${stamp}.db`)
+    copyFileSync(dbPath, target)
+    // 轮转：只保留最近 PRE_MIGRATE_KEEP 份迁移前快照
+    const olds = readdirSync(dir)
+      .filter((f) => f.startsWith('pre-migrate-') && f.endsWith('.db'))
+      .sort()
+    while (olds.length > PRE_MIGRATE_KEEP) {
+      rmSync(join(dir, olds.shift()!), { force: true })
+    }
+    console.log(`[migrate] 迁移前快照已保存: ${target}`)
+  } catch (err) {
+    console.error('[migrate] 迁移前快照失败（不阻断迁移）:', String(err))
+  }
+}
+
+export function applyMigrations(db: DatabaseSync, dbPath?: string): void {
   db.exec(`CREATE TABLE IF NOT EXISTS _migrations (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -488,6 +527,14 @@ export function applyMigrations(db: DatabaseSync): void {
       (r) => r.version
     )
   )
+
+  // v0.25.0（审查 M2）：升级既有库（current > 0）且有待应用迁移时先快照。
+  // 全新库（current === 0）无数据可保，跳过——避免首次安装产生无意义备份。
+  const pending = MIGRATIONS.filter((m) => !applied.has(m.version))
+  const current = getSchemaVersion(db)
+  if (pending.length > 0 && dbPath && current > 0) {
+    snapshotBeforeMigration(db, dbPath, current, pending[pending.length - 1].version)
+  }
 
   for (const migration of MIGRATIONS) {
     if (applied.has(migration.version)) continue
