@@ -61,7 +61,7 @@ chapter.content 恒等于最新 chapter_version.content（降级原因经 Genera
 ```
 Web API → INSERT job（queued，json_extract novelId 精确查重）→ Scheduler 抢占
   → jobs/repository.claimNextJob：原子置 running + 颁发唯一 claim_token
-  → runDirectorPipeline / runProductionPipeline（进度经 updateClaimedJob：id+token+running 守卫）
+  → jobs/executors.ts 注册表分发（五类执行器；未知类型立即失败；进度经 reportProgress 守卫写入）
   → 收尾 finishClaimedJob（done|failed；取消/watchdog 终态不被迟到协程覆盖）
   → 进度回写 result_json / 状态 done|failed
 失败恢复：retry(可换模型 modelOverride，重排队清 claim_token) / cancel(lifecycle.cancelActiveJob)

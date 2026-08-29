@@ -710,3 +710,9 @@
   4. **兼容策略**：`jobQueue.ts` 保留全部既有公共签名（enqueueDirectorJob/enqueueTypedJob/enqueueProductionJob/isJobCancelled/isJobAborted）转发 repository；`JobRecord` 改 camelCase（payloadJson/claimToken 等），原 scheduler 内部接口无外部消费者，零破坏。
 - **与 R4.1 的边界**：job claim token 与未来章节 generation_token 是不同身份、不同生命周期（R0 基线预扫描结论）——重试回收 job 不应使无关章节工作失效，二者禁止混用。
 - **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 49 文件 285 用例（+18：payload 7 / repository 6 / lifecycle 5，含 12 vs 123 查重回归、watchdog 后不虚报 done、迟到协程拒绝）/ db-smoke 7 项（schema version=21）。
+
+### D113 · 2026-08-29 · R3 scheduler token 作用域化执行 + 构建环境沙箱 ACL 观测（分支 codex/refactor-r0-r1）
+
+- **R3 决策（本地设计）**：五类 job 业务循环迁入 `jobs/executors.ts` 显式注册表（`JobExecutor` 接收 `{db, claim, isAborted, reportProgress}`，未知类型分发层立即失败）；trace 去重/上限 300/完成率收拢 `jobs/progress.ts`；`jobs/scheduler.ts` 只负责轮询/claim/watchdog/分发/运行锁。watchdog 置 failed 即失效当前 claim（迟到协程写入被 id+token+running 守卫拒绝——R2 守卫的直接消费方）；`stopScheduler` 停止接受新 claim，当前执行器经 `isAborted`（`!active || isJobAborted`）在下一安全边界观察停止；启动恢复 `resetStaleRunning`（R2 迁入）。旧 `services/scheduler.ts` 缩为 3 行兼容转发。测试 +7（取消不被 done 覆盖、全失败不虚报 done、异常逃逸兜底且调度器存活、stop 后不再 claim、watchdog 回收、重启恢复、claim A/B 故障注入）。
+- **环境观测（重要，非代码问题）**：约 12:00 起，本机对 vite 构建产物（out/renderer/assets/*.js）出现跨命令删除拒绝（读/写正常、删除 EPERM），vite `emptyOutDir` 连锁失败，两棵工作树均复现。证据：文件 ACL 含 `JING\CodexSandboxUsers` 与 `S-1-4-*` 会话级 SID；DSH 沙箱命令行带 `--write-sid/--temp-write-sid`（Defender 检测记录可见）——会话 ACL 轮换后旧会话创建的文件对新会话不可删，`emptyOutDir` 每次撞上一轮产物即失败。R0-R2 期间的打包（11:31/11:48/11:52）均正常。**处置**：R3 提交保留分支，main 不合并；待环境恢复（重启会话/机器或调整沙箱策略）后重跑 `pnpm dist` 完成交付。协作提示：同症状下勿反复重试构建（每次失败留下一批不可删产物），优先换全新 outDir 或恢复环境。
+- **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 51 文件 292 用例（+7）/ db-smoke 7 项；打包门禁被上述环境问题阻塞，未宣称交付。

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 重构：R3 scheduler token 作用域化（2026-08-29，分支 codex/refactor-r0-r1，D113）
+
+- 五类 job 业务循环迁入 `jobs/executors.ts` 显式注册表；trace/进度收拢 `jobs/progress.ts`；`jobs/scheduler.ts` 只负责轮询/claim/watchdog/分发/运行锁；旧 `services/scheduler.ts` 缩为兼容转发
+- watchdog 置 failed 即失效当前 claim，迟到协程进度/收尾写入被守卫拒绝；stopScheduler 停止新 claim 且执行器在下一安全边界观察停止；启动恢复清 claim token
+- 测试 +7（全量 51 文件 292 用例）；打包门禁受构建环境会话 ACL 问题阻塞（D113），交付待环境恢复后重跑 dist
+
 ### 重构：R2 job 域隔离（2026-08-29，分支 codex/refactor-r0-r1，D112）
 
 - job 抢占/收尾迁入 `services/jobs/` 域（repository/lifecycle/payload/types）：`claimNextJob()` 颁发唯一 claim token（迁移 21 新增 `job.claim_token`），所有运行态写入以 `id+token+status='running'` 守卫——迟到协程与取消/watchdog 终态覆盖被结构性拒绝
