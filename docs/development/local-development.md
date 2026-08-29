@@ -8,7 +8,8 @@
 ## 常用命令
 
 ```
-pnpm dev          # electron-vite 三端；dev 固定 AI_NOVEL_PORT=3000（浏览器可直连调试）
+pnpm dev          # electron-vite 三端；dev 固定 AI_NOVEL_PORT=3000
+                  # 浏览器直连 5173 调试需：AI_NOVEL_TOKEN_OPTIONAL=1 pnpm dev（v0.25.0 起 dev 也强制 X-App-Token，浏览器无 preload 桥拿不到 token）
 pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
 pnpm test         # vitest run
@@ -25,6 +26,7 @@ AI_NOVEL_USER_DATA=<目录> AI_NOVEL_PORT=3000 AI_NOVEL_ALLOW_PLAINTEXT=1 node o
 
 - `AI_NOVEL_ALLOW_PLAINTEXT=1` 仅限调试：允许以明文存取 API Key（正式运行经 safeStorage 加密）。
 - 不设 `SERVER_TOKEN` 时关闭 token 强制；设了则全请求需 `X-App-Token`。
+- dev（electron-vite）始终注入随机 `SERVER_TOKEN`；浏览器直连调试时以 `AI_NOVEL_TOKEN_OPTIONAL=1` 关闭强制（server/src/services/security.ts 预留开关，仅限本机调试）。
 
 ## 验收脚本
 

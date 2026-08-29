@@ -761,3 +761,10 @@
 - **文档架构（R9.1，按 spec §6 按需落地）**：docs/user/（首启/写作/模型/备份/排障/导出更新 6 篇）、docs/development/（仓库地图/本地开发/测试/数据模型/API 契约/错误模型 6 篇）、docs/operations/（打包/发版检查单/CI 3 篇）、docs/reference/（校准索引/决策归档索引 2 篇）；docs/README.md 索引同批更新；权威治理入口保持原路径不动。
 - **最终验收（R9.3）**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 62 文件 366 用例 / db-smoke 7 项（schema v22）/ build / dist 双产物 / v072-pack-verify 通过（真实网关 SSE + 导出 + 鉴权）/ e2e round 两轮（R1：T2 因网关超时部分失败；R2：T1 10/10、T2 9/14、T3 6/6、T4 全过、T5 11/13——失败项为网关在不同调用上轮替超时，属供应商侧波动；T1/T3/T4 两轮全绿，T2/T5 主链通过）。kill/restart 幂等由 scheduler-recovery（看门狗回收/重启恢复/迟到协程）与 chapter-generation（stale claim）具名测试覆盖。
 - **完成定义对照（计划 §5）**：R0-R9 均有独立提交与门禁；核心域单一事实源；大文件仅剩装配/兼容职责并已删除；REST/数据/流程兼容；架构守护固化边界；文档按受众组织。残余：e2e 网关波动项（环境侧）、R0-F6（production 无守卫置状态，属域内一致性问题，保留至下轮功能批）、发布/tag 需用户单独授权。
+
+### D120 · 2026-08-29 · 1.0 判定二次修订（用户裁定：UI 升级收官即 1.0）+ 前端 UI 全面审查
+
+- **1.0 判定二次修订（用户裁定，产品决策）**：UI 全面升级批次完成后即判定 1.0 达成——批次 A（v0.26.0，UI 一致性与 P0 硬伤）→ 批次 B（v1.0.0，观感升级收官版）。「真实写书完成」调整为「全链路真实写书验证通过」：书 #25 全链路（导演→方案流水线→审核修复→回灌→导出）持续生产验证中，30 万字收官在 1.x 内完成、不再阻塞发版；「核心链稳定」（R0-R9 + 审查批）与「数据格式冻结」（schema v22）维持已满足。versioning.md §1.1/§7、PLAN.md §3、onboarding §顶部/§14 同批回写。
+- **前端 UI 全面审查（走查 + 代码级，报告落 docs/ui-review.md 含 10 张关键截图）**：17 页面路由 + paper/sepia 主题抽查（dev 直连 5173）。强项：7 主题令牌体系完整、颜色纪律（硬编码 hex 仅 2 处）、可访问性（focus-visible/reduced-motion）、CodeMirror 与变量全联动。P0：章节执行工具栏与导演页按钮竖排挤压（根因 = button 缺 white-space:nowrap + flex 容器无最小宽约束）；侧栏「工作台」项无书时 to='/' 与「小说列表」撞车 → 双高亮 + isPrimary 常亮；index.css fade-in-up 双定义、.page 未定义、遮罩 rgba(0,0,0,0.5) 硬编码 4 处、7 处 window.confirm（D69）、AgentsLibraryPage 自造弹窗、zIndex 散落、editor dark:false、10px 小字。P1：加载/空/错误三态三轨并行（统计页 4-5s 白屏无指示、23 处纯文字加载）、执行右栏 10 按钮无层级、body_md 术语泄漏、emoji 与 lucide 混用、品牌三重重复。P2（批次 B）：书架卡/执行页重排（先按 AGENTS #38 拆分 1150 行文件）/工作台三套引导收敛/Hub 气泡+受限 markdown/亮色主题遮罩阴影复查。
+- **走查方法教训（本地经验）**：首访页面数据晚到时，截图会拍到 .panel 200ms 入场动画中间帧——表现为「整页极暗」假象（computed style 全正常、opacity=1）；视觉审查必须等数据稳定（3s+）后重截再下对比度结论，computed-style 核查是甄别假象的关键步骤。
+- **文档漂移修正**：v0.25.0 审查 M3 起 dev 亦无条件注入 SERVER_TOKEN（electron/serverProcess.ts），浏览器直连 5173 调试会 403——需 `AI_NOVEL_TOKEN_OPTIONAL=1 pnpm dev`（security.ts 预留调试开关）；docs/development/local-development.md 的「浏览器可直连调试」表述已同步修正。
