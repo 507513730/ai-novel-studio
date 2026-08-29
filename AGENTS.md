@@ -77,7 +77,7 @@ docs/          校准报告 + P9 体验修复明细
 ```
 
 ## 用户环境
-- Windows / PowerShell 5.1；Node v24.15.0；pnpm 由 corepack 激活；无全局 electron
+- Windows / PowerShell：**默认用 pwsh 7.6.5**（PowerShell 7，`pwsh` 命令；2026-08-29 起，5.1 仅遗留兼容——旧 5.1 不支持三元等语法）；Node v24.15.0；pnpm 由 corepack 激活；无全局 electron
 - 测试凭证：OpenCode Go 网关 key（`~/.local/share/opencode/auth.json`，不落盘不提交）
 
 41. **主题/外观纪律**（P13 F0/D36）：界面配色统一走 CSS 变量体系（4 套主题 / 深色 3 色 / accent 体系），窗口外观走 nativeTheme + titleBarOverlay + IPC theme-set；CodeMirror 主题与 CSS 变量保持一致。
