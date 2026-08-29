@@ -96,7 +96,8 @@ export async function runProductionPipeline(
       if (isBatchFatalError(err)) throw err
       progress.failed += 1
       progress.currentAction = `失败：${err instanceof Error ? err.message.slice(0, 80) : String(err)}`
-      db.prepare("UPDATE chapter SET status = 'failed' WHERE id = ?").run(ch.id)
+      // R0-F6：守卫失败置状态——不覆盖新一轮生成的 generating claim
+      db.prepare("UPDATE chapter SET status = 'failed' WHERE id = ? AND status != 'generating'").run(ch.id)
       onProgress(progress)
     }
   }
@@ -229,14 +230,15 @@ async function reviewFixBackfill(
   }
 
   // 4. 写回修复后的正文（如有）—— v0.22.0（审查 N1）：整章 AI 内容→覆盖 ai_words
+  // R0-F6：守卫推进 reviewed——仅从生成域落库的 written 状态推进
   if (finalContent !== generatedContent) {
     const fc = (finalContent.match(/[\u4e00-\u9fff]/g) ?? []).length
     db.prepare(
-      "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, status = 'reviewed', updated_at = datetime('now') WHERE id = ?"
+      "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, status = 'reviewed', updated_at = datetime('now') WHERE id = ? AND status = 'written'"
     ).run(finalContent, fc, fc, chapterId)
   } else {
     db.prepare(
-      "UPDATE chapter SET status = 'reviewed', updated_at = datetime('now') WHERE id = ?"
+      "UPDATE chapter SET status = 'reviewed', updated_at = datetime('now') WHERE id = ? AND status = 'written'"
     ).run(chapterId)
   }
 

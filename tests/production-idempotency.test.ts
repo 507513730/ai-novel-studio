@@ -102,7 +102,11 @@ describe('整本生产幂等与熔断（R4.3）', () => {
     const db = makeDb()
     const { novelId, chapterIds } = seedNovelWithChapters(db, 2)
     generateChapterMock.mockRejectedValueOnce(new Error('供应商超时'))
-    generateChapterMock.mockResolvedValue(GOOD_GENERATION)
+    generateChapterMock.mockImplementation(async (_db: DatabaseSync, _n: number, chapterId: number) => {
+      // 模拟生成域的 written 落库（守卫写回依赖该状态）
+      db.prepare("UPDATE chapter SET content = ?, status = 'written' WHERE id = ?").run(GOOD_GENERATION.content, chapterId)
+      return GOOD_GENERATION
+    })
 
     const progress = await runProductionPipeline(db, novelId, () => {})
 
@@ -112,6 +116,21 @@ describe('整本生产幂等与熔断（R4.3）', () => {
     const done = db.prepare('SELECT status FROM chapter WHERE id = ?').get(chapterIds[1]) as { status: string }
     expect(failed.status).toBe('failed')
     expect(done.status).toBe('reviewed')
+    db.close()
+  })
+
+  it('失败置状态不覆盖 generating claim（R0-F6 守卫）', async () => {
+    const db = makeDb()
+    const { novelId, chapterIds } = seedNovelWithChapters(db, 1)
+    generateChapterMock.mockRejectedValue(new Error('boom'))
+    // 模拟：生成失败落定前，该章已被新一轮生成抢占
+    db.prepare("UPDATE chapter SET status = 'generating', generation_token = 'new-claim' WHERE id = ?").run(chapterIds[0])
+
+    const progress = await runProductionPipeline(db, novelId, () => {})
+
+    expect(progress.failed).toBe(1)
+    const row = db.prepare('SELECT status FROM chapter WHERE id = ?').get(chapterIds[0]) as { status: string }
+    expect(row.status).toBe('generating')
     db.close()
   })
 
