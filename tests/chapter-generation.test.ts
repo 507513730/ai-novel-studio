@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
@@ -6,6 +6,13 @@ import { ConfigError } from '../server/src/services/llm'
 import { claimChapter, failClaimedChapter } from '../server/src/services/chapterGeneration/state'
 import type { ClaimedChapter } from '../server/src/services/chapterGeneration/types'
 import { persistGeneratedChapter } from '../server/src/services/chapterGeneration/persistence'
+import { setConstraints, type NovelConstraint } from '../server/src/services/constraintEngine'
+import { postProcessGeneratedContent } from '../server/src/services/chapterGeneration/postProcess'
+import { callLlmJson } from '../server/src/services/jsonSafe'
+
+vi.mock('../server/src/services/jsonSafe', () => ({ callLlmJson: vi.fn() }))
+
+const mockedCallLlmJson = vi.mocked(callLlmJson)
 
 // 重构计划 R1（spec §4.1）：锁定章节生成域的状态与持久化契约——
 // 原子抢占、ConfigError 恢复抢占前状态、短事务一致落库、空正文不建版本、守卫失配回滚。
@@ -163,6 +170,86 @@ describe('chapter generation state and persistence contracts', () => {
     )
     expect(readLatestVersion(db, chapterIds[0])).toBeUndefined()
     expect(readChapter(db, chapterIds[0])).toMatchObject({ content: '', status: 'generating' })
+    db.close()
+  })
+})
+
+describe('chapter generation post processing', () => {
+  beforeEach(() => {
+    mockedCallLlmJson.mockReset()
+  })
+
+  it('replaces the protagonist name and returns no degradation without anti-AI rules', async () => {
+    const db = makeDb()
+    const { novelId, chapterIds } = makeNovelWithChapters(db, 1)
+    const constraint: NovelConstraint = {
+      id: 'c-name',
+      text: '主角必须叫 Jing',
+      level: 'must',
+      enabled: true,
+      createdAt: '2026-08-25T00:00:00Z',
+      keyword: 'Jing',
+      replaceWith: 'Jing'
+    }
+    setConstraints(db, novelId, [constraint])
+    db.prepare('INSERT INTO character (novel_id, name, profile_json) VALUES (?, ?, ?)').run(
+      novelId,
+      '惊蛰',
+      JSON.stringify({ role: '主角' })
+    )
+
+    const result = await postProcessGeneratedContent(db, novelId, chapterIds[0], '惊蛰推开了门。')
+
+    expect(result).toEqual({ content: 'Jing推开了门。', degradedReasons: [] })
+    db.close()
+  })
+
+  it('keeps the original content and reports degradation when the rewrite is too short', async () => {
+    const db = makeDb()
+    const { novelId, chapterIds } = makeNovelWithChapters(db, 1)
+    db.prepare(
+      'INSERT INTO style_asset (novel_id, name, features_json, samples_json, anti_ai_rules_json) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      novelId,
+      '测试风格',
+      JSON.stringify([{ id: 'f1', name: '节奏', description: '短句', enabled: true, category: 'rhythm' }]),
+      '[]',
+      JSON.stringify(['套话'])
+    )
+    mockedCallLlmJson.mockResolvedValue({ content: '短文' })
+    const original = '套话套话套话套话套话，这是原文。'
+
+    const result = await postProcessGeneratedContent(db, novelId, chapterIds[0], original)
+
+    expect(result.content).toBe(original)
+    expect(result.degradedReasons).toContain('anti-ai rewrite rejected: output too short')
+    db.close()
+  })
+
+  it('records constraint violations against the generated chapter, not the latest chapter', async () => {
+    const db = makeDb()
+    const { novelId, chapterIds } = makeNovelWithChapters(db, 3)
+    const constraint: NovelConstraint = {
+      id: 'c-ban',
+      text: '全文禁止出现套话',
+      level: 'must',
+      enabled: true,
+      createdAt: '2026-08-29T00:00:00Z',
+      keyword: '套话'
+    }
+    setConstraints(db, novelId, [constraint])
+
+    const result = await postProcessGeneratedContent(db, novelId, chapterIds[0], '开头一句套话。')
+
+    expect(result.content).toBe('开头一句套话。')
+    expect(result.degradedReasons).toEqual([])
+    const debts = db.prepare('SELECT chapter_id, issue FROM quality_debt').all() as Array<{
+      chapter_id: number
+      issue: string
+    }>
+    expect(debts).toHaveLength(1)
+    expect(debts[0].chapter_id).toBe(chapterIds[0])
+    expect(debts[0].issue).toContain('c-ban')
     db.close()
   })
 })
