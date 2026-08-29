@@ -699,3 +699,14 @@
 - **域边界**：state.ts 抢占/失败恢复唯一入口；persistence.ts 落库唯一入口；postProcess.ts 禁写 chapter/chapter_version；orchestrator.ts 只编排；generate.ts 缩为 3 行兼容转发（待 R9 删除）。
 - **遗留**：solutionRunner 复制 claim SQL（R0-F5）与 production 无守卫置状态（R0-F6）→ R4.3；generation_token（R4.1）；R2（job 域）起未动。
 - **验收**：typecheck 0 err / lint 0 err（5 条既有警告）/ vitest 46 文件 267 用例（基线 257 + 新增 10）/ db-smoke 7 项 / 打包双产物验证；打包态与 e2e 在合并 main 前按批次门禁执行。
+
+### D112 · 2026-08-29 · R2 job 域隔离：claim token 与生命周期守卫（分支 codex/refactor-r0-r1）
+
+- **背景**：重构计划 R2——job 表此前无抢占身份，任何协程都能按 id 写运行态（迟到/watchdog 回收后的旧协程可覆盖新状态）；payload 解析散落 scheduler 内联。域文件：`services/jobs/{types,payload,lifecycle,repository}.ts`。
+- **决策（均为本地设计）**：
+  1. **claim token 身份**：迁移 21 增加 `job.claim_token TEXT`（向前兼容，默认 NULL）。`claimNextJob()` 每次 claim 颁发唯一 token（node:crypto randomUUID；node:sqlite 禁自定义函数，故 SELECT→markRunning 两步 + `status='queued'` 守卫兜底并发竞争）。所有运行态写入（进度/trace/收尾）以 `id + claim_token + status='running'` 为守卫——迟到协程 changes=0 被拒，取消/watchdog 终态不被覆盖（原 finishJob「先读后写」语义被原子守卫替代，且消除了读-写窗口）。
+  2. **payload 域边界一次 Zod 解析**：`parseJobPayload(type, raw)` 按类型给出强类型对象（novelId 为公共字段，modelOverride 穿过解析保留——换模型重试 P13 G1 语义不变）；损坏 JSON / 未知类型 / 字段不合规 → `JobPayloadError` 语义化失败，只失败该 job 不影响 scheduler 进程（v0.23.1 批次 A1 防御的域内化，`corrupted payload_json` / `unknown job type` 消息契约保持）。
+  3. **token 生命周期**：retry 重排队置 `claim_token=NULL`；重启恢复 `resetStaleRunning()` 重置 running→queued 并清空 token（原 startScheduler 内联 SQL 迁入 lifecycle）；取消端点收拢 `cancelActiveJob()`（queued|running→cancelled，终态 409 语义不变）。
+  4. **兼容策略**：`jobQueue.ts` 保留全部既有公共签名（enqueueDirectorJob/enqueueTypedJob/enqueueProductionJob/isJobCancelled/isJobAborted）转发 repository；`JobRecord` 改 camelCase（payloadJson/claimToken 等），原 scheduler 内部接口无外部消费者，零破坏。
+- **与 R4.1 的边界**：job claim token 与未来章节 generation_token 是不同身份、不同生命周期（R0 基线预扫描结论）——重试回收 job 不应使无关章节工作失效，二者禁止混用。
+- **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 49 文件 285 用例（+18：payload 7 / repository 6 / lifecycle 5，含 12 vs 123 查重回归、watchdog 后不虚报 done、迟到协程拒绝）/ db-smoke 7 项（schema version=21）。

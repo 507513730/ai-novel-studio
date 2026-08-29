@@ -59,10 +59,14 @@ chapter.content 恒等于最新 chapter_version.content（降级原因经 Genera
 ### 任务调度（执行面隔离）
 
 ```
-Web API → INSERT job（queued）→ Scheduler 原子抢占(running)
-  → runDirectorPipeline / runProductionPipeline
+Web API → INSERT job（queued，json_extract novelId 精确查重）→ Scheduler 抢占
+  → jobs/repository.claimNextJob：原子置 running + 颁发唯一 claim_token
+  → runDirectorPipeline / runProductionPipeline（进度经 updateClaimedJob：id+token+running 守卫）
+  → 收尾 finishClaimedJob（done|failed；取消/watchdog 终态不被迟到协程覆盖）
   → 进度回写 result_json / 状态 done|failed
-失败恢复：retry(可换模型 modelOverride) / cancel / 从断点继续(resume)
+失败恢复：retry(可换模型 modelOverride，重排队清 claim_token) / cancel(lifecycle.cancelActiveJob)
+          / 从断点继续(resume)；重启恢复 resetStaleRunning（running→queued + 清 token）
+payload：jobs/payload.parseJobPayload 域边界一次 Zod 解析（强类型 / 损坏→JobPayloadError 只失败该 job）
 ```
 
 ### 创作方案运行时（P21，创造工坊）

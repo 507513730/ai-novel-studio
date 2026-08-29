@@ -97,11 +97,12 @@
 electron/           主进程：main.ts（窗口/菜单/utilityProcess/safeStorage 加密/updater/shutdown）
 server/src/         服务进程（Node 隔离）：routes/（~17 路由）services/（业务）db/（迁移+种子）prompts/
   services 关键文件：chapterGeneration/（章节生成域：state/persistence/postProcess/orchestrator——
-                    generate.ts 已缩为兼容转发，公共签名不变）/ context（前缀冻结） / llm（路由+降级+记账）
-                    / planner（导演 prompt 统一） / ledger（状态账本） / jobQueue / scheduler / director
-                    / production / solutionRunner / debtFix / tripleReview / retrieval（TF-IDF）
-                    / styleEngine / smartContext / constraintEngine / settingBrief / webSearch
-                    / currency / keyCrypto / security
+                    generate.ts 已缩为兼容转发，公共签名不变）/ jobs/（job 域：repository/lifecycle/
+                    payload——jobQueue.ts 兼容转发；claim token 守卫见 D112）/ context（前缀冻结）
+                    / llm（路由+降级+记账） / planner（导演 prompt 统一） / ledger（状态账本）
+                    / scheduler / director / production / solutionRunner / debtFix / tripleReview
+                    / retrieval（TF-IDF） / styleEngine / smartContext / constraintEngine
+                    / settingBrief / webSearch / currency / keyCrypto / security
 client/src/         React 19：pages/（~20 页）workspace/（工作台 8 面板）components/ editor/ utils/
 shared/src/         前后端共享类型（@shared/types.ts，camelCase 契约——新增响应必须补类型，AGENTS #20）
 tests/              vitest 单测（vXXXX.test.ts 按版本命名；143 基线）

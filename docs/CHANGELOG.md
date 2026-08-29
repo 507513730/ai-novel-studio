@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### 重构：R2 job 域隔离（2026-08-29，分支 codex/refactor-r0-r1，D112）
+
+- job 抢占/收尾迁入 `services/jobs/` 域（repository/lifecycle/payload/types）：`claimNextJob()` 颁发唯一 claim token（迁移 21 新增 `job.claim_token`），所有运行态写入以 `id+token+status='running'` 守卫——迟到协程与取消/watchdog 终态覆盖被结构性拒绝
+- payload 域边界一次 Zod 强类型解析（`parseJobPayload`）：损坏 JSON/未知类型/字段不合规 → 语义化失败只影响该 job，不影响 scheduler 进程；`modelOverride` 穿过解析保留（换模型重试语义不变）
+- `jobQueue.ts` 缩为兼容转发（公共签名不变）；重试重排队/重启恢复清空 claim token；取消端点收拢 `cancelActiveJob`
+- 测试：新增 job 域契约 18 例（全量 49 文件 285 用例）；db-smoke schema version=21；REST/数据兼容
+
 ### 重构：R0 基线 + R1 章节生成域重放（2026-08-29，分支 codex/refactor-r0-r1，D111）
 
 - 章节生成从 `generate.ts`（245 行单文件）拆为 `chapterGeneration/` 域：`state.ts`（抢占/失败恢复）、`persistence.ts`（正文/版本/字数/状态短事务）、`postProcess.ts`（主角名替换/约束登记/反 AI 重写）、`orchestrator.ts`（编排）；`generate.ts` 缩为兼容转发，公共签名与全部调用方零改动
