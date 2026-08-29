@@ -243,7 +243,7 @@ async function reviewFixBackfill(
   progress.currentAction = '状态回灌'
   onProgress(progress)
   try {
-    backfillChapterState(db, novelId, chapterId, finalContent)
+    await backfillChapterState(db, novelId, chapterId, finalContent)
   } catch (err) {
     // v0.8.0（审查 #14）：回灌失败不再静默——不影响主流程但必须可见
     // v0.24.3：ConfigError 例外——配置级错误上抛熔断整批（否则下一章生成才失败，多空转一章）
