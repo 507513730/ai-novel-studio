@@ -127,6 +127,22 @@ export function enqueueProductionJob(
   return { jobId: Number(result.lastInsertRowid) }
 }
 
+// v0.10.0（批B/I2）/ R5：质量债修复入队（automation 路由与 production 收尾共用，消除两处复制 SQL）
+export function enqueueDebtFixJob(db: DatabaseSync, novelId: number): EnqueueResult | { conflict: true } {
+  const result = db
+    .prepare(
+      `INSERT INTO job (type, status, progress, payload_json)
+       SELECT 'debt-fix', 'queued', 0, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM job WHERE type = 'debt-fix' AND status IN ('queued','running')
+           AND json_extract(payload_json, '$.novelId') = ?
+       )`
+    )
+    .run(JSON.stringify({ novelId }), novelId)
+  if (Number(result.changes) === 0) return { conflict: true }
+  return { jobId: Number(result.lastInsertRowid) }
+}
+
 export function enqueueTypedJob(
   db: DatabaseSync,
   type: 'refine-range' | 'solution-chapter',

@@ -99,7 +99,7 @@ Retriever 接口：TfidfRetriever（默认，零依赖）/ EmbeddingRetriever（
 ```
 client/src/      React：pages/（33 页含 settings/ chapter/ 子目录）workspace/（8 面板）
                  components/ editor/ utils/ hooks/
-server/src/      服务：routes/（15 个路由文件，~17 路由面）services/（chapterGeneration/（章节生成域：
+server/src/      服务：routes/（chapters/ 七模块聚合 + 14 单域路由文件）services/（含 shared/errors 统一错误模型）services/（chapterGeneration/（章节生成域：
                  state/persistence/postProcess/orchestrator）director/（导演域：stages/checkpoint/
                  artifacts/executors/pipeline）production/（生产域：chapterPolicy/progress/pipeline）
                  jobs/（job 域：repository/lifecycle/payload/executors/scheduler/progress）

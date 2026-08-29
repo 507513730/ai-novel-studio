@@ -730,3 +730,11 @@
 - **R4.3（本地设计）**：production 拆为 `production/{chapterPolicy,progress,pipeline}.ts`。chapterPolicy 统一批次边界决策：产物驱动选章（`content=''` 才进批次——kill 恢复以正文产物为准，不因旧 status 重调模型）、范围授权校验、生成不达标（<200 重试一次）、ConfigError 整批熔断。**solutionRunner 复制的 claim/落库/复位 SQL 收拢进章节生成域（R0-F5 关闭）**：claimChapter token 身份 + persistGeneratedChapter（新增 note/title 变体：版本注释 'AI 生产（方案流水线）' 与标题 CASE-WHEN 覆盖）+ failClaimedChapter（ConfigError 恢复抢占前状态，对齐 v0.24.3 不误标原则）。production.ts 缩为兼容转发。
 - **行为保真**：runDirectorPipeline/runProductionPipeline 公共签名不变；v080 并发抢占拒绝文案、v0220 覆盖语义、config-circuit 熔断契约全部保持；P20 M3 幂等去重、P13 G5 节拍板门禁、P14 B4 范围授权规则逐字保真。
 - **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 55 文件 308 用例（R4.2 +7：artifacts 阈值 4 + 故障注入 3[产物落库后中断恢复跳过模型调用、同阶段 4 签名重规划超限、auto 收尾入册]；R4.3 +8：策略判定 4 + 幂等故障注入 4[kill 恢复跳过产物、两轮零重复调用、失败继续、熔断未尝试章节保持 planned]）/ db-smoke 7 项。
+
+### D116 · 2026-08-29 · R5 统一错误模型 + 章节执行路由拆分（分支 codex/refactor-r0-r1）
+
+- **统一错误模型（本地设计）**：`services/shared/errors.ts` 六类——ConfigurationError / CancellationError / TransientProviderError / OutputValidationError / PersistenceError / InvariantError。**ConfigError 改为继承 ConfigurationError**（instanceof 双向成立、name 保留 'ConfigError'、cause 支持，公共行为不变）。apiErrorMiddleware 语义化映射：ZodError→400（既有）/ ConfigurationError→**400 消息透传**（配置类消息本身即用户可操作指引，此前被 'internal error' 吞掉）/ CancellationError→**499**（取消语义不伪装成 500）/ TransientProviderError→503 / OutputValidationError→502 / SQLite 约束→409、chapter not found→404、其余→500（既有保持）。
+- **章节执行路由拆分**：924 行 `routes/chapters.ts` → `routes/chapters/`（index 聚合 + create/generate/review/backfill/versions/search/aiAction 七模块）。路径/方法/状态码/camelCase 响应逐字保持，由 api-contracts 契约测试锁定（13 例：创建/待确认/确认/版本五端点/检索/上下文预览/记忆面修正/未配置 key 时审核 400 语义）。
+- **路由业务 SQL 收拢**：debt-fix 入队 SQL（automation 路由 + production 收尾两处复制）收拢 `jobs/repository.enqueueDebtFixJob`（AGENTS #26 json_extract 精确查重保留）。
+- **其余路由审查结论（按计划"只拆职责过载部分"标准）**：novels(684)/volumes(544)/solutions(516)/settings(514)/agents(453)——单域内聚 CRUD、无长链路循环（重型逻辑已在 services/planner/scheduler），保持不动；automation(392) 已在 R2/R5 完成入队收拢。volumes.ts 内的章节详情/保存端点与卷 CRUD 内聚，维持现状。
+- **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 57 文件 321 用例（+13：错误映射 6 + 路由契约 7）/ db-smoke 7 项 / 打包双产物时间戳更新。

@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### 重构：R5 统一错误模型 + 章节执行路由拆分（2026-08-29，分支 codex/refactor-r0-r1，D116）
+
+- 新增 `services/shared/errors.ts` 六类统一错误；`ConfigError` 改为继承 `ConfigurationError`（instanceof 兼容）
+- 错误中间件语义化映射：配置错误→400 消息透传（不再伪装 500）、取消→499、暂时性供应商→503、输出校验→502；既有 ZodError→400 / 约束→409 / 其余→500 保持
+- 924 行 `routes/chapters.ts` 拆为 `routes/chapters/` 七模块聚合（创建/生成/审核修复校对/回灌与记忆面/版本/检索与上下文预览/AI 编辑），路径与方法不变（契约测试锁定）
+- debt-fix 入队 SQL 收拢 `jobs/repository.enqueueDebtFixJob`；其余路由审查后保持（单域内聚）
+- 测试 +13（全量 57 文件 321 用例）
+
 ### 重构：R4.2 导演域 + R4.3 整本生产域拆分（2026-08-29，分支 codex/refactor-r0-r1，D115）
 
 - 导演 826 行拆为 `director/{stages,checkpoint,artifacts,pipeline}` + `executors/`（9 阶段执行器注册表）：阶段元数据与产物判定各归唯一事实源，checkpoint 不再是完成依据；恢复跳过已完成模型调用（故障注入测试锁定）

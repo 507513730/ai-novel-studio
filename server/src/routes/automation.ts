@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { directorProgress } from '../services/director'
 import { hubChat } from '../services/hub'
 import { enqueueDirectorJob, enqueueProductionJob } from '../services/jobQueue'
+import { enqueueDebtFixJob } from '../services/jobs/repository'
 import { cancelActiveJob } from '../services/jobs/lifecycle'
 
 /** v0.17.0（LOW）：安全 JSON 解析（损坏数据兜底） */
@@ -279,21 +280,13 @@ export function createAutomationRouter(db: DatabaseSync): Router {
   router.post('/:novelId/debts/fix', (req, res, next) => {
     try {
       const novelId = Number(req.params.novelId)
-      const result = db
-        .prepare(
-          `INSERT INTO job (type, status, progress, payload_json)
-           SELECT 'debt-fix', 'queued', 0, ?
-           WHERE NOT EXISTS (
-             SELECT 1 FROM job WHERE type = 'debt-fix' AND status IN ('queued','running')
-               AND json_extract(payload_json, '$.novelId') = ?
-           )`
-        )
-        .run(JSON.stringify({ novelId }), novelId)
-      if (Number(result.changes) === 0) {
+      // R5：入队收拢 jobs/repository（与 production 收尾共用，消除复制 SQL）
+      const result = enqueueDebtFixJob(db, novelId)
+      if ('conflict' in result) {
         res.status(409).json({ error: '自动修复任务已在运行中' })
         return
       }
-      res.status(201).json({ jobId: Number(result.lastInsertRowid) })
+      res.status(201).json({ jobId: result.jobId })
     } catch (err) {
       next(err)
     }

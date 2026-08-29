@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { DatabaseSync } from 'node:sqlite'
+import { ConfigurationError } from './shared/errors'
 import type { TaskType } from '../db/seed'
 import { decryptSecret } from './keyCrypto'
 import { recordUsage } from './usage'
@@ -7,7 +8,8 @@ import { recordUsage } from './usage'
 // v0.24.3（写书实战纠错）：配置级错误（确定性失败：路由缺失 / key 未配置 / key 解密失败）。
 // 历史bug：生产管线遇到解密失败不熔断，18 章被逐个误标 failed 而 job 仍 done（任务 28/29）。
 // 调用方（generate/production）据 instanceof 熔断整批或复位章节状态，禁止逐章空转。
-export class ConfigError extends Error {
+// R5：统一错误模型兼容映射——ConfigError 即 ConfigurationError（instanceof 双向成立，公共行为不变）
+export class ConfigError extends ConfigurationError {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options)
     this.name = 'ConfigError'

@@ -9,6 +9,7 @@ import { ConfigError } from '../llm'
 import { buildChapterReviewContext, buildBackfillContext, buildFixContext, buildPatchContext, applyPatches } from '../context'
 import { writeCharacterStates } from '../ledger'
 import { isJobAborted } from '../jobQueue'
+import { enqueueDebtFixJob } from '../jobs/repository'
 import { runProductionChapter } from '../solutionRunner'
 import { parseSolutionSteps } from '../solutionAssets'
 import { getAutoFixEnabled } from '../appSettings'
@@ -341,17 +342,9 @@ function enqueueAutoDebtFix(db: DatabaseSync, novelId: number, jobId?: number): 
         )
         .get(novelId) as { c: number }
       if (Number(pending.c) > 0) {
-        const queued = db
-          .prepare(
-            `INSERT INTO job (type, status, progress, payload_json)
-             SELECT 'debt-fix', 'queued', 0, ?
-             WHERE NOT EXISTS (
-               SELECT 1 FROM job WHERE type = 'debt-fix' AND status IN ('queued','running')
-                 AND json_extract(payload_json, '$.novelId') = ?
-             )`
-          )
-          .run(JSON.stringify({ novelId }), novelId)
-        if (Number(queued.changes) > 0) {
+        // R5：入队收拢 jobs/repository（与 automation 路由共用）
+        const queued = enqueueDebtFixJob(db, novelId)
+        if ('jobId' in queued) {
           console.log(`[production] 自动入队质量债修复（${pending.c} 章）`)
         }
       }
