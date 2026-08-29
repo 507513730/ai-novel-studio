@@ -778,3 +778,13 @@
 - **观感细节**：首页书卡 JS hover → CSS（.hover-lift）；进度条三处内联 → .progress；按钮 emoji 清零（🔥✍️📖🛒📚⚠️ → 纯文案/lucide TriangleAlert）；「AI 起草 body_md」术语泄漏 →「AI 起草正文（Body）」；monospace → var(--font-mono)；AgentEditor 弹窗对齐共享遮罩/z token + Esc 关闭 + dialog 语义；10px/9px 字号 10 处归 --fs-11；侧栏品牌行删除（titlebar 单点承载 + 首页 h1 移除，三重重复→单点）；EditorArea 手写 SVG 图钉 → lucide Pin；任务中心长错误文案 ellipsis 截断 + title 全文。
 - **复核修正**：ui-review.md 初版「7 处 window.confirm 未迁移」结论有误——全仓实际调用已清零（P3-6 批完成），仅余注释；报告已更正。
 - **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 62 文件 367 用例（chapter-panels 断言随 emoji 清理同步）/ 走查回归截图（首页双高亮消失、工具栏横排、导演页按钮组横排，release/ui-review/20-22）。
+
+### D122 · 2026-08-29 · 批次 B：UI 观感升级收官（1.0.0）
+
+- **章节执行页拆分（AGENTS #38 硬约束先行）**：1150 行/28 useState → 装配层 398 行/4 useState。新增 6 hooks：useChapterActions（审核/校对/修复/方案编排）、useChapterArtifacts（待确认/记忆/版本/上下文/回灌产物 + versionActions + closeAllPanels）、useSuggestion（续写建议 abort/seq）、useActionFeedback（busy/提示/错误原语——解「session 需要 notify、actions 需要 content」循环依赖的公共底层）、useChapterShortcuts（快捷键/Cmd+J/Tab/beforeunload/Esc/失焦与定时保存 + bindActions 闭包注入）、useChapterFileOps（导出/标题/引导句固定约束）、useChapterList（列表查询/派生统计/初始选中）；右栏拆 chapter/ExecutionPanel.tsx。行为逐字保持（confirmStates 随回灌产物移入 artifacts 以便关闭待确认浮层；backfillDoneRef/快照信号 ref 仍由页面持有）。
+- **右栏执行面板重排（D27「每屏一个主行动」+ Ulysses 渐进披露）**：「当前推荐」主行动卡 accent 边强调；质量与连续性（AI 审核/本地校对/修复/状态回灌）双列网格组卡；方案流水线（select + 跑方案/以方案生产）；查看与记录（待确认区/记忆面/版本历史/存快照/写作上下文）双列组卡；index.css 新增 .action-grid。
+- **首页书架**：封面色块 50×64 + 内描边、书名 16px、进度条与百分比同行右对齐、新增「最近打开」相对时间（relativeTime 本地 util，书架扫读上下文）。
+- **HubChat**：消息三态（用户/助手/系统）——错误以 danger 系统消息条呈现（不再「⚠️」拼进助手正文）；受限 markdown 渲染（粗体/行内码/代码块/列表/标题；纯 React 元素构造无 dangerouslySetInnerHTML，零新依赖）；空状态 EmptyState 化；发送按钮 lucide 图标。
+- **工作台引导收敛（Ulysses 渐进披露）**：GuideStrip 默认收起为一行进度（左步骤导航为常驻层级），消除「步骤导航/横排卡片/NextStepCard」三层同屏冗余；点击可展开。
+- **回归证据**：release/ui-review/23-25（执行面板分组卡、书架新卡、工作台单行引导条）；typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 62 文件全过。
+- **发版**：1.0.0（MAJOR，稳定承诺）——判据见 versioning §1.1 二次修订（D120）；本地 dist 双产物 + tag v1.0.0 + GitHub Release。

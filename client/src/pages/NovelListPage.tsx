@@ -11,6 +11,20 @@ import { EmptyState } from '../components/EmptyState'
 // v0.23.1（批次 B6）：主角名提取统一 utils（此前双实现且正则漂移）
 import { extractProtagonistName } from '../utils/protagonist'
 
+// 批次 B：相对时间（书卡「最近打开」展示——书架扫读时的关键上下文）
+function relativeTime(value: string): string {
+  const t = new Date(value).getTime()
+  if (Number.isNaN(t)) return ''
+  const min = Math.floor((Date.now() - t) / 60_000)
+  if (min < 1) return '刚刚打开'
+  if (min < 60) return `${min} 分钟前打开`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h} 小时前打开`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d} 天前打开`
+  return `${new Date(t).toLocaleDateString()} 打开`
+}
+
 export function NovelListPage(): React.JSX.Element {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -172,41 +186,46 @@ export function NovelListPage(): React.JSX.Element {
             <div
               key={n.id}
               className="panel hoverable hover-lift"
-              style={{ background: 'var(--bg-card)', cursor: 'pointer', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}
+              style={{ background: 'var(--bg-card)', cursor: 'pointer', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
               onClick={() => navigate(`/novels/${n.id}`)}
             >
               <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
-                {/* 封面色块（流派占位） */}
+                {/* 封面色块（流派占位；批次 B：加大 + 内描边提升质感） */}
                 <div
                   style={{
-                    width: 46,
-                    height: 58,
+                    width: 50,
+                    height: 64,
                     borderRadius: 8,
                     flexShrink: 0,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: 700,
                     color: 'var(--bg)',
-                    background: `linear-gradient(135deg, var(--accent-bright), var(--accent))`
+                    background: 'linear-gradient(150deg, var(--accent-bright), var(--accent))',
+                    boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.14)'
                   }}
                 >
                   {(n.title || '未').slice(0, 1)}
                 </div>
-                <div className="flex-1">
-                  <strong style={{ fontSize: 15, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div className="flex-1" style={{ minWidth: 0 }}>
+                  <strong style={{ fontSize: 'var(--fs-16)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {n.title || '未命名小说'}
                   </strong>
                   <div className="muted" style={{ fontSize: 12, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {n.inspiration.length > 60 ? n.inspiration.slice(0, 60) + '…' : n.inspiration}
                   </div>
-                  {/* 进度条 */}
-                  <div className="progress" style={{ marginTop: 8 }}>
-                    <div style={{ width: `${pct}%` }} />
+                  {/* 进度条 + 百分比（批次 B：同行右对齐，数字层级提升） */}
+                  <div className="row" style={{ marginTop: 10, gap: 8 }}>
+                    <div className="progress flex-1">
+                      <div style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="muted" style={{ fontSize: 'var(--fs-11)', flexShrink: 0 }}>{pct}%</span>
                   </div>
-                  <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
-                    章节 {n.chaptersDone}/{n.chaptersTotal} · {pct}%
+                  <div className="muted" style={{ fontSize: 'var(--fs-11)', marginTop: 4 }}>
+                    章节 {n.chaptersDone}/{n.chaptersTotal}
+                    {n.lastOpenedAt ? ` · ${relativeTime(n.lastOpenedAt)}` : ''}
                   </div>
                 </div>
               </div>

@@ -92,18 +92,20 @@ function GuideStrip({
   statusOf: (key: Tab) => StepStatus
   onPick: (key: Tab) => void
 }): React.JSX.Element {
+  // v0.26.0（批次 B，审查 P2「三套引导冗余」）：默认收起——左侧步骤导航已是常驻层级，
+  // 横排卡片仅按需展开查看，避免与步骤导航/NextStepCard 三层同屏
   const allDone = steps.every((s) => statusOf(s.key) === 'done')
-  const [collapsed, setCollapsed] = useState<boolean>(allDone)
+  const [collapsed, setCollapsed] = useState<boolean>(true)
   if (collapsed) {
     const doneCount = steps.filter((s) => statusOf(s.key) === 'done').length
     return (
       <button
         className="sm"
-        style={{ marginBottom: 16, color: 'var(--ok)', borderColor: 'var(--ok)' }}
+        style={{ marginBottom: 16, color: allDone ? 'var(--ok)' : 'var(--text-dim)', borderColor: allDone ? 'var(--ok)' : 'var(--border)' }}
         onClick={() => setCollapsed(false)}
         title="点击展开流程卡片"
       >
-        ✓ 本书创作流程已完成 {doneCount}/{steps.length} 步 · 点击展开
+        {allDone ? '✓ ' : ''}本书创作流程 {doneCount}/{steps.length} 步 · 点击展开
       </button>
     )
   }
