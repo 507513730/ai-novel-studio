@@ -745,3 +745,11 @@
 - **R6.2 LLM（本地设计）**：388 行 llm.ts 拆为 `llm/{types,errors,routes,candidates,request,caller}.ts`，llm.ts 缩为兼容转发（vi.mock('./llm') 桩仍生效）。**契约测试先行**（tests/llm-contract.test.ts 14 例，mock OpenAI SDK + 明文 keyCrypto）：buildBody 的 DeepSeek 参数语义（thinking off 显式 disabled / thinking 开温度无效 / jsonMode 仅非 thinking / reasoning_content 回传 / 不强制 tool_choice）、候选链（override 优先→主模型 degraded→fallback degraded）、成功记账 usage_log、500 退避耗尽换 fallback（degraded）、abort 立即上抛、配置错误不泄露 Key。
 - **R6.3 DAO 审查结论（按计划"只收拢两处以上重复或需集中事务"标准）**：chapter（claim/persist 唯一入口，R1/R4.1）、job（repository，R2）、director checkpoint（checkpoint.ts，R4.2）已各有唯一事实源，prompt asset 本就模块化——**无需新增薄 repository**；仅 CJK 字数口径三处重复（章节落库/版本列表/版本恢复）收拢 `services/shared/text.countCJKChars`。
 - **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 59 文件 341 用例（context 契约 6 + llm 契约 14）/ db-smoke 7 项 / 打包双产物时间戳更新。
+
+### D118 · 2026-08-29 · R8 Electron 主进程模块化 + 打包态验收修复（分支 codex/refactor-r0-r1）
+
+- **模块化（本地设计）**：659 行 main.ts 拆为 electron/{state,window,serverProcess,shutdown,ipc,theme,updater}.ts，main.ts 缩为 46 行纯装配（单实例锁 → whenReady 编排 → before-quit 优雅退出）。state.ts 集中 mainWindow/serverProcess/serverUrl/SERVER_TOKEN 跨模块可变态；ipc.ts 集中全部 IPC 通道与 trusted sender 校验（isTrustedSender/assertTrustedSender/trusted 三态导出供测试）；export-backup 内联复制的 checkpoint 协议代码收拢 shutdown.requestCheckpoint。
+- **安全契约测试**（tests/electron-security-contract.test.ts，9 例，mock electron 模块）：trusted sender 矩阵（主窗口未就绪拒绝/他窗拒绝/非顶层 frame 拒绝）、get-server-token 对不可信 frame 返回空（token 不外泄）、wipe-data 不可信直接拒绝（不触达文件系统）、外链白名单（http/https only）、导航白名单（打包 file:// vs dev URL）、webPreferences 三件套源级断言（sandbox/contextIsolation/nodeIntegration）、safeStorage fail-closed 文案、随机端口契约（打包 0/dev 3000）。
+- **复核结论（R8 清单）**：f404bdb 全请求 X-App-Token + sender 校验在位；52fca79 升级前 db 快照在位（migrate.ts snapshotBeforeMigration，迁移批次外不触碰用户库）；00dcbc1 三平台构建矩阵在位（electron-builder 配置未动，Windows NSIS+portable 本批验证）。
+- **打包态验收修复（两个既有遗留，非本重构引入）**：其一，v072-pack-verify 就绪探测缺 X-App-Token——v0.25.0（f404bdb）全请求强制 token 后 403 循环误报「server 未就绪」；其二，spawn 环境缺 AI_NOVEL_ALLOW_PLAINTEXT=1——v0.17.0（M2）fail-closed 后 import-opencode 存 key 被 500（release.mjs 一直带此 env，独立运行未带）。修复后打包态等价验收全部通过（真实网关 SSE 生成 483 字 + 导出 TXT + 鉴权矩阵）。
+- **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 61 文件 360 用例（+9 安全契约）/ 双产物 16:34 / pack-verify PASS。

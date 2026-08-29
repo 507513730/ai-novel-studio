@@ -15,13 +15,15 @@ const UDATA = process.env.UDATA ?? join(ROOT, 'release', '.verify-tmp')
 rmSync(UDATA, { recursive: true, force: true })
 mkdirSync(UDATA, { recursive: true })
 const server = spawn(process.execPath, [join(ROOT, 'out', 'main', 'server.js')], {
-  env: { ...process.env, AI_NOVEL_USER_DATA: UDATA, AI_NOVEL_PORT: PORT, SERVER_TOKEN: TOKEN },
+  // R8 修复：非 utilityProcess 直跑需明文直通（与 release.mjs 验收一致），否则 import-opencode 存 key 被 fail-closed 拒绝
+  env: { ...process.env, AI_NOVEL_USER_DATA: UDATA, AI_NOVEL_PORT: PORT, SERVER_TOKEN: TOKEN, AI_NOVEL_ALLOW_PLAINTEXT: '1' },
   stdio: 'ignore'
 })
 let ready = false
+// R8 修复：v0.25.0 起全请求强制 X-App-Token——就绪探测必须带 token（此前 403 循环至超时误报"未就绪"）
 for (let i = 0; i < 30; i++) {
   try {
-    const r = await fetch(`${BASE}/health`)
+    const r = await fetch(`${BASE}/health`, { headers: { Origin: 'null', 'X-App-Token': TOKEN } })
     if (r.ok) { ready = true; break }
   } catch { /* not ready yet */ }
   await new Promise((r) => setTimeout(r, 500))

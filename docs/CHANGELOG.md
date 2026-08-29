@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 重构：R8 Electron 主进程模块化（2026-08-29，分支 codex/refactor-r0-r1，D118）
+
+- 659 行 electron/main.ts 缩为 46 行纯装配，拆出 state/window/serverProcess/shutdown/ipc/theme/updater 七模块；export-backup 复制的 checkpoint 协议收拢 shutdown.requestCheckpoint
+- 新增安全契约测试 9 例（mock electron）：trusted sender 矩阵、get-server-token 不外泄、wipe-data 不可信拒绝、外链/导航白名单、webPreferences 三件套、safeStorage fail-closed、随机端口
+- 修复打包态验收脚本两个既有遗留：v072-pack-verify 就绪探测缺 X-App-Token（v0.25.0 起误报「server 未就绪」）、spawn 缺 AI_NOVEL_ALLOW_PLAINTEXT（v0.17.0 起 import-opencode 500）——修复后打包态等价验收通过（真实 SSE 生成+导出+鉴权）
+
 ### 重构：R6 Context/LLM 域拆分（2026-08-29，分支 codex/refactor-r0-r1，D117）
 
 - 771 行 `context.ts` 拆为 `context/{types,hash,budget,frozen,dynamic}`：冻结前缀顺序/hash 版本化/预算裁剪优先级/RAG 直塞语义由特征测试锁定（拆分前后行为一致）
