@@ -738,3 +738,10 @@
 - **路由业务 SQL 收拢**：debt-fix 入队 SQL（automation 路由 + production 收尾两处复制）收拢 `jobs/repository.enqueueDebtFixJob`（AGENTS #26 json_extract 精确查重保留）。
 - **其余路由审查结论（按计划"只拆职责过载部分"标准）**：novels(684)/volumes(544)/solutions(516)/settings(514)/agents(453)——单域内聚 CRUD、无长链路循环（重型逻辑已在 services/planner/scheduler），保持不动；automation(392) 已在 R2/R5 完成入队收拢。volumes.ts 内的章节详情/保存端点与卷 CRUD 内聚，维持现状。
 - **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 57 文件 321 用例（+13：错误映射 6 + 路由契约 7）/ db-smoke 7 项 / 打包双产物时间戳更新。
+
+### D117 · 2026-08-29 · R6 Context/LLM 域拆分 + DAO 收拢审查（分支 codex/refactor-r0-r1）
+
+- **R6.1 Context（本地设计）**：771 行 context.ts 拆为 `context/{types,hash,budget,frozen,dynamic}.ts`，context.ts 缩为兼容转发。**特征测试先行**（tests/context-contract.test.ts 6 例锁定拆分前现状）：冻结前缀顺序（系统提示→合约→世界观→角色账本→任务单→前文回顾，尾部指令固定）、frozen hash 版本化（世界观变化即失效）、预算裁剪优先级（可变区先裁前文回顾保任务单；冻结区先裁角色保合约，合约不可整裁）、RAG/直塞语义（direct 资料进冻结区【外部资料】且被检索排除防双份）。
+- **R6.2 LLM（本地设计）**：388 行 llm.ts 拆为 `llm/{types,errors,routes,candidates,request,caller}.ts`，llm.ts 缩为兼容转发（vi.mock('./llm') 桩仍生效）。**契约测试先行**（tests/llm-contract.test.ts 14 例，mock OpenAI SDK + 明文 keyCrypto）：buildBody 的 DeepSeek 参数语义（thinking off 显式 disabled / thinking 开温度无效 / jsonMode 仅非 thinking / reasoning_content 回传 / 不强制 tool_choice）、候选链（override 优先→主模型 degraded→fallback degraded）、成功记账 usage_log、500 退避耗尽换 fallback（degraded）、abort 立即上抛、配置错误不泄露 Key。
+- **R6.3 DAO 审查结论（按计划"只收拢两处以上重复或需集中事务"标准）**：chapter（claim/persist 唯一入口，R1/R4.1）、job（repository，R2）、director checkpoint（checkpoint.ts，R4.2）已各有唯一事实源，prompt asset 本就模块化——**无需新增薄 repository**；仅 CJK 字数口径三处重复（章节落库/版本列表/版本恢复）收拢 `services/shared/text.countCJKChars`。
+- **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 59 文件 341 用例（context 契约 6 + llm 契约 14）/ db-smoke 7 项 / 打包双产物时间戳更新。

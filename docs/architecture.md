@@ -103,7 +103,9 @@ server/src/      服务：routes/（chapters/ 七模块聚合 + 14 单域路由�
                  state/persistence/postProcess/orchestrator）director/（导演域：stages/checkpoint/
                  artifacts/executors/pipeline）production/（生产域：chapterPolicy/progress/pipeline）
                  jobs/（job 域：repository/lifecycle/payload/executors/scheduler/progress）
-                 generate/scheduler/production/director(兼容转发)/context/llm/planner/ledger/
+                 context/（上下文域：types/hash/budget/frozen/dynamic——context.ts 兼容转发）
+                 llm/（LLM 域：types/errors/routes/candidates/request/caller——llm.ts 兼容转发）
+                 generate/scheduler/production/director(兼容转发)/planner/ledger/
                  retrieval…）db/ prompts/
 electron/        主进程：窗口/菜单/安全/utilityProcess
 shared/          前后端共享类型（@shared/types）

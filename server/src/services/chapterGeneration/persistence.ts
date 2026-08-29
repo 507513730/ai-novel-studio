@@ -4,11 +4,9 @@
 // 空正文不建版本；任何失败整体回滚。
 // note/title 变体（R4.3）：方案流水线产出的版本注释与标题覆盖也经此唯一入口落库。
 import { DatabaseSync } from 'node:sqlite'
+import { countCJKChars } from '../shared/text'
 import type { ClaimedChapter, PersistedGeneration } from './types'
 
-function countChineseChars(content: string): number {
-  return (content.match(/[\u4e00-\u9fff]/g) ?? []).length
-}
 
 export function persistGeneratedChapter(
   db: DatabaseSync,
@@ -16,7 +14,7 @@ export function persistGeneratedChapter(
   generation: PersistedGeneration
 ): { wordCount: number } {
   const content = generation.content
-  const wordCount = countChineseChars(content)
+  const wordCount = countCJKChars(content)
   const GUARD = "id=? AND novel_id=? AND generation_token=? AND status='generating'"
   const guardParams = [claim.id, claim.novelId, claim.generationToken] as const
   const note = generation.note ?? (generation.aborted ? 'AI 生成（中止）' : 'AI 生成')

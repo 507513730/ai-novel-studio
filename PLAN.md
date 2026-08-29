@@ -44,7 +44,7 @@ AI 导演式长篇小说生产系统的桌面版（Electron）。借鉴两个参
 ## 2. 已知遗留与 backlog（按优先级）
 
 > 全仓内部兼容重构的剩余工作、依赖顺序、逐批文件和验收门禁，统一见 [全仓库兼容重构剩余工作实施计划](docs/superpowers/plans/2026-08-29-full-repository-refactor-remaining-work.md)。该计划与下方产品功能 backlog 分开管理。
-> **进度（2026-08-29）**：R0 基线 + R1 章节生成域重放 + R2 job 域隔离已合并 main（决策 D111/D112）；R3-R5 已完成并合并 main（D113-D115：scheduler/导演/生产域；D116：统一错误模型 + 章节执行路由拆分）；下一批 R6 Context/LLM/DAO 边界；基线文档见 `docs/superpowers/audits/2026-08-29-refactor-baseline.md`。
+> **进度（2026-08-29）**：R0 基线 + R1 章节生成域重放 + R2 job 域隔离已合并 main（决策 D111/D112）；R3-R5 已完成并合并 main（D113-D115：scheduler/导演/生产域；D116：统一错误模型 + 章节执行路由拆分）；R6 Context/LLM/DAO 边界已完成（D117）；下一批 R7 客户端热点拆分复核；基线文档见 `docs/superpowers/audits/2026-08-29-refactor-baseline.md`。
 
 | 项 | 状态 | 说明 |
 |---|---|---|

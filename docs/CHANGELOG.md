@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### 重构：R6 Context/LLM 域拆分（2026-08-29，分支 codex/refactor-r0-r1，D117）
+
+- 771 行 `context.ts` 拆为 `context/{types,hash,budget,frozen,dynamic}`：冻结前缀顺序/hash 版本化/预算裁剪优先级/RAG 直塞语义由特征测试锁定（拆分前后行为一致）
+- 388 行 `llm.ts` 拆为 `llm/{types,errors,routes,candidates,request,caller}`：DeepSeek 参数语义（thinking 显式 disabled/温度无效/jsonMode 限制/reasoning_content 回传）、候选链 override 优先、统一记账、Key 不泄露由契约测试锁定
+- CJK 字数口径收拢 `shared/text.countCJKChars`；公共签名不变（context/llm 兼容转发）
+- 测试 +20（全量 59 文件 341 用例）
+
 ### 重构：R5 统一错误模型 + 章节执行路由拆分（2026-08-29，分支 codex/refactor-r0-r1，D116）
 
 - 新增 `services/shared/errors.ts` 六类统一错误；`ConfigError` 改为继承 `ConfigurationError`（instanceof 兼容）
