@@ -119,5 +119,5 @@
 | R0-F2 | P2 | 章节内容/状态 UPDATE 缺 novel_id 守卫（其余同类路径均带；章 id 全局唯一，实际风险低，属一致性修复） | generate.ts:137/198/240 | R1 | [x] R1 |
 | R0-F3 | P3 | 注释声称「最终内容（含反 AI 重写后）确定性校验」，代码实际在重写前校验（注释与顺序不符） | generate.ts:151-153 | R1 | [x] R1 |
 | R0-F4 | P2 | 参考分支 postProcess 约束登记取「该书最后一章」id 而非被生成章节 id——重放时必须改为传入 chapterId，不得回退 main 行为 | 旧分支 chapterGeneration/postProcess.ts:21 | R1 | [x] R1 |
-| R0-F5 | P2 | solutionRunner 复制 generate 的 claim/复位 SQL，同语义两处维护（漂移风险） | solutionRunner.ts:303-311/539 vs generate.ts:44-51 | R4.3 | [ ] |
+| R0-F5 | P2 | solutionRunner 复制 generate 的 claim/复位 SQL，同语义两处维护（漂移风险） | solutionRunner.ts:303-311/539 vs generate.ts:44-51 | R4.3 | [x] R4.3 |
 | R0-F6 | P2 | production 无守卫直接置 reviewed/failed（其余路径均带 status='generating' 守卫） | production.ts:238/330 | R4.3 | [ ] |

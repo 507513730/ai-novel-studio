@@ -723,3 +723,10 @@
 - **决策（本地设计）**：迁移 22 新增 `chapter.generation_token TEXT`（向前兼容）。`claimChapter` 原子抢占时颁发章节级 token（node:crypto randomUUID）；persistence/failClaimedChapter 的守卫升级为 `id+novel_id+generation_token+status='generating'`。语义分层：旧协程迟到**落库** → 抛 stale claim 错误（'章节生成会话已失效'）且短事务整体回滚、零数据变更；旧协程迟到**失败处理**（failClaimedChapter）→ 守卫失配静默跳过（失败处理是尽力而为的清理，不得触碰新 claim）。重启恢复（startJobScheduler）重置 generating→planned 时一并清空 token。token 与 job claim token 严格不同源不同生命周期（R0 基线预扫描结论）。
 - **边界（未动，留后续批次）**：hub.ts 的兜底复位与 solutionRunner.ts 复制的 claim SQL 尚未 token 化——solutionRunner 在 R4.3 收拢进统一 generateChapter 时自然消解；hub 兜底复位属防御性写，收敛于 R4.3/R9 复核。
 - **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 51 文件 293 用例（+1 stale claim 故障注入：重启恢复后旧协程落库被拒且新 claim 数据零触碰）/ db-smoke 7 项（schema version=22）/ 打包双产物时间戳更新。
+
+### D115 · 2026-08-29 · R4.2 导演域 + R4.3 整本生产域拆分（分支 codex/refactor-r0-r1）
+
+- **R4.2（本地设计）**：导演 826 行单文件拆为 `director/{stages,checkpoint,artifacts,pipeline}.ts` + `director/executors/`（9 阶段执行器 + 显式注册表）。stages.ts 为阶段元数据唯一事实源（禁止字符串清单复制）；artifacts.ts 为产物落库判定唯一事实源（checkpoint 仅存位置/决策/熔断计数/展示状态，progress 仅为展示缓存）；pipeline 保留取消感知、按阶段熔断 + 决策路径去重、supervised 暂停，ready 收尾（auto 角色入册）保持在 done 判定之前。旧 director.ts 缩为兼容转发（hub/automation/scheduler 零改动）。
+- **R4.3（本地设计）**：production 拆为 `production/{chapterPolicy,progress,pipeline}.ts`。chapterPolicy 统一批次边界决策：产物驱动选章（`content=''` 才进批次——kill 恢复以正文产物为准，不因旧 status 重调模型）、范围授权校验、生成不达标（<200 重试一次）、ConfigError 整批熔断。**solutionRunner 复制的 claim/落库/复位 SQL 收拢进章节生成域（R0-F5 关闭）**：claimChapter token 身份 + persistGeneratedChapter（新增 note/title 变体：版本注释 'AI 生产（方案流水线）' 与标题 CASE-WHEN 覆盖）+ failClaimedChapter（ConfigError 恢复抢占前状态，对齐 v0.24.3 不误标原则）。production.ts 缩为兼容转发。
+- **行为保真**：runDirectorPipeline/runProductionPipeline 公共签名不变；v080 并发抢占拒绝文案、v0220 覆盖语义、config-circuit 熔断契约全部保持；P20 M3 幂等去重、P13 G5 节拍板门禁、P14 B4 范围授权规则逐字保真。
+- **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 55 文件 308 用例（R4.2 +7：artifacts 阈值 4 + 故障注入 3[产物落库后中断恢复跳过模型调用、同阶段 4 签名重规划超限、auto 收尾入册]；R4.3 +8：策略判定 4 + 幂等故障注入 4[kill 恢复跳过产物、两轮零重复调用、失败继续、熔断未尝试章节保持 planned]）/ db-smoke 7 项。

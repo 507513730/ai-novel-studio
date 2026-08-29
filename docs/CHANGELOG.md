@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 重构：R4.2 导演域 + R4.3 整本生产域拆分（2026-08-29，分支 codex/refactor-r0-r1，D115）
+
+- 导演 826 行拆为 `director/{stages,checkpoint,artifacts,pipeline}` + `executors/`（9 阶段执行器注册表）：阶段元数据与产物判定各归唯一事实源，checkpoint 不再是完成依据；恢复跳过已完成模型调用（故障注入测试锁定）
+- 整本生产拆为 `production/{chapterPolicy,progress,pipeline}`：批次决策（产物驱动选章/范围校验/不达标重试/ConfigError 熔断）收拢 chapterPolicy；**solutionRunner 复制的抢占/落库/复位 SQL 收拢进章节生成域（R0-F5 关闭，token 身份贯通）**
+- 公共签名不变（runDirectorPipeline/runProductionPipeline），调用方零改动；测试 +15（全量 55 文件 308 用例）
+
 ### 重构：R4.1 章节级 generation_token（2026-08-29，分支 codex/refactor-r0-r1，D114）
 
 - 迁移 22 新增 `chapter.generation_token`：`claimChapter` 抢占即颁发章节级生成身份，落库/失败恢复守卫升级为 `id+novel_id+generation_token+status='generating'`

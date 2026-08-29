@@ -98,7 +98,10 @@ electron/           主进程：main.ts（窗口/菜单/utilityProcess/safeStora
 server/src/         服务进程（Node 隔离）：routes/（~17 路由）services/（业务）db/（迁移+种子）prompts/
   services 关键文件：chapterGeneration/（章节生成域：state/persistence/postProcess/orchestrator——
                     generate.ts 已缩为兼容转发，公共签名不变）/ jobs/（job 域：repository/lifecycle/
-                    payload/executors/scheduler/progress——jobQueue.ts 与 scheduler.ts 兼容转发；claim token 守卫见 D112/D113）/ context（前缀冻结）
+                    payload/executors/scheduler/progress——jobQueue.ts 与 scheduler.ts 兼容转发；claim token 守卫见 D112/D113）
+                    / director/（导演域：stages/checkpoint/artifacts/executors/pipeline——director.ts 兼容转发；
+                    产物判定唯一事实源见 artifacts.ts）/ production/（生产域：chapterPolicy/progress/pipeline——
+                    production.ts 兼容转发；批次决策见 chapterPolicy.ts）/ context（前缀冻结）
                     / llm（路由+降级+记账） / planner（导演 prompt 统一） / ledger（状态账本）
                     / scheduler / director / production / solutionRunner / debtFix / tripleReview
                     / retrieval（TF-IDF） / styleEngine / smartContext / constraintEngine

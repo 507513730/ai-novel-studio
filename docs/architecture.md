@@ -63,6 +63,8 @@ chapter.content 恒等于最新 chapter_version.content（降级原因经 Genera
 Web API → INSERT job（queued，json_extract novelId 精确查重）→ Scheduler 抢占
   → jobs/repository.claimNextJob：原子置 running + 颁发唯一 claim_token
   → jobs/executors.ts 注册表分发（五类执行器；未知类型立即失败；进度经 reportProgress 守卫写入）
+  → director：director/pipeline（stages 元数据 + artifacts 产物判定 + executors 逐阶段执行）
+  → production：production/pipeline（chapterPolicy 批次决策 + 逐章生成/审核/修复/回灌）
   → 收尾 finishClaimedJob（done|failed；取消/watchdog 终态不被迟到协程覆盖）
   → 进度回写 result_json / 状态 done|failed
 失败恢复：retry(可换模型 modelOverride，重排队清 claim_token) / cancel(lifecycle.cancelActiveJob)
@@ -98,8 +100,11 @@ Retriever 接口：TfidfRetriever（默认，零依赖）/ EmbeddingRetriever（
 client/src/      React：pages/（33 页含 settings/ chapter/ 子目录）workspace/（8 面板）
                  components/ editor/ utils/ hooks/
 server/src/      服务：routes/（15 个路由文件，~17 路由面）services/（chapterGeneration/（章节生成域：
-                 state/persistence/postProcess/orchestrator）generate(兼容转发)/context/llm/planner/
-                 ledger/jobQueue/scheduler/director/production/retrieval…）db/ prompts/
+                 state/persistence/postProcess/orchestrator）director/（导演域：stages/checkpoint/
+                 artifacts/executors/pipeline）production/（生产域：chapterPolicy/progress/pipeline）
+                 jobs/（job 域：repository/lifecycle/payload/executors/scheduler/progress）
+                 generate/scheduler/production/director(兼容转发)/context/llm/planner/ledger/
+                 retrieval…）db/ prompts/
 electron/        主进程：窗口/菜单/安全/utilityProcess
 shared/          前后端共享类型（@shared/types）
 scripts/         db-smoke / calibrate / e2e（round.mjs 全功能 + longbook.mjs 长书）/ release / verify-docs
