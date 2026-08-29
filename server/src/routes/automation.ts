@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { directorProgress } from '../services/director'
 import { hubChat } from '../services/hub'
 import { enqueueDirectorJob, enqueueProductionJob } from '../services/jobQueue'
+import { cancelActiveJob } from '../services/jobs/lifecycle'
 
 /** v0.17.0（LOW）：安全 JSON 解析（损坏数据兜底） */
 function safeParseJson(v: unknown): unknown {
@@ -99,7 +100,7 @@ export function createJobsRouter(db: DatabaseSync): Router {
         delete payload.modelOverride
       }
       db.prepare(
-        "UPDATE job SET status = 'queued', progress = 0, error = NULL, payload_json = ?, updated_at = datetime('now') WHERE id = ?"
+        "UPDATE job SET status = 'queued', progress = 0, error = NULL, claim_token = NULL, payload_json = ?, updated_at = datetime('now') WHERE id = ?"
       ).run(JSON.stringify(payload), id)
       res.json({ ok: true, modelOverride: input.model ?? null })
     } catch (err) {
@@ -108,13 +109,11 @@ export function createJobsRouter(db: DatabaseSync): Router {
   })
 
   // P12 A1：任务取消（queued 直接取消；running 标记取消——导演主循环感知）
+  // R2：转换守卫收拢 lifecycle（queued|running → cancelled；终态 409）
   router.post('/jobs/:id/cancel', (req, res, next) => {
     try {
       const id = Number(req.params.id)
-      const result = db
-        .prepare("UPDATE job SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND status IN ('queued','running')")
-        .run(id)
-      if (Number(result.changes) === 0) {
+      if (!cancelActiveJob(db, id)) {
         res.status(409).json({ error: '任务不在可取消状态' })
         return
       }

@@ -1,9 +1,9 @@
 import { DatabaseSync } from 'node:sqlite'
+import { enqueueDirectorJob as enqueueDirector, enqueueProductionJob as enqueueProduction, enqueueTypedJob as enqueueTyped } from './jobs/repository'
 
 // ============================================================
-// 命令队列公共函数（P2.1 修复 #2 + P20）
-// Web API 与 Creative Hub 共用：导演命令统一走 job 表 + scheduler
-// （执行面隔离，防并发跑导演）
+// 命令队列兼容入口（重构计划 R2）：实现已迁至 services/jobs/ 域
+// （repository = 入队/抢占/收尾唯一入口），此处仅保留既有公共签名转发。
 // ============================================================
 
 export interface EnqueueOptions {
@@ -16,27 +16,7 @@ export function enqueueDirectorJob(
   novelId: number,
   opts: EnqueueOptions = {}
 ): { jobId: number } | { conflict: true } {
-  // P20（M8）：查重+插入合并为单条 SQL（原子，多实例不双排）
-  const result = db
-    .prepare(
-      `INSERT INTO job (type, status, progress, payload_json)
-       SELECT 'director', 'queued', 0, ?
-       WHERE NOT EXISTS (
-         SELECT 1 FROM job
-         WHERE type = 'director' AND status IN ('queued','running')
-           AND json_extract(payload_json, '$.novelId') = ?
-       )`
-    )
-    .run(
-      JSON.stringify({
-        novelId,
-        mode: opts.mode ?? 'auto',
-        chaptersPerVolume: opts.chaptersPerVolume ?? 20
-      }),
-      novelId
-    )
-  if (result.changes === 0) return { conflict: true }
-  return { jobId: Number(result.lastInsertRowid) }
+  return enqueueDirector(db, { novelId, mode: opts.mode, chaptersPerVolume: opts.chaptersPerVolume })
 }
 
 // P20（M2/C1）：运行中任务取消感知（导演/生产循环每阶段/每章检查）
@@ -45,8 +25,7 @@ export function isJobCancelled(db: DatabaseSync, jobId: number): boolean {
   return row?.status === 'cancelled'
 }
 
-// v0.23.1（批次 D1/D2）：通用类型入队（refine-range / solution-chapter 迁 job 队列用）——
-// 原子查重（同类型 + 同 novelId + 活跃态不重复排），语义与 enqueueDirectorJob 一致
+// v0.23.1（批次 D1/D2）：通用类型入队（refine-range / solution-chapter 迁 job 队列用）
 export type TypedJobType = 'refine-range' | 'solution-chapter'
 
 export function enqueueTypedJob(
@@ -54,19 +33,7 @@ export function enqueueTypedJob(
   type: TypedJobType,
   payload: Record<string, unknown> & { novelId: number }
 ): { jobId: number } | { conflict: true } {
-  const result = db
-    .prepare(
-      `INSERT INTO job (type, status, progress, payload_json)
-       SELECT ?, 'queued', 0, ?
-       WHERE NOT EXISTS (
-         SELECT 1 FROM job
-         WHERE type = ? AND status IN ('queued','running')
-           AND json_extract(payload_json, '$.novelId') = ?
-       )`
-    )
-    .run(type, JSON.stringify(payload), type, payload.novelId)
-  if (Number(result.changes) === 0) return { conflict: true }
-  return { jobId: Number(result.lastInsertRowid) }
+  return enqueueTyped(db, type, payload)
 }
 
 // v0.24.2（F4）：整本生产入队（production 型，原子查重）——自动化路由与方案整本入口共用
@@ -75,19 +42,7 @@ export function enqueueProductionJob(
   novelId: number,
   range?: { from: number; to: number }
 ): { jobId: number } | { conflict: true } {
-  const result = db
-    .prepare(
-      `INSERT INTO job (type, status, progress, payload_json)
-       SELECT 'production', 'queued', 0, ?
-       WHERE NOT EXISTS (
-         SELECT 1 FROM job
-         WHERE type = 'production' AND status IN ('queued','running')
-           AND json_extract(payload_json, '$.novelId') = ?
-       )`
-    )
-    .run(JSON.stringify({ novelId, ...(range ? { from: range.from, to: range.to } : {}) }), novelId)
-  if (Number(result.changes) === 0) return { conflict: true }
-  return { jobId: Number(result.lastInsertRowid) }
+  return enqueueProduction(db, novelId, range)
 }
 
 // v0.8.0（审查 #8）：执行中止感知——取消（cancelled）或 watchdog 超时回收（failed + watchdog: 前缀）都中止

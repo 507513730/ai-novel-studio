@@ -474,6 +474,13 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
       `ALTER TABLE chapter ADD COLUMN ai_words INTEGER NOT NULL DEFAULT 0`,
       `ALTER TABLE chapter ADD COLUMN human_words INTEGER NOT NULL DEFAULT 0`
     ]
+  },
+  {
+    // 重构计划 R2：job.claim_token——scheduler 原子抢占身份。
+    // 迟到协程（旧 token）的进度/收尾写入因 id+claim_token+status='running' 不匹配被拒绝（changes=0）；
+    // 每次 claim 重新生成，重排队（retry/重启恢复）置 NULL。向前兼容：旧数据默认 NULL。
+    version: 21,
+    statements: [`ALTER TABLE job ADD COLUMN claim_token TEXT`]
   }
 ]
 
