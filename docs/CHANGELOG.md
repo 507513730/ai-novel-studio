@@ -1,5 +1,7 @@
 # AI-Novel-Studio 发布说明
 
+## [Unreleased]
+
 ## v0.26.0（2026-08-29）
 
 ### 安装方式
