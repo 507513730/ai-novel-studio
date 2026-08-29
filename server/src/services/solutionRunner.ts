@@ -4,6 +4,8 @@ import { loadSolution, type SolutionStep } from './solutionAssets'
 import { buildChapterWriteContext } from './context'
 import { chapterPositionBlock } from './chapterRole'
 import { constraintsBlock, replaceProtagonistName } from './constraintEngine'
+import { claimChapter, failClaimedChapter } from './chapterGeneration/state'
+import { persistGeneratedChapter } from './chapterGeneration/persistence'
 import { JSON_FORMAT } from '../prompts'
 
 // ============================================================
@@ -300,16 +302,9 @@ export async function runProductionChapter(
   if (!chapter) throw new Error('chapter not found')
   if (chapter.content.trim()) throw new Error('章节已有正文（生产模式只用于空章节）')
 
-  // v0.8.0（审查 #5）：原子抢占——复用 generateChapter 的 claim 语义（status 门禁），
+  // v0.8.0（审查 #5）：原子抢占——R4.3 起统一走章节生成域 claimChapter（token 身份），
   // 防 produce-chapter 与整本生产/SSE 生成并发写同一章（双倍费用 + 后写覆盖先写）
-  const claimed = db
-    .prepare(
-      "UPDATE chapter SET status = 'generating', updated_at = datetime('now') WHERE id = ? AND novel_id = ? AND status NOT IN ('generating')"
-    )
-    .run(chapterId, novelId)
-  if (Number(claimed.changes) === 0) {
-    throw new Error('章节正在生成中（或状态不允许），请等待完成')
-  }
+  const claim = claimChapter(db, novelId, chapterId)
 
   const outputs: StepOutput[] = []
   const degradedReasons: string[] = []
@@ -518,12 +513,14 @@ export async function runProductionChapter(
   content = replaceProtagonistName(db, novelId, content)
   const title = outline?.title?.trim() || chapter.title || ''
 
-  // v0.22.0（审查 N1·本地设计决策）：整章替换→覆盖语义（防重生膨胀；见 generate.ts 注释）
-  const wordCount = (content.match(/[\u4e00-\u9fff]/g) ?? []).length
-  db.prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)').run(chapterId, content, 'AI 生产（方案流水线）')
-  db.prepare(
-    "UPDATE chapter SET title = CASE WHEN ? != '' THEN ? ELSE title END, content = ?, word_count = ?, status = 'written', ai_words = ?, human_words = 0, updated_at = datetime('now') WHERE id = ?"
-  ).run(title, title, content, wordCount, wordCount, chapterId)
+  // v0.22.0（审查 N1·本地设计决策）：整章替换→覆盖语义（防重生膨胀）。
+  // R4.3：落库统一走章节生成域 persistence（版本注释/标题变体经 PersistedGeneration 传入）。
+  const { wordCount } = persistGeneratedChapter(db, claim, {
+    content,
+    aborted: false,
+    note: 'AI 生产（方案流水线）',
+    title
+  })
 
   return {
     content,
@@ -534,9 +531,9 @@ export async function runProductionChapter(
     degradedReasons
   }
   } catch (err) {
-    // 抢占复位：失败时释放 claim（status='generating' → 'failed'），
+    // 抢占复位（R4.3：统一走章节域 failClaimedChapter——token 守卫，ConfigError 恢复抢占前状态），
     // 使调用方（整本生产回退 generateChapter）可用，且不残留"永久生成中"
-    db.prepare("UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'generating'").run(chapterId)
+    failClaimedChapter(db, claim, err)
     throw err
   }
 }

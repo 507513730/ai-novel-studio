@@ -11,4 +11,6 @@ export interface ClaimedChapter {
 export interface PersistedGeneration {
   content: string
   aborted: boolean
+  note?: string // 版本快照注释（默认 'AI 生成' / 'AI 生成（中止）'；方案流水线用 'AI 生产（方案流水线）'）
+  title?: string // 产出附标题（非空时覆盖章节标题；方案流水线 R4.3）
 }
