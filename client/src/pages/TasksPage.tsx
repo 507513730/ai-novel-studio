@@ -6,6 +6,7 @@ import { novelApi, automationApi } from '../api'
 import { useActionRun } from '../hooks/useActionRun'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { EmptyState } from '../components/EmptyState'
+import { Loading } from '../components/Loading'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 
@@ -164,7 +165,7 @@ export function TasksPage(): React.JSX.Element {
         </button>
       </div>
       {error && <ErrorMsg error={error} />}
-      {jobs.isLoading && <p className="muted">加载中…</p>}
+      {jobs.isLoading && <Loading lines={4} />}
       {!jobs.isLoading && list.length === 0 && <EmptyState icon={Inbox} title="暂无任务" desc="启动自动导演后，任务会出现在这里。" />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {list.map((j) => {
@@ -196,14 +197,13 @@ export function TasksPage(): React.JSX.Element {
                 <span className="muted t-small">{j.createdAt}</span>
               </div>
               {j.status === 'running' && typeof j.progress === 'number' && j.progress > 0 && (
-                <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'var(--bg-input)' }}>
-                  <div
-                    style={{ height: '100%', borderRadius: 2, background: 'var(--accent)', width: `${Math.min(100, j.progress * 100)}%` }}
-                  />
+                <div className="progress" style={{ marginTop: 8 }}>
+                  <div style={{ width: `${Math.min(100, j.progress * 100)}%` }} />
                 </div>
               )}
               {j.error && (
-                <div className="muted" style={{ fontSize: 12, marginTop: 8, color: 'var(--danger)' }}>
+                // v0.26.0（审查 P1-4）：长错误文案单行截断 + 悬浮看全文（此前 safeStorage 等长报错裸奔撑爆行）
+                <div className="muted ellipsis" title={j.error} style={{ fontSize: 12, marginTop: 8, color: 'var(--danger)' }}>
                   失败原因：{j.error}
                 </div>
               )}

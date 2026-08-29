@@ -64,6 +64,12 @@
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
 
+  /* ---- 弹层遮罩（亮色主题单独调淡）与 z 阶梯 ---- */
+  --overlay: rgba(0, 0, 0, 0.6);
+  --z-dropdown: 1000;
+  --z-modal: 8000;
+  --z-toast: 9000;
+
   /* ---- 过渡 ---- */
   --transition-fast: 150ms;
   --transition-base: 250ms;
@@ -231,6 +237,7 @@
   --warn-soft: rgba(217, 119, 6, 0.12);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --overlay: rgba(16, 21, 19, 0.4);
 }
 
 /* 暖色文学·sepia（Bear 风——沉静排印 + 暖棕，写作 app 阅读面气质，v0.23 UI 美化） */
@@ -257,6 +264,7 @@
   --warn-soft: rgba(176, 122, 31, 0.12);
   --shadow-md: 0 4px 16px rgba(74, 63, 47, 0.1);
   --shadow-lg: 0 8px 24px rgba(74, 63, 47, 0.16);
+  --overlay: rgba(74, 63, 47, 0.35);
   --font-editor: var(--font-serif);
 }
 
@@ -290,8 +298,9 @@ button {
   background: var(--bg-card);
   color: var(--text);
   border-radius: var(--radius);
-  padding: 6px 14px;
+  padding: 8px 16px;
   font-size: var(--fs-13);
+  white-space: nowrap;
   transition:
     background var(--transition-fast) var(--ease),
     border-color var(--transition-fast) var(--ease),
@@ -337,7 +346,7 @@ button.danger:hover:not(:disabled) {
 /* 小按钮 */
 button.sm {
   font-size: var(--fs-12);
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: var(--radius-s);
 }
 
@@ -375,7 +384,7 @@ textarea {
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius);
-  padding: 7px 10px;
+  padding: 8px 12px;
   font-size: var(--fs-13);
   outline: none;
   transition: border-color var(--transition-fast) var(--ease);
@@ -410,6 +419,7 @@ label {
   font-size: var(--fs-12);
   color: var(--text-dim);
   margin-bottom: var(--sp-1);
+  white-space: nowrap;
 }
 
 h1 {
@@ -419,9 +429,9 @@ h1 {
 }
 
 h2 {
-  font-size: var(--fs-15);
+  font-size: var(--fs-16);
   font-weight: 600;
-  color: var(--text-dim);
+  color: var(--text);
   margin-bottom: var(--sp-3);
 }
 
@@ -443,6 +453,14 @@ h2 {
   border-color: var(--border-hover);
 }
 
+/* 卡片悬浮上浮（首页书卡等可点卡片；v0.26.0 收敛 JS hover） */
+.hover-lift {
+  transition: transform 150ms var(--ease), border-color var(--transition-fast) var(--ease);
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
 /* 卡片：更高一层背景 */
 .card {
   background: var(--bg-card);
@@ -454,21 +472,21 @@ h2 {
 
 .row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
 .col {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .badge {
   display: inline-block;
   font-size: var(--fs-11);
   padding: 2px 10px;
-  border-radius: 20px;
+  border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-bright);
 }
@@ -542,7 +560,7 @@ h2 {
 }
 
 .statusbar {
-  padding: 6px 14px;
+  padding: 8px 16px;
   border-top: 1px solid var(--border);
   font-size: var(--fs-12);
   color: var(--text-dim);
@@ -615,8 +633,8 @@ h2 {
   background: transparent;
   color: var(--text-dim);
   border-radius: 8px;
-  padding: 5px 14px;
-  font-size: 13px;
+  padding: 4px 12px;
+  font-size: var(--fs-13);
   transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
 }
 
@@ -751,8 +769,43 @@ button, .list-item, [role='button'] {
 }
 
 /* ---- 页面进入动效 ---- */
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+/* fade-in-up 主定义在 .panel 之前的「入场动画」区（translateY 6px）；此处不再重复定义 */
+
+/* ---- 页面容器（统一各页散乱 maxWidth：narrow 960 / 默认 1080 / wide 1400） ---- */
+.page {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--sp-6);
+}
+.page-narrow { max-width: 960px; }
+.page-wide { max-width: 1400px; }
+
+/* ---- 骨架屏（列表/卡片级加载占位，配合既有 shimmer 用法） ---- */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-elevated) 50%, var(--bg-card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--radius-s);
+}
+.skeleton-text { height: 13px; }
+.skeleton-title { height: 20px; width: 40%; }
+
+/* ---- 进度条（统一 3 处内联手写：AppLayout 浮层 / 首页书卡 / 任务中心） ---- */
+.progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+.progress > div {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 300ms var(--ease);
 }
 

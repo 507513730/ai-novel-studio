@@ -63,7 +63,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
-          zIndex: 9999
+          zIndex: 'var(--z-toast)'
         }}
       >
         {toasts.map((t) => (

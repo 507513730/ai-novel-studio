@@ -235,12 +235,13 @@ describe('EmptyStateGuide（空章节引导）', () => {
   it('点击生成触发回调；busy 时按钮禁用', () => {
     const onGenerate = vi.fn()
     const { unmount } = render(<EmptyStateGuide busy={false} onGenerate={onGenerate} />)
-    fireEvent.click(screen.getByText('✍️ 生成正文'))
+    // v0.26.0：按钮 emoji 清理（✍️ → 纯文案 + lucide 体系统一）
+    fireEvent.click(screen.getByText('生成正文'))
     expect(onGenerate).toHaveBeenCalledTimes(1)
     unmount()
 
     render(<EmptyStateGuide busy onGenerate={onGenerate} />)
-    const btn = screen.getByText('✍️ 生成正文') as HTMLButtonElement
+    const btn = screen.getByText('生成正文') as HTMLButtonElement
     expect(btn.disabled).toBe(true)
   })
 })

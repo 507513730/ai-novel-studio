@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { BookOpen, TriangleAlert } from 'lucide-react'
 import type { NovelSummary } from '../types'
 import { novelApi, apiFetch } from '../api'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
+import { EmptyState } from '../components/EmptyState'
 // v0.23.1（批次 B6）：主角名提取统一 utils（此前双实现且正则漂移）
 import { extractProtagonistName } from '../utils/protagonist'
 
@@ -83,10 +85,8 @@ export function NovelListPage(): React.JSX.Element {
   }
 
   return (
-    <div style={{ maxWidth: 1080, margin: '0 auto', padding: 24 }}>
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 20 }}>
-        <h1>AI 小说创作工作台</h1>
-      </div>
+    <div className="page">
+      {/* v0.26.0（审查 P1-7）：应用名由 titlebar 承载，页面直接从建书入口开始 */}
 
       <div className="panel" style={{ marginBottom: 20 }}>
         <h2 className="mb-3">开始新书：输入一句灵感</h2>
@@ -124,41 +124,41 @@ export function NovelListPage(): React.JSX.Element {
 
       <div className="panel">
         <h2 className="mb-3">我的小说</h2>
-        {novels.isLoading && <p className="muted">加载中…</p>}
-        {novels.isError && (
-          <div style={{ color: 'var(--danger)' }}>
-            加载失败：{String(novels.error)}
-            <button className="ml-2" onClick={() => void novels.refetch()}>重试</button>
+        {novels.isLoading && (
+          <div className="col gap-2" aria-label="加载中">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="skeleton skeleton-text" style={{ width: `${88 - i * 18}%` }} />
+            ))}
           </div>
         )}
+        {novels.isError && <ErrorMsg error={`加载失败：${String(novels.error)}`} onRetry={() => void novels.refetch()} />}
         {novels.data?.novels.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>📚</div>
-            <div style={{ fontSize: 15, marginBottom: 6 }}>还没有小说</div>
-            <div className="muted t-small">
-              在上方输入一句灵感，AI 自动导演会帮你完成开书、设定与第一卷规划；或先载入演示书看看成品管线。
-            </div>
-            {/* v0.24.4（A6）：演示书——零 LLM 的成品样例（1 卷 3 章 + 角色 + 世界观 + 伏笔） */}
-            <button
-              className="primary"
-              style={{ marginTop: 12 }}
-              disabled={demoBusy}
-              onClick={() => void (async () => {
-                setDemoBusy(true)
-                try {
-                  await apiFetch('/novels/import-demo', { method: 'POST' })
-                  toast('ok', '演示书已载入，可在「章节执行」浏览')
-                  await queryClient.invalidateQueries({ queryKey: ['novels'] })
-                } catch (e) {
-                  toast('error', e instanceof Error ? e.message : String(e))
-                } finally {
-                  setDemoBusy(false)
-                }
-              })()}
-            >
-              {demoBusy ? '载入中…' : '📖 载入演示书'}
-            </button>
-          </div>
+          <EmptyState
+            icon={BookOpen}
+            title="还没有小说"
+            desc="在上方输入一句灵感，AI 自动导演会帮你完成开书、设定与第一卷规划；或先载入演示书看看成品管线。"
+            action={
+              /* v0.24.4（A6）：演示书——零 LLM 的成品样例（1 卷 3 章 + 角色 + 世界观 + 伏笔） */
+              <button
+                className="primary"
+                disabled={demoBusy}
+                onClick={() => void (async () => {
+                  setDemoBusy(true)
+                  try {
+                    await apiFetch('/novels/import-demo', { method: 'POST' })
+                    toast('ok', '演示书已载入，可在「章节执行」浏览')
+                    await queryClient.invalidateQueries({ queryKey: ['novels'] })
+                  } catch (e) {
+                    toast('error', e instanceof Error ? e.message : String(e))
+                  } finally {
+                    setDemoBusy(false)
+                  }
+                })()}
+              >
+                {demoBusy ? '载入中…' : '载入演示书'}
+              </button>
+            }
+          />
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
           {/* P27 1-3：最近使用排序（lastOpenedAt 降序，无记录排后） */}
@@ -171,10 +171,8 @@ export function NovelListPage(): React.JSX.Element {
             return (
             <div
               key={n.id}
-              className="panel"
-              style={{ background: 'var(--bg-card)', cursor: 'pointer', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, transition: 'transform 150ms ease, border-color 150ms ease' }}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = 'var(--border-hover)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.borderColor = 'var(--border)' }}
+              className="panel hoverable hover-lift"
+              style={{ background: 'var(--bg-card)', cursor: 'pointer', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}
               onClick={() => navigate(`/novels/${n.id}`)}
             >
               <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
@@ -204,8 +202,8 @@ export function NovelListPage(): React.JSX.Element {
                     {n.inspiration.length > 60 ? n.inspiration.slice(0, 60) + '…' : n.inspiration}
                   </div>
                   {/* 进度条 */}
-                  <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'var(--bg-input)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 2, transition: 'width 300ms' }} />
+                  <div className="progress" style={{ marginTop: 8 }}>
+                    <div style={{ width: `${pct}%` }} />
                   </div>
                   <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
                     章节 {n.chaptersDone}/{n.chaptersTotal} · {pct}%
@@ -224,7 +222,8 @@ export function NovelListPage(): React.JSX.Element {
                         navigate(`/novels/${n.id}/director`)
                       }}
                     >
-                      ⚠️ 需恢复
+                      <TriangleAlert size={12} className="icon-gap" />
+                      需恢复
                     </button>
                   )}
                 </div>

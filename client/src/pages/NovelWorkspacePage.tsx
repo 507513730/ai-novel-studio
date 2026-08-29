@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { novelApi, automationApi } from '../api'
 import { ArrowRight } from 'lucide-react'
 import { useConfirm } from '../components/ConfirmDialog'
+import { ErrorMsg } from '../components/ErrorMsg'
 import { SetupPanel } from '../workspace/SetupPanel'
 import { ConstraintPanel } from '../workspace/ConstraintPanel'
 import { WorldPanel } from '../workspace/WorldPanel'
@@ -152,7 +153,7 @@ function GuideStrip({
               >
                 {st === 'done' ? '✓' : <Icon size={11} />}
               </span>
-              <span className="muted" style={{ fontSize: 10 }}>{i + 1}/{steps.length}</span>
+              <span className="muted" style={{ fontSize: 'var(--fs-11)' }}>{i + 1}/{steps.length}</span>
             </div>
             <strong style={{ fontSize: 12, color: st === 'done' ? 'var(--ok)' : 'var(--text)' }}>{s.label}</strong>
             <span className="muted t-small">{s.desc}</span>
@@ -284,7 +285,7 @@ export function NovelWorkspacePage(): React.JSX.Element {
                   </span>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
                   {/* P16 P2：状态标签文案（参考项目：当前步骤/流程中/查看中/已完成/待推进） */}
-                  <span style={{ fontSize: 10, color: st === 'done' ? 'var(--ok)' : st === 'current' ? 'var(--accent-bright)' : 'var(--text-faint)' }}>
+                  <span style={{ fontSize: 'var(--fs-11)', color: st === 'done' ? 'var(--ok)' : st === 'current' ? 'var(--accent-bright)' : 'var(--text-faint)' }}>
                     {st === 'done' ? '已完成' : st === 'current' ? '当前步骤' : '待推进'}
                     {metaOf(s.key) ? ` · ${metaOf(s.key)}` : ''}
                   </span>
@@ -305,12 +306,9 @@ export function NovelWorkspacePage(): React.JSX.Element {
         <AiStatusBar novelId={id} />
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <div>
-            {detail.isLoading && <h1>加载中…</h1>}
+            {detail.isLoading && <h1 className="muted">加载中…</h1>}
             {detail.isError && (
-              <h1 style={{ color: 'var(--danger)' }}>
-                加载失败：{String(detail.error)}{' '}
-                <button onClick={() => void detail.refetch()}>重试</button>
-              </h1>
+              <ErrorMsg error={`加载失败：${String(detail.error)}`} onRetry={() => void detail.refetch()} />
             )}
             {n && <h1>{n.title || '未命名小说'}</h1>}
             {n && (

@@ -919,7 +919,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
                 onClick={() => void generate()}
                 disabled={!selectedChapter || actionBusy !== null || contentLoading}
               >
-                {contentLoading ? '正文加载中…' : streaming ? '生成中…' : '✍️ 生成正文'}
+                {contentLoading ? '正文加载中…' : streaming ? '生成中…' : '生成正文'}
               </button>
             )}
             <div className="muted" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>

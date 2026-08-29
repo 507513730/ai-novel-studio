@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { BarChart3, BookOpenCheck, CircleAlert, Coins, PenLine, ScrollText, Pin } from 'lucide-react'
 import { novelApi } from '../api'
 import type { NovelStats } from '../types'
+import { Loading } from '../components/Loading'
 
 // v0.24.4（A3）：写作统计面板——全书字数/AI 占比/卷分布/审核分分布/成本（零图表库，CSS bar 自绘）
 const STATUS_COLOR: Record<string, string> = {
@@ -56,7 +57,7 @@ export function StatsPage(): React.JSX.Element {
       </h2>
       <p className="muted t-small mb-2">全书数据洞察（字数/AI 占比/卷分布/审核分布/成本）——v0.24.4 新增</p>
 
-      {stats.isLoading && <p className="muted">加载中…</p>}
+      {stats.isLoading && <Loading lines={5} />}
       {stats.isError && (
         <p className="muted" style={{ color: 'var(--danger)' }}>
           加载失败：{String(stats.error)}
@@ -187,7 +188,7 @@ export function StatsPage(): React.JSX.Element {
           {/* v0.24.4（B5）：伏笔看板——状态分组，点击跳转章节 */}
           <div className="panel" style={{ marginTop: 14, padding: 14 }}>
             <strong className="t3 row gap-2"><Pin size={13} />伏笔账本（{fs?.foreshadows.length ?? '…'} 条 · 未回收 {fs?.foreshadows.filter((f) => f.status === 'laid').length ?? '…'}）</strong>
-            {fs === undefined && <p className="muted t-small" style={{ marginTop: 8 }}>加载中…</p>}
+            {fs === undefined && <Loading label="伏笔加载中…" lines={2} />}
             {fs && fs.foreshadows.length === 0 && <p className="muted t-small" style={{ marginTop: 8 }}>暂无伏笔（回灌自动记录；章节页「记忆面」可手动增删）。</p>}
             {fs && fs.foreshadows.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8, marginTop: 10 }}>

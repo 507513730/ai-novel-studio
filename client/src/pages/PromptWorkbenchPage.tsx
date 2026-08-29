@@ -113,7 +113,7 @@ export function PromptWorkbenchPage(): React.JSX.Element {
                 }}
               >
                 {p.name}
-                <span className="muted" style={{ fontSize: 10, marginLeft: 6 }}>{p.taskType}</span>
+                <span className="muted" style={{ fontSize: 'var(--fs-11)', marginLeft: 6 }}>{p.taskType}</span>
               </button>
             ))}
             <button className="sm" style={{ width: '100%', marginTop: 6 }} onClick={() => navigate('/anti-ai')}>

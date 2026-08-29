@@ -81,7 +81,7 @@ export function BookSearchPanel({ novelId, onSelectChapter }: BookSearchPanelPro
               title="打开此章节"
               onClick={() => onSelectChapter(c.id)}
             >
-              <strong className="t-small">📖 {c.title || `#${c.id}`}</strong>
+              <strong className="t-small">{c.title || `#${c.id}`}</strong>
               <div className="muted t-small" style={{ fontWeight: 400, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                 {c.snippet}
               </div>
@@ -113,7 +113,7 @@ export function BookSearchPanel({ novelId, onSelectChapter }: BookSearchPanelPro
           ))}
           {results?.kb.map((d) => (
             <div key={`kb${d.id}`} className="panel" style={{ padding: '4px 8px', fontSize: 11, background: 'var(--bg-panel)' }}>
-              <strong>📚 {d.title}</strong>
+              <strong>{d.title}</strong>
               <div className="muted" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{d.snippet}</div>
             </div>
           ))}

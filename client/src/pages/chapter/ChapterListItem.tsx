@@ -47,11 +47,11 @@ export const ChapterListItem = memo(function ChapterListItem({
           {c.status} {c.volumeTitle ? `· ${c.volumeTitle}` : ''}
         </span>
       </div>
-      <div style={{ fontSize: 10, marginTop: 2, color: 'var(--text-faint)' }}>
+      <div style={{ fontSize: 'var(--fs-11)', marginTop: 2, color: 'var(--text-faint)' }}>
         {c.status === 'planned' && '下一步：生成正文'}
         {c.status === 'written' && '下一步：AI 审核'}
         {['reviewed', 'done'].includes(c.status) && '✓ 可进入下一章'}
-        {c.status === 'failed' && '⚠️ 生成失败，可重试'}
+        {c.status === 'failed' && '生成失败，可重试'}
       </div>
     </div>
   )

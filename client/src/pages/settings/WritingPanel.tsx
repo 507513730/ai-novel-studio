@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../../api'
 import { useToast } from '../../components/Toast'
+import { Loading } from '../../components/Loading'
 import { applyFonts, getStoredFonts, type FontSettings } from '../../utils/fonts'
 
 export function WritingPanel(): React.JSX.Element {  const { toast } = useToast()
@@ -63,7 +64,7 @@ export function WritingPanel(): React.JSX.Element {  const { toast } = useToast(
       <div className="muted t-small">{desc}</div>
     </button>
   )
-  if (!settings) return <div className="panel">加载中…</div>
+  if (!settings) return <div className="panel"><Loading label="设置加载中…" lines={3} /></div>
   return (
     <div className="panel col">
       <h2>写作偏好</h2>

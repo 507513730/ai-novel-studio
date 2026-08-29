@@ -1,4 +1,5 @@
 import { EmptyState } from '../components/EmptyState'
+import { Loading } from '../components/Loading'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -213,7 +214,7 @@ function NovelChars({ novelId, title, chars, busy, onLoad, onOpen, onSaveTemplat
             </button>
           </span>
         ))}
-        {list === undefined && <span className="muted t-small">加载中…</span>}
+        {list === undefined && <Loading label="模板加载中…" lines={2} />}
       </div>
     </div>
   )

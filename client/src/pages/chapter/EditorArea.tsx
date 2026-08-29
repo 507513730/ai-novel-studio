@@ -2,8 +2,9 @@ import { useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { autocompletion } from '@codemirror/autocomplete'
+import { Pin } from 'lucide-react'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
-import { novelEditorTheme } from '../../editor/theme'
+import { useEditorTheme } from '../../editor/theme'
 import { makeQuickWordSource } from '../../utils/quickWords'
 import { EmptyStateGuide, SuggestionOverlay } from './ChapterPanels'
 
@@ -73,11 +74,12 @@ export function ChapterToolbar({
   }
 
   return (
+    // v0.26.0（审查 P0-1）：允许换行 + 左组收缩保护——此前窄宽下标题/字数被压成一字一行竖排
     <div
-      className="row"
-      style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', justifyContent: 'space-between' }}
+      className="row flex-wrap"
+      style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', justifyContent: 'space-between', rowGap: 8 }}
     >
-      <div className="row">
+      <div className="row" style={{ minWidth: 0, flexShrink: 1 }}>
         {editingTitle ? (
           <input
             style={{ width: 240 }}
@@ -104,7 +106,7 @@ export function ChapterToolbar({
           />
         ) : (
           <strong
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280, minWidth: 0 }}
             title="点击编辑标题"
             onClick={() => {
               setTitleDraft(title)
@@ -114,12 +116,16 @@ export function ChapterToolbar({
             {title}
           </strong>
         )}
-        {summary && <span className="muted t-small">{summary}</span>}
-        <span className="muted t-small">｜{hanCount} 字</span>
+        {summary && (
+          <span className="muted t-small ellipsis" style={{ maxWidth: 200 }} title={summary}>
+            {summary}
+          </span>
+        )}
+        <span className="muted t-small" style={{ flexShrink: 0 }}>｜{hanCount} 字</span>
         {/* v0.19.0：人类/AI 字数分离 */}
         <span
           className="muted t-small"
-          style={{ color: 'var(--ok)', cursor: 'help' }}
+          style={{ color: 'var(--ok)', cursor: 'help', flexShrink: 0 }}
           title="AI 字数：当前内容中 AI 来源（整章生成/重生/修复按本次覆盖，不超当前字数）。我的字数：人工输入累计（增量累加，删除不降）。"
         >
           ｜我的 {humanWords.toLocaleString()} · AI {aiWords.toLocaleString()}
@@ -138,7 +144,7 @@ export function ChapterToolbar({
           disabled={streaming || contentLoading}
           onClick={onToggleViewMode}
         >
-          {viewMode === 'read' ? '✏️ 编辑' : '📖 阅读'}
+          {viewMode === 'read' ? '编辑' : '阅读'}
         </button>
         {/* v0.22.2：正文进度轻提示 */}
         {stats.total > 0 && (stats.remaining > 0 || stats.failed > 0) && (
@@ -165,7 +171,7 @@ export function ChapterToolbar({
           disabled={streaming || !guidance.trim()}
           onClick={onPinGuidance}
         >
-          <PinGlyph /> 固定为约束
+          <Pin size={12} className="icon-gap" /> 固定为约束
         </button>
         <span style={{ margin: '0 8px', color: 'var(--border)' }}>|</span>
         {(['txt', 'md', 'epub', 'docx'] as ExportFormat[]).map((f) => (
@@ -181,15 +187,6 @@ export function ChapterToolbar({
         ))}
       </div>
     </div>
-  )
-}
-
-// 内联图钉图标（避免为单个图标额外引入依赖）
-function PinGlyph(): React.JSX.Element {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: '-1px', marginRight: 2 }}>
-      <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
-    </svg>
   )
 }
 
@@ -230,6 +227,7 @@ export function EditorPane({
   busy,
   editorRef
 }: EditorPaneProps): React.JSX.Element {
+  const editorTheme = useEditorTheme()
   return (
     <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
       <CodeMirror
@@ -238,7 +236,7 @@ export function EditorPane({
         onChange={onContentChange}
         onUpdate={(u) => onEditorUpdate(u)}
         height="100%"
-        theme={novelEditorTheme}
+        theme={editorTheme}
         // v0.24.4（A2）：快捷词补全（";触发词" → 展开文本，设置页维护词典）
         extensions={[markdown(), autocompletion({ override: [makeQuickWordSource(quickWords)] })]}
         style={{ height: '100%' }}

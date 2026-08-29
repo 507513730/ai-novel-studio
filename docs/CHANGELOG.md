@@ -1,10 +1,30 @@
 # AI-Novel-Studio 发布说明
 
-## [Unreleased]
+## v0.26.0（2026-08-29）
 
-### 图标换用「简约字母」设计（B 变体）
-- 应用图标替换为第 3 张候选图 B 槽「简约字母」设计（米色瓦片 + 衬线 A + 羽笔 + I + 星光），覆盖安装包/任务栏/窗口与介绍站（resources/icon-512.png、icon-256.png、site/icon-512.png）
-- 图标候选素材入库 resources/icon-candidates/（两组九宫各拆 9 张去白透明化 + AI NOVEL STUDIO 终稿 + 透明总览图 + 原始素材归档），SCRIPT 见 scripts/icon-candidates.mjs
+### 安装方式
+- **安装版**：`AI-Novel-Studio-Setup-0.26.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.26.0-portable-x64.exe`
+
+### UI 一致性与 P0 硬伤修复批（D120/D121，问题清单见 docs/ui-review.md）
+
+**P0 可用性修复**
+- 修复章节执行页顶部工具栏与导演页控制区被挤压成竖排文字（1440px 宽即可复现的标题一字一行/按钮一字一行）：按钮与 label 全局补 white-space 约束，工具栏加收缩保护与换行容错
+- 侧栏导航 active 判定重写：移除「小说列表」常亮强调；修复无书时「工作台」项与「小说列表」双高亮；章节执行/自动导演/创作中枢/写作统计在有书时直连书内路由并正确高亮
+- 样式地基清理：fade-in-up 重复定义去重；新增 `.page` 页面容器体系（narrow 960 / 默认 1080 / wide 1400）；弹层遮罩 `--overlay` 与层级 `--z-dropdown/modal/toast` token 化（亮色主题遮罩调淡）；CodeMirror 编辑器 dark 标记跟随主题（原硬编码 light）
+
+### 一致性与舒适度（P1）
+- 8px 栅格归位：按钮 8/16、输入框 8/12、行间距 8、状态栏/药丸 tab 对齐 token；标题 h2 层级强化（15px 灰 → 16px 正文字色）
+- 加载态统一：新增骨架屏 Loading 组件替换「加载中…」纯文字（任务中心/写作统计/资源面板/基础角色库/写作设置/书架），路由级骨架收敛全局 .skeleton
+- 空状态统一 EmptyState：首页书架、选书落地页；错误呈现统一 ErrorMsg（首页列表/工作台标题行）
+- 首页书卡：JS hover 改 CSS 悬浮过渡、进度条统一组件、「⚠️ 需恢复」改图标库
+- 按钮 emoji 清零（🔥✍️📖🛒📚⚠️ → 纯文案或 lucide 图标，与侧栏图标体系统一）；智能体库「AI 起草 body_md」术语泄漏改「AI 起草正文（Body）」、等宽字体走 token、编辑弹窗对齐共享遮罩规范并支持 Esc 关闭
+- 任务中心长错误文案单行截断 + 悬浮看全文；10px/9px 超小字号全部归位 11px 下限；应用名三重重复收敛为标题栏单点承载
+
+### 其他
+- 应用图标换用「简约字母」设计（B 变体），候选素材入库（继承自 Unreleased）
+- 1.0 判据二次修订（versioning §1.1，用户裁定）：UI 全面升级批次完成即达成 1.0，写书收官在 1.x 内完成、不阻塞发版
+- 文档修正：浏览器直连 5173 调试需 `AI_NOVEL_TOKEN_OPTIONAL=1 pnpm dev`（v0.25.0 起 dev 亦强制 X-App-Token）
 
 ## v0.25.0（2026-08-29）
 

@@ -100,7 +100,7 @@ export function MarketPanel(): React.JSX.Element {
   if (market.isError) {
     return (
       <div className="panel" style={{ padding: 16, fontSize: 13 }}>
-        ⚠️ 方案市场不可用（{market.error instanceof Error ? market.error.message : '未知错误'}）
+        方案市场不可用（{market.error instanceof Error ? market.error.message : '未知错误'}）
         <br />
         <span className="muted t-small">市场数据来自 GitHub 仓库 solutions/ 目录（{MARKET_INDEX_URL}），请检查网络后
           <button className="sm" style={{ marginLeft: 8 }} onClick={() => void market.refetch()}>重试</button>

@@ -177,9 +177,10 @@ export function DirectorPage(): React.JSX.Element {
 
       <div className="panel mb-4">
         <h2 className="mb-3">启动自动导演</h2>
-        <div className="row mb-3">
+        {/* v0.26.0（审查 P0-2）：flex-wrap + 右侧按钮组不收缩——此前窄宽下「启动导演」等按钮与 label 被压成一字一行 */}
+        <div className="row mb-3 flex-wrap">
           <label>模式</label>
-          <select value={mode} onChange={(e) => setMode(e.target.value as 'auto' | 'supervised')}>
+          <select value={mode} onChange={(e) => setMode((e.target.value) as 'auto' | 'supervised')}>
             <option value="auto">全自动（无人值守）</option>
             <option value="supervised">半自动（每阶段确认）</option>
           </select>
@@ -193,7 +194,7 @@ export function DirectorPage(): React.JSX.Element {
             onChange={(e) => setChaptersPerVolume(e.target.value === '' ? 0 : Number(e.target.value))}
           />
           {/* P27 1-1：启动前预览（预计调用/耗时/可中断） */}
-          <div className="panel" style={{ marginTop: 8, padding: 10, fontSize: 12 }}>
+          <div className="panel" style={{ marginTop: 8, padding: 10, fontSize: 12, flex: '1 1 320px' }}>
             <div className="muted">
               启动前须知：导演将按 11 阶段依次调用模型（预计{' '}
               <strong style={{ color: 'var(--text)' }}>10-20 次调用</strong>，视书复杂度约{' '}
@@ -201,15 +202,17 @@ export function DirectorPage(): React.JSX.Element {
               · 可随时点「取消」停止（当前阶段完成后生效）· 全部过程可断点恢复
             </div>
           </div>
-          <button className="primary" disabled={busy} onClick={() => void run()}>
-            启动导演
-          </button>
-          <button disabled={busy} onClick={() => void resume()} title="从检查点继续">
-            恢复/继续
-          </button>
-          <button className="danger" onClick={() => cancelWithConfirm()}>
-            取消
-          </button>
+          <div className="row" style={{ flexShrink: 0 }}>
+            <button className="primary" disabled={busy} onClick={() => void run()}>
+              启动导演
+            </button>
+            <button disabled={busy} onClick={() => void resume()} title="从检查点继续">
+              恢复/继续
+            </button>
+            <button className="danger" onClick={() => cancelWithConfirm()}>
+              取消
+            </button>
+          </div>
         </div>
         {msg && <div style={{ color: 'var(--ok)', fontSize: 13 }}>{msg}</div>}
         {error && <ErrorMsg error={error} />}

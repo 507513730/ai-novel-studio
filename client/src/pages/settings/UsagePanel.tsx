@@ -156,7 +156,7 @@ export function UsagePanel(): React.JSX.Element {
         {budget > 0 ? (
           <span className="t-small" style={{ color: overBudget ? 'var(--danger)' : 'var(--ok)' }}>
             本月已用 ¥{monthlyCost.toFixed(2)} / ¥{budget}
-            {overBudget ? ' ⚠️ 已超预算' : ''}
+            {overBudget ? ' · 已超预算' : ''}
           </span>
         ) : (
           <span className="muted t-small">本月已用 ¥{monthlyCost.toFixed(2)}（未设预算）</span>

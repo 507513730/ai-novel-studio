@@ -32,11 +32,11 @@ export function ConfirmDialog({ options, onConfirm, onCancel }: ConfirmDialogPro
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
+        background: 'var(--overlay)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 9998,
+        zIndex: 'var(--z-modal)',
         padding: 24
       }}
       onClick={onCancel}

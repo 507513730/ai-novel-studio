@@ -40,8 +40,8 @@
 | `@keyframes fade-in-up` 定义两次且位移不同（后者静默覆盖前者） | index.css:571(6px) / :754(4px) |
 | `.page` 类被 ForgePage/StatsPage 使用但从未定义，页面容器宽度散乱（960/1080/1200/1400 各页自定） | ForgePage.tsx:61、StatsPage.tsx:52、StudioPage.tsx:319 等 |
 | 弹窗遮罩 `rgba(0,0,0,0.5)` 硬编码 4 处，无 token（亮色主题下过重且不可调） | ConfirmDialog.tsx:35、PromptDialog.tsx:65、CommandPalette.tsx:79、AgentsLibraryPage.tsx:270 |
-| 7 处 `window.confirm` 原生弹窗（违反 D69，与应用风格割裂） | DirectorPage / AgentsLibraryPage / KnowledgePage / BaseCharactersPage / StoryModesPage / WorldsLibraryPage |
-| AgentsLibraryPage 自造 fixed 弹窗（zIndex 10000）不复用 ConfirmDialog | AgentsLibraryPage.tsx:270 |
+| 7 处 `window.confirm` 原生弹窗（违反 D69） | **复核修正（D120 后）**：全仓实际调用已清零（P3-6 批已迁移 useConfirm），仅余注释；报告初版结论有误 |
+| AgentsLibraryPage 自造 fixed 弹窗（zIndex 10000）不复用共享弹窗规范 | AgentsLibraryPage.tsx:270（AgentEditor——编辑表单，应向共享弹窗规范看齐而非 ConfirmDialog） |
 | zIndex 散落（999/9998/9999/10000），层级关系靠运气 | Toast.tsx:66、CommandPalette.tsx:79、AgentsLibraryPage.tsx:270 等 |
 | CodeMirror 主题 `{ dark: false }` 硬编码（深色主题下派生行为标记错误） | editor/theme.ts:46 |
 | `fontFamily: 'monospace'` 绕过 `--font-mono` | AgentsLibraryPage.tsx:280,283 |

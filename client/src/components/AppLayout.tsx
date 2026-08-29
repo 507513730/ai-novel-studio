@@ -41,6 +41,8 @@ interface NavItem {
   requiresNovel?: boolean
   disabled?: boolean
   badge?: string
+  /** 仅精确匹配该路径时高亮（工作台用：/novels/:id 的子路由由各自条目高亮） */
+  exact?: boolean
 }
 
 interface NavGroup {
@@ -96,6 +98,8 @@ export function AppLayout(): React.JSX.Element {
     .filter((j) => j.status === 'running' || j.status === 'queued')
     .map((j) => ({ id: Number(j.id), type: String(j.type), progress: Number(j.progress ?? 0) }))
 
+  // v0.26.0（审查 P0-3）：书级条目带书时直连书内路由（此前章节执行/自动导演/创作中枢恒走选书落地页）；
+  // 「工作台」无书时不再退化为 '/' 与「小说列表」撞车（双高亮根因），点击按 requiresNovel 引导选书。
   const navGroups: NavGroup[] = [
     {
       title: '创作',
@@ -106,9 +110,9 @@ export function AppLayout(): React.JSX.Element {
         { to: '/tasks', label: '任务中心', icon: ListChecks, badge: failedCount > 0 ? `F${failedCount}` : undefined },
         { to: '/follow-ups', label: '导演跟进', icon: Workflow },
         { to: bookPath(novelId, '/stats'), label: '写作统计', icon: BarChart3, requiresNovel: true },
-        { to: '/hub', label: '创作中枢', icon: Brain },
-        { to: '/director', label: '自动导演', icon: Clapperboard },
-        { to: '/chapters', label: '章节执行', icon: BookOpenText }
+        { to: bookPath(novelId, '/hub'), label: '创作中枢', icon: Brain },
+        { to: bookPath(novelId, '/director'), label: '自动导演', icon: Clapperboard },
+        { to: bookPath(novelId, '/chapters'), label: '章节执行', icon: BookOpenText }
       ]
     },
     {
@@ -122,12 +126,10 @@ export function AppLayout(): React.JSX.Element {
         { to: '/book-analysis', label: '拆书', icon: Search },
         { to: '/genres', label: '流派管理', icon: Tags },
         { to: '/forge', label: '要素工坊', icon: Hammer },
-        { to: bookPath(novelId, '/'), label: '工作台（设定/世界/角色）', icon: PanelLeft, requiresNovel: true },
-               { to: '/anti-ai', label: '反 AI 规则', icon: ShieldCheck },
+        { to: novelId ? `/novels/${novelId}` : '/', label: '工作台（设定/世界/角色）', icon: PanelLeft, requiresNovel: true, exact: true },
+        { to: '/anti-ai', label: '反 AI 规则', icon: ShieldCheck },
         { to: '/base-characters', label: '基础角色库', icon: UsersRound },
         { to: '/agents-library', label: '智能体库', icon: Bot },
-      
-
         { to: '/titles', label: '标题工坊', icon: Type }
       ]
     },
@@ -177,7 +179,7 @@ export function AppLayout(): React.JSX.Element {
               AI 运行中{runningJobs.length > 1 ? `（${runningJobs.length}）` : ''} · {runningJobs[0].type === 'director' ? '自动导演' : runningJobs[0].type}
             </button>
             {jobsOpen && (
-              <div className="panel" style={{ position: 'absolute', right: 0, top: 34, width: 260, zIndex: 999, background: 'var(--bg-elevated)', padding: 12 }}>
+              <div className="panel" style={{ position: 'absolute', right: 0, top: 34, width: 260, zIndex: 'var(--z-dropdown)', background: 'var(--bg-elevated)', padding: 12 }}>
                 <div className="row justify-between mb-2">
                   <strong className="t-small">运行中任务</strong>
                   <button className="sm" onClick={() => navigate('/tasks')}>任务中心 →</button>
@@ -188,8 +190,8 @@ export function AppLayout(): React.JSX.Element {
                       <span>{j.type === 'director' ? '自动导演' : j.type} #{j.id}</span>
                       <span className="muted">{Math.round((j.progress ?? 0) * 100)}%</span>
                     </div>
-                    <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-input)', marginTop: 4 }}>
-                      <div style={{ height: '100%', borderRadius: 2, background: 'var(--accent)', width: `${Math.min(100, (j.progress ?? 0) * 100)}%`, transition: 'width 300ms' }} />
+                    <div className="progress" style={{ marginTop: 4 }}>
+                      <div style={{ width: `${Math.min(100, (j.progress ?? 0) * 100)}%` }} />
                     </div>
                   </div>
                 ))}
@@ -211,20 +213,15 @@ export function AppLayout(): React.JSX.Element {
           transition: 'width 150ms cubic-bezier(0.4, 0, 0.2, 1)'
         }}
       >
-        {/* 品牌 */}
+        {/* 品牌：应用名与版本由 titlebar 承载（v0.26.0 审查 P1-7 去三重重复），此行仅保留折叠开关 */}
         <div
           className="row"
           style={{
-            padding: '14px 16px',
+            padding: '8px 8px',
             borderBottom: '1px solid var(--border)',
-            justifyContent: 'space-between'
+            justifyContent: collapsed ? 'center' : 'flex-end'
           }}
         >
-          {!collapsed && (
-            <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden' }}>
-              AI 小说创作工作台
-            </div>
-          )}
           {collapsed && <PanelLeft size={18} style={{ margin: '0 auto' }} />}
           <button
             className="sm"
@@ -241,21 +238,21 @@ export function AppLayout(): React.JSX.Element {
           {navGroups.map((g) => (
             <div key={g.title} className="mb-2">
               {!collapsed && (
-                <div style={{ fontSize: 10, color: 'var(--text-faint)', padding: '6px 10px 4px', letterSpacing: 0.5 }}>
+                <div style={{ fontSize: 'var(--fs-11)', color: 'var(--text-faint)', padding: '6px 10px 4px', letterSpacing: 0.5 }}>
                   {g.title}
                 </div>
               )}
               {collapsed && <div style={{ height: 1, background: 'var(--border)', margin: '4px 12px' }} />}
               {g.items.map((item) => {
+                // v0.26.0（审查 P0-3）：active 判定重写——「小说列表」仅在根路径高亮；
+                // 工作台仅精确匹配书根；其余条目精确或子路径命中。移除 isPrimary 常亮强调（此前与 active 无法区分）。
                 const active =
                   item.to === '/'
-                    ? location.pathname === '/' || location.pathname.startsWith('/novels/')
-                    : item.to === '/settings'
-                      ? location.pathname === '/settings'
-                      : location.pathname === item.to
-                // P16 P1：书级项不再禁用——无书时点击跳列表并提示
+                    ? location.pathname === '/'
+                    : item.exact
+                      ? location.pathname === item.to
+                      : location.pathname === item.to || location.pathname.startsWith(item.to + '/')
                 const needsNovel = item.requiresNovel && !novelId
-                const isPrimary = item.to === '/'
                 const Icon = item.icon
                 return (
                   <button
@@ -278,9 +275,8 @@ export function AppLayout(): React.JSX.Element {
                       padding: collapsed ? '10px 0' : '8px 10px',
                       borderRadius: 8,
                       border: '1px solid transparent',
-                      background: active || isPrimary ? (active ? 'var(--accent-soft)' : 'color-mix(in srgb, var(--accent) 6%, transparent)') : 'transparent',
-                      color: active ? 'var(--text)' : isPrimary ? 'var(--accent-bright)' : 'var(--text-dim)',
-                      fontWeight: isPrimary ? 600 : 'inherit',
+                      background: active ? 'var(--accent-soft)' : 'transparent',
+                      color: active ? 'var(--text)' : 'var(--text-dim)',
                       fontSize: 13,
                       justifyContent: collapsed ? 'center' : 'flex-start',
                       marginBottom: 2
@@ -290,7 +286,7 @@ export function AppLayout(): React.JSX.Element {
                       <span
                         style={{
                           position: 'absolute',
-                          left: -8,
+                          left: 0,
                           top: '50%',
                           transform: 'translateY(-50%)',
                           height: 18,
@@ -310,7 +306,7 @@ export function AppLayout(): React.JSX.Element {
                       <span
                         style={{
                           marginLeft: collapsed ? 0 : 'auto',
-                          fontSize: 10,
+                          fontSize: 'var(--fs-11)',
                           padding: '1px 6px',
                           borderRadius: 10,
                           background: 'var(--danger-soft)',

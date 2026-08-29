@@ -81,7 +81,7 @@ export function HubChat({ novelId, height = '100%' }: HubChatProps): React.JSX.E
               {m.content}
             </div>
             {m.toolCalls && m.toolCalls.length > 0 && (
-              <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>工具：{m.toolCalls.join(' → ')}</div>
+              <div className="muted" style={{ fontSize: 'var(--fs-11)', marginTop: 2 }}>工具：{m.toolCalls.join(' → ')}</div>
             )}
           </div>
         ))}

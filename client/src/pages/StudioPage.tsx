@@ -344,7 +344,7 @@ export function StudioPage(): React.JSX.Element {
           {genBusy ? '生成中…' : 'AI 生成方案'}
         </button>
         <button className="sm" onClick={() => setShowMarket((v) => !v)} style={showMarket ? { borderColor: 'var(--accent)' } : undefined}>
-          🛒 方案市场{showMarket ? '（收起）' : ''}
+          方案市场{showMarket ? '（收起）' : ''}
         </button>
       </div>
 
@@ -382,7 +382,7 @@ export function StudioPage(): React.JSX.Element {
                     {/* P23（N7）：方案删除 */}
                     <button
                       className="sm"
-                      style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '0 6px', fontSize: 10 }}
+                      style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '2px 6px', fontSize: 'var(--fs-11)' }}
                       disabled={busy !== null}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -447,7 +447,7 @@ export function StudioPage(): React.JSX.Element {
                   </span>
                   <button
                     className="sm"
-                    style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '0 6px', fontSize: 10 }}
+                    style={{ color: 'var(--danger)', borderColor: 'var(--danger)', padding: '2px 6px', fontSize: 'var(--fs-11)' }}
                     // v0.17.0（审查 A9）：删除加 busy 门控 + try/catch（此前无禁用，可连点重复删除）
                     disabled={busy !== null}
                     onClick={() => {

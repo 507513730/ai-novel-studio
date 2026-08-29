@@ -4,6 +4,7 @@ import { novelApi, styleApi } from '../../api'
 import type { ChapterSummary, WorldData } from '../../types'
 import { BookSearchPanel } from './BookSearchPanel'
 import { ChapterListItem } from './ChapterListItem'
+import { Loading } from '../../components/Loading'
 import type { ResourceDetail, ResourceTabKey } from './types'
 
 // v0.25.0（审查 S1）：从 ChapterExecutionPage 拆出的左栏资源树。
@@ -135,7 +136,7 @@ export function ResourcePanel({
               onSelect={() => onSelectChapter(c.id)}
             />
           ))}
-          {loading && <p className="muted t-small">加载中…</p>}
+          {loading && <Loading label="章节加载中…" lines={3} />}
           {error !== undefined && error !== null && (
             <p className="muted" style={{ fontSize: 12, color: 'var(--danger)' }}>
               加载失败：{String(error)}

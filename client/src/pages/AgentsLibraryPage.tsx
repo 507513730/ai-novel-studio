@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, Plus, Pencil, Trash2, Sparkles, Power } from 'lucide-react'
 import { agentsApi, studioApi, apiFetch } from '../api'
@@ -222,7 +222,7 @@ export function AgentsLibraryPage(): React.JSX.Element {
               </div>
               <div className="mt-2">
                 <button className="sm" disabled={busy} onClick={() => void aiAssist(a.id)}>
-                  <Sparkles size={12} className="icon-gap" />AI 起草 body_md
+                  <Sparkles size={12} className="icon-gap" />AI 起草正文（Body）
                 </button>
               </div>
             </div>
@@ -251,6 +251,16 @@ function AgentEditor({ agent, onClose, onSaved }: { agent: AgentRow; onClose: ()
   const [showSys, setShowSys] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // v0.26.0（审查 A-3）：与 ConfirmDialog 同规范——Esc 关闭 + 共享遮罩/z-index token
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onCloseRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const save = async (): Promise<void> => {
     setBusy(true)
@@ -267,8 +277,8 @@ function AgentEditor({ agent, onClose, onSaved }: { agent: AgentRow; onClose: ()
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }} onClick={onClose}>
-      <div className="panel" style={{ width: 560, background: 'var(--bg-elevated)', maxHeight: '85vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-modal)' }} onClick={onClose}>
+      <div className="panel" style={{ width: 560, background: 'var(--bg-elevated)', maxHeight: '85vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`编辑：${agent.name}`}>
         <div className="row justify-between mb-3">
           <strong>编辑：{agent.name}</strong>
           <button className="sm" onClick={onClose}>✕</button>
@@ -277,12 +287,12 @@ function AgentEditor({ agent, onClose, onSaved }: { agent: AgentRow; onClose: ()
           <label className="t-small">职责描述（列表展示）</label>
           <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="一句话职责（≤80 字）" />
           <label className="t-small">Body（职责/标准/原则，方案运行时注入）</label>
-          <textarea style={{ width: '100%', minHeight: 220, fontSize: 12, fontFamily: 'monospace' }} value={body} onChange={(e) => setBody(e.target.value)} placeholder="## 核心职责&#10;1. ...&#10;&#10;## 质量标准&#10;- ..." />
+          <textarea style={{ width: '100%', minHeight: 220, fontSize: 12, fontFamily: 'var(--font-mono)' }} value={body} onChange={(e) => setBody(e.target.value)} placeholder="## 核心职责&#10;1. ...&#10;&#10;## 质量标准&#10;- ..." />
           <button className="sm" onClick={() => setShowSys((v) => !v)}>{showSys ? '收起' : '展开'}系统提示词（高级）</button>
           {showSys && (
-            <textarea style={{ width: '100%', minHeight: 120, fontSize: 12, fontFamily: 'monospace' }} value={sysPrompt} onChange={(e) => setSysPrompt(e.target.value)} />
+            <textarea style={{ width: '100%', minHeight: 120, fontSize: 12, fontFamily: 'var(--font-mono)' }} value={sysPrompt} onChange={(e) => setSysPrompt(e.target.value)} />
           )}
-          {error && <p className="muted t-small" style={{ color: 'var(--danger)' }}>{error}</p>}
+          {error && <p className="t-small" style={{ color: 'var(--danger)' }}>{error}</p>}
           <div className="row justify-end gap-2">
             <button className="sm" onClick={onClose}>取消</button>
             <button className="sm primary" disabled={busy} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</button>

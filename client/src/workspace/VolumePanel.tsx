@@ -251,10 +251,10 @@ export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element
                         <div className="muted t-small">{c.id}</div>
                         <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>{c.title}</div>
                         <div className="t-small" style={{ marginTop: 4 }}>
-                          <span className="badge" style={{ fontSize: 10 }}>
+                          <span className="badge">
                             {statusLabelOf(c.status)}
                           </span>
-                          <span className="muted" style={{ fontSize: 10, marginLeft: 6 }}>
+                          <span className="muted" style={{ fontSize: 'var(--fs-11)', marginLeft: 6 }}>
                             {c.wordCount ? `${c.wordCount} 字` : ''}
                           </span>
                         </div>

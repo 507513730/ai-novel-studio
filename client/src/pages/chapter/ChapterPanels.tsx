@@ -28,7 +28,7 @@ export function ProgressMatrix({ segments }: { segments: Array<[string, boolean]
             />
             <div
               style={{
-                fontSize: 9,
+                fontSize: 'var(--fs-11)',
                 color: done ? 'var(--ok)' : 'var(--text-faint)',
                 marginTop: 3,
                 textAlign: 'center',
@@ -305,7 +305,7 @@ export function EmptyStateGuide({
           ) : null}
         </div>
         <button className="primary" onClick={onGenerate} disabled={busy}>
-          ✍️ 生成正文
+          生成正文
         </button>
       </div>
     </div>
