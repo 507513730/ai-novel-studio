@@ -28,7 +28,7 @@ AI 导演式长篇小说生产系统的桌面版（Electron）。借鉴两个参
 | 测试 | ✅ | vitest 178/178、db-smoke 7/7、typecheck/lint 0 error、e2e R10 全绿（T1 10/10 T2 30/30 T3 6/6 T4 7/7） |
 | **当前主线** | 📚 | 真实写书（书 #25「帝路十章」）：卷 72 完成（18 章 47,112 字）+ 卷 73 完成（25 章 66,852 字），全书累计 43 章 ≈11.4 万字；剩卷 74-75 共 49 章待产（应用内执行，绑定方案「帝路十章」） |
 
-**版本记录**：最新 v0.24.4（非写书清单批 B：审核基线校准 + 写作统计/伏笔账本 + 快捷词 + 本地校对 + DOCX 导出 + 拖拽导入/跟随系统主题 + 网文要素工坊 + 演示书，D108/D109）；上一版 v0.24.3（写书实战纠错批 A：生产管线配置级错误熔断 ConfigError + job 全失败不再虚报 done，D106）——之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+**版本记录**：最新 v0.25.0（全仓库重构 R0-R9：业务域单一事实源 + 兼容层删除 + 架构守护 + 统一错误模型 + 文档架构，D111-D119）；上一版 v0.24.4（非写书清单批 B：审核基线校准 + 写作统计/伏笔账本 + 快捷词 + 本地校对 + DOCX 导出 + 拖拽导入/跟随系统主题 + 网文要素工坊 + 演示书，D108/D109）；上一版 v0.24.3（写书实战纠错批 A：生产管线配置级错误熔断 ConfigError + job 全失败不再虚报 done，D106）——之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 
 ## 1. 用户已锁定决策（不可再问）
 

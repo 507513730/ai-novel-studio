@@ -1,30 +1,41 @@
 # AI-Novel-Studio 发布说明
 
-> 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
-
 ## [Unreleased]
 
-### 重构：R9 兼容层删除 / 架构守护 / 文档架构 / 最终验收（2026-08-29，分支 codex/refactor-r0-r1，D119）
+（暂无）
 
-- 删除全部七个兼容入口（generate/context/llm/scheduler/director/production/jobQueue），调用方迁移至域模块——全仓不再存在双轨
-- 新增架构守护测试 6 例：routes 不导 pipeline、版本落库唯一入口、后处理不写章表、scheduler 不内联业务执行器等（源码扫描固化）
-- 文档架构：新增 docs/user（6）/ development（6）/ operations（3）/ reference（2）按受众组织，README 索引同批更新
-- 最终验收：62 文件 366 用例 + db-smoke + 双产物 + 打包态验收通过 + E2E 两轮（剩余失败为网关波动，已记录）
+## v0.25.0（2026-08-29）
 
-### 重构：R8 Electron 主进程模块化（2026-08-29，分支 codex/refactor-r0-r1，D118）
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 0.25.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-0.25.0-portable-x64.exe`
+
+### 全仓库重构 R0-R9（D111-D119）
+
+兼容重构十批全部落地：业务域单一事实源 + 兼容层删除 + 架构守护 + 文档按受众重组。外部 REST/数据/用户流程完全兼容。
+
+### 重构：R0 基线 + R1 章节生成域重放（D111）
+
+- 章节生成从 `generate.ts`（245 行单文件）拆为 `chapterGeneration/` 域：`state.ts`（抢占/失败恢复）、`persistence.ts`（正文/版本/字数/状态短事务）、`postProcess.ts`（主角名替换/约束登记/反 AI 重写）、`orchestrator.ts`（编排）；`generate.ts` 缩为兼容转发，公共签名与全部调用方零改动
+- **修复**：反 AI 重写成功后正文与最新版本快照分叉（R0-F1）——最终内容单事务落库，`chapter.content` 恒等于最新 `chapter_version.content`
+- **修复**：截断检测移至一切后处理副作用之前；章节 UPDATE 补 novel_id 守卫（R0-F2）；降级原因经 `GenerateResult.degradedReasons` 透出
+- 测试：新增契约测试 10 例（抢占互斥/ConfigError 恢复/版本一致/中止注释/空正文/守卫失配回滚/约束登记归因等），全量 46 文件 267 用例
+- 用户可见行为（REST/数据/操作流程）保持兼容；合并 main 与发版另行执行
+
+### 重构：R8 Electron 主进程模块化（D118）
 
 - 659 行 electron/main.ts 缩为 46 行纯装配，拆出 state/window/serverProcess/shutdown/ipc/theme/updater 七模块；export-backup 复制的 checkpoint 协议收拢 shutdown.requestCheckpoint
 - 新增安全契约测试 9 例（mock electron）：trusted sender 矩阵、get-server-token 不外泄、wipe-data 不可信拒绝、外链/导航白名单、webPreferences 三件套、safeStorage fail-closed、随机端口
 - 修复打包态验收脚本两个既有遗留：v072-pack-verify 就绪探测缺 X-App-Token（v0.25.0 起误报「server 未就绪」）、spawn 缺 AI_NOVEL_ALLOW_PLAINTEXT（v0.17.0 起 import-opencode 500）——修复后打包态等价验收通过（真实 SSE 生成+导出+鉴权）
 
-### 重构：R6 Context/LLM 域拆分（2026-08-29，分支 codex/refactor-r0-r1，D117）
+### 重构：R6 Context/LLM 域拆分（D117）
 
 - 771 行 `context.ts` 拆为 `context/{types,hash,budget,frozen,dynamic}`：冻结前缀顺序/hash 版本化/预算裁剪优先级/RAG 直塞语义由特征测试锁定（拆分前后行为一致）
 - 388 行 `llm.ts` 拆为 `llm/{types,errors,routes,candidates,request,caller}`：DeepSeek 参数语义（thinking 显式 disabled/温度无效/jsonMode 限制/reasoning_content 回传）、候选链 override 优先、统一记账、Key 不泄露由契约测试锁定
 - CJK 字数口径收拢 `shared/text.countCJKChars`；公共签名不变（context/llm 兼容转发）
 - 测试 +20（全量 59 文件 341 用例）
 
-### 重构：R5 统一错误模型 + 章节执行路由拆分（2026-08-29，分支 codex/refactor-r0-r1，D116）
+### 重构：R5 统一错误模型 + 章节执行路由拆分（D116）
 
 - 新增 `services/shared/errors.ts` 六类统一错误；`ConfigError` 改为继承 `ConfigurationError`（instanceof 兼容）
 - 错误中间件语义化映射：配置错误→400 消息透传（不再伪装 500）、取消→499、暂时性供应商→503、输出校验→502；既有 ZodError→400 / 约束→409 / 其余→500 保持
@@ -32,38 +43,30 @@
 - debt-fix 入队 SQL 收拢 `jobs/repository.enqueueDebtFixJob`；其余路由审查后保持（单域内聚）
 - 测试 +13（全量 57 文件 321 用例）
 
-### 重构：R4.2 导演域 + R4.3 整本生产域拆分（2026-08-29，分支 codex/refactor-r0-r1，D115）
+### 重构：R4.2 导演域 + R4.3 整本生产域拆分（D115）
 
 - 导演 826 行拆为 `director/{stages,checkpoint,artifacts,pipeline}` + `executors/`（9 阶段执行器注册表）：阶段元数据与产物判定各归唯一事实源，checkpoint 不再是完成依据；恢复跳过已完成模型调用（故障注入测试锁定）
 - 整本生产拆为 `production/{chapterPolicy,progress,pipeline}`：批次决策（产物驱动选章/范围校验/不达标重试/ConfigError 熔断）收拢 chapterPolicy；**solutionRunner 复制的抢占/落库/复位 SQL 收拢进章节生成域（R0-F5 关闭，token 身份贯通）**
 - 公共签名不变（runDirectorPipeline/runProductionPipeline），调用方零改动；测试 +15（全量 55 文件 308 用例）
 
-### 重构：R4.1 章节级 generation_token（2026-08-29，分支 codex/refactor-r0-r1，D114）
+### 重构：R4.1 章节级 generation_token（D114）
 
 - 迁移 22 新增 `chapter.generation_token`：`claimChapter` 抢占即颁发章节级生成身份，落库/失败恢复守卫升级为 `id+novel_id+generation_token+status='generating'`
 - 旧生成协程迟到落库 → stale claim 错误 + 事务回滚零数据变更；迟到失败处理静默跳过（不触碰新 claim）；重启恢复清空 token
 - 测试 +1 stale claim 故障注入（全量 51 文件 293 用例）；db-smoke schema version=22
 
-### 重构：R3 scheduler token 作用域化（2026-08-29，分支 codex/refactor-r0-r1，D113）
+### 重构：R3 scheduler token 作用域化（D113）
 
 - 五类 job 业务循环迁入 `jobs/executors.ts` 显式注册表；trace/进度收拢 `jobs/progress.ts`；`jobs/scheduler.ts` 只负责轮询/claim/watchdog/分发/运行锁；旧 `services/scheduler.ts` 缩为兼容转发
 - watchdog 置 failed 即失效当前 claim，迟到协程进度/收尾写入被守卫拒绝；stopScheduler 停止新 claim 且执行器在下一安全边界观察停止；启动恢复清 claim token
 - 测试 +7（全量 51 文件 292 用例）；打包门禁受构建环境会话 ACL 问题阻塞（D113），交付待环境恢复后重跑 dist
 
-### 重构：R2 job 域隔离（2026-08-29，分支 codex/refactor-r0-r1，D112）
+### 重构：R2 job 域隔离（D112）
 
 - job 抢占/收尾迁入 `services/jobs/` 域（repository/lifecycle/payload/types）：`claimNextJob()` 颁发唯一 claim token（迁移 21 新增 `job.claim_token`），所有运行态写入以 `id+token+status='running'` 守卫——迟到协程与取消/watchdog 终态覆盖被结构性拒绝
 - payload 域边界一次 Zod 强类型解析（`parseJobPayload`）：损坏 JSON/未知类型/字段不合规 → 语义化失败只影响该 job，不影响 scheduler 进程；`modelOverride` 穿过解析保留（换模型重试语义不变）
 - `jobQueue.ts` 缩为兼容转发（公共签名不变）；重试重排队/重启恢复清空 claim token；取消端点收拢 `cancelActiveJob`
 - 测试：新增 job 域契约 18 例（全量 49 文件 285 用例）；db-smoke schema version=21；REST/数据兼容
-
-### 重构：R0 基线 + R1 章节生成域重放（2026-08-29，分支 codex/refactor-r0-r1，D111）
-
-- 章节生成从 `generate.ts`（245 行单文件）拆为 `chapterGeneration/` 域：`state.ts`（抢占/失败恢复）、`persistence.ts`（正文/版本/字数/状态短事务）、`postProcess.ts`（主角名替换/约束登记/反 AI 重写）、`orchestrator.ts`（编排）；`generate.ts` 缩为兼容转发，公共签名与全部调用方零改动
-- **修复**：反 AI 重写成功后正文与最新版本快照分叉（R0-F1）——最终内容单事务落库，`chapter.content` 恒等于最新 `chapter_version.content`
-- **修复**：截断检测移至一切后处理副作用之前；章节 UPDATE 补 novel_id 守卫（R0-F2）；降级原因经 `GenerateResult.degradedReasons` 透出
-- 测试：新增契约测试 10 例（抢占互斥/ConfigError 恢复/版本一致/中止注释/空正文/守卫失配回滚/约束登记归因等），全量 46 文件 267 用例
-- 用户可见行为（REST/数据/操作流程）保持兼容；合并 main 与发版另行执行
 
 ### 依赖治理（2026-08-24，免发版，D110）
 
@@ -72,6 +75,22 @@
 - electron 43.3.0→43.4.1 关闭（#9）：锁定基线，待重大升级评估
 
 （暂无）
+
+
+### 修复
+- 生产管线状态推进补守卫（R0-F6 清零）：失败置状态不覆盖新一轮生成、审核写回仅从 written 推进
+- v072-pack-verify 打包态验收脚本两处既有遗留（就绪探测缺 X-App-Token / spawn 缺明文调试开关）
+- 生产回灌 await 缺失（unhandled rejection + ConfigError 熔断被吞）
+
+### 其他
+- 提交规范：标题与正文一律中文（AGENTS #60）
+- 开发默认 Shell：pwsh 7.6.5
+
+### 测试与验收
+- vitest 62 文件 366 用例（重构前 257 → 净增 109 条行为契约）
+- db-smoke 7 项（schema v22）；v072-pack-verify 打包态等价验收通过；E2E 两轮（网关波动项见 decision-log D119）
+
+---
 
 ## v0.24.4（2026-08-24）
 
