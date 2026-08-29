@@ -21,7 +21,7 @@ import { createPromptsRouter } from './routes/prompts'
 import { createSolutionsRouter } from './routes/solutions'                   
 import { createAssetsRouter } from './routes/assets'                         
 import { initPromptDb } from './prompts/promptAsset'
-import { startScheduler, stopScheduler } from './services/scheduler'
+import { startJobScheduler as startScheduler, stopJobScheduler as stopScheduler } from './services/jobs/scheduler'
 import { refreshAutoRate } from './services/currency'
 import { originGuard } from './services/security'
 

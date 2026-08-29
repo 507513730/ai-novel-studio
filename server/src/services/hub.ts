@@ -1,10 +1,11 @@
 import OpenAI from 'openai'
 import { DatabaseSync } from 'node:sqlite'
-import { callLlm, type LlmMessage } from './llm'
-import { getRouteConfig } from './llm'
-import { directorProgress } from './director'
-import { generateChapter } from './generate'
-import { enqueueDirectorJob } from './jobQueue'
+import { callLlm } from './llm/caller'
+import type { LlmMessage } from './llm/types'
+import { getRouteConfig } from './llm/routes'
+import { directorProgress } from './director/checkpoint'
+import { generateChapter } from './chapterGeneration/orchestrator'
+import { enqueueDirectorJob } from './jobs/repository'
 
 // ============================================================
 // Creative Hub（PLAN §7.5 / P2 简化版）

@@ -15,7 +15,10 @@ vi.mock('openai', () => ({
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { buildBody, buildCandidates, callLlm, getRouteConfig, setActiveModelOverride } from '../server/src/services/llm'
+import { buildBody } from '../server/src/services/llm/request'
+import { buildCandidates, setActiveModelOverride } from '../server/src/services/llm/candidates'
+import { callLlm } from '../server/src/services/llm/caller'
+import { getRouteConfig } from '../server/src/services/llm/routes'
 import type { LlmCallOptions, LlmMessage, RouteConfig } from '../server/src/services/llm'
 
 const KEY = 'sk-test-abc123'

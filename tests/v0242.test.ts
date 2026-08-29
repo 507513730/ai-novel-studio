@@ -8,7 +8,7 @@ import { seedIfEmpty } from '../server/src/db/seed'
 import { createChapterExecutionRouter } from '../server/src/routes/chapters'
 import { createSolutionsRouter } from '../server/src/routes/solutions'
 import { originGuard } from '../server/src/services/security'
-import { enqueueProductionJob } from '../server/src/services/jobQueue'
+import { enqueueProductionJob } from '../server/src/services/jobs/repository'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 5000 })

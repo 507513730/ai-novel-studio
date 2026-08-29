@@ -3,10 +3,10 @@ import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
 import { getWritingSettings, buildWritingRules, getGuidance, buildGuidanceBlock } from '../server/src/services/guidance'
-import { getChapterLocation } from '../server/src/services/context'
-import { buildFrozenContext } from '../server/src/services/context'
+import { getChapterLocation } from '../server/src/services/context/dynamic'
+import { buildFrozenContext } from '../server/src/services/context/frozen'
 import { estimateCost } from '../server/src/services/usage'
-import { enqueueDirectorJob } from '../server/src/services/jobQueue'
+import { enqueueDirectorJob } from '../server/src/services/jobs/repository'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 5000 })

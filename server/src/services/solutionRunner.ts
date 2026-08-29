@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { callLlmJson } from './jsonSafe'
 import { loadSolution, type SolutionStep } from './solutionAssets'
-import { buildChapterWriteContext } from './context'
+import { buildChapterWriteContext } from './context/dynamic'
 import { chapterPositionBlock } from './chapterRole'
 import { constraintsBlock, replaceProtagonistName } from './constraintEngine'
 import { claimChapter, failClaimedChapter } from './chapterGeneration/state'
@@ -456,7 +456,7 @@ export async function runProductionChapter(
         result = JSON.stringify({ issues: allIssues, verdict })
       } else if (prod.output === 'final') {
         // P30 修复：正文类产出走 callLlm（纯文本，不做 JSON 解析）——flash 输出纯文本被 JSON 校验误杀
-        const llm = await import('./llm')
+        const llm = await import('./llm/caller')
         const r = await withTimeout(
           (signal) =>
             llm.callLlm(db, 'extraction', {
@@ -473,7 +473,7 @@ export async function runProductionChapter(
         result = finalContent.slice(0, 500) + '…'
       } else {
         // draft / scene / dialogue：正文片段（收集合并）——P30 修复：纯文本输出不解析 JSON
-        const llm = await import('./llm')
+        const llm = await import('./llm/caller')
         const r = await withTimeout(
           (signal) =>
             llm.callLlm(db, 'extraction', {

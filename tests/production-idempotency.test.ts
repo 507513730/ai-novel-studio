@@ -7,13 +7,13 @@ const { generateChapterMock, callLlmJsonMock } = vi.hoisted(() => ({
   generateChapterMock: vi.fn(),
   callLlmJsonMock: vi.fn()
 }))
-vi.mock('../server/src/services/generate', () => ({ generateChapter: (...a: unknown[]) => generateChapterMock(...a) }))
+vi.mock('../server/src/services/chapterGeneration/orchestrator', () => ({ generateChapter: (...a: unknown[]) => generateChapterMock(...a) }))
 vi.mock('../server/src/services/jsonSafe', () => ({ callLlmJson: (...a: unknown[]) => callLlmJsonMock(...a) }))
 
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { ConfigError } from '../server/src/services/llm'
+import { ConfigError } from '../server/src/services/llm/errors'
 import { runProductionPipeline } from '../server/src/services/production/pipeline'
 
 function makeDb(): DatabaseSync {

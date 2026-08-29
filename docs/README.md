@@ -9,6 +9,33 @@
 | [getting-started.md](getting-started.md) | 快速上手：配置模型 → 建书 → 生成 → 方案生产（4 步） |
 | [AI-AGENT-ONBOARDING.md](AI-AGENT-ONBOARDING.md) | AI 协作者手册：工作流 / 验证门禁 / 实战教训 / 协作边界（新 agent 进场必读，v0.21.0 起） |
 
+### 用户文档（R9.1，面向创作者）
+
+| 文档 | 说明 |
+|---|---|
+| [user/getting-started.md](user/getting-started.md) | 首启：安装 → 供应商 → 零决策开写 |
+| [user/writing-workflow.md](user/writing-workflow.md) | 单章生产循环 / 编辑器能力 / 整本生产 |
+| [user/model-setup.md](user/model-setup.md) | 供应商 / 任务路由 / thinking / fallback |
+| [user/backup-restore.md](user/backup-restore.md) | 自动备份 / 导出 / 恢复 / 清除数据 |
+| [user/troubleshooting.md](user/troubleshooting.md) | 生成失败 / 卡生成中 / 服务失联排障 |
+| [user/export-and-update.md](user/export-and-update.md) | 导出格式 / 应用更新（安装版与便携版） |
+
+### 开发与运维（R9.1，面向协作者）
+
+| 文档 | 说明 |
+|---|---|
+| [development/repository-map.md](development/repository-map.md) | 业务域结构总览 |
+| [development/local-development.md](development/local-development.md) | 环境 / 命令 / 独立调试 |
+| [development/testing.md](development/testing.md) | 测试分层 / 约定 / 故障注入场景 |
+| [development/data-model.md](development/data-model.md) | 核心表 / 状态枚举 / 迁移纪律 |
+| [development/api-contracts.md](development/api-contracts.md) | 端点总览 / 鉴权 |
+| [development/error-model.md](development/error-model.md) | 统一错误 → HTTP 映射矩阵 |
+| [operations/packaging.md](operations/packaging.md) | 打包 / 打包态验收 / 平台矩阵 |
+| [operations/release-checklist.md](operations/release-checklist.md) | 发版检查单 |
+| [operations/ci.md](operations/ci.md) | CI 工作流 / 本地等效 |
+| [reference/calibration/README.md](reference/calibration/README.md) | 校准报告索引 |
+| [reference/decisions/README.md](reference/decisions/README.md) | 决策归档索引 |
+
 ## 🛠 操作（How-to）——具体任务怎么做
 
 | 文档 | 说明 |

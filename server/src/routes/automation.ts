@@ -1,9 +1,9 @@
 import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { directorProgress } from '../services/director'
+import { directorProgress } from '../services/director/checkpoint'
 import { hubChat } from '../services/hub'
-import { enqueueDirectorJob, enqueueProductionJob } from '../services/jobQueue'
+import { enqueueDirectorJob, enqueueProductionJob } from '../services/jobs/repository'
 import { enqueueDebtFixJob } from '../services/jobs/repository'
 import { cancelActiveJob } from '../services/jobs/lifecycle'
 

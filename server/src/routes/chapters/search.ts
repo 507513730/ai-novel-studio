@@ -1,7 +1,7 @@
 // 章节执行路由：B1 上下文预览（写作上下文可视化）+ v0.24.2（F2）书内全文检索
 import type { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
-import { buildChapterWriteContext } from '../../services/context'
+import { buildChapterWriteContext } from '../../services/context/dynamic'
 
 export function registerChapterSearchRoutes(router: Router, db: DatabaseSync): void {
   // ---------- B1 上下文预览（写作上下文可视化） ----------

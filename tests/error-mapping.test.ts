@@ -8,7 +8,7 @@ import type { Server } from 'node:http'
 import { ZodError, z } from 'zod'
 import { apiErrorMiddleware } from '../server/src/services/apiError'
 import { ConfigurationError, CancellationError, TransientProviderError, OutputValidationError } from '../server/src/services/shared/errors'
-import { ConfigError } from '../server/src/services/llm'
+import { ConfigError } from '../server/src/services/llm/errors'
 
 function makeApp(): express.Express {
   const app = express()

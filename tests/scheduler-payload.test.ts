@@ -4,7 +4,7 @@ import { describe, expect, it, afterEach } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { startScheduler, stopScheduler } from '../server/src/services/scheduler'
+import { startJobScheduler, stopJobScheduler } from '../server/src/services/jobs/scheduler'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 5000 })
@@ -14,7 +14,7 @@ function makeDb(): DatabaseSync {
 }
 
 afterEach(() => {
-  stopScheduler()
+  stopJobScheduler()
 })
 
 describe('scheduler 损坏 payload 防御（批次 A1）', () => {
@@ -26,7 +26,7 @@ describe('scheduler 损坏 payload 防御（批次 A1）', () => {
     const jobId = (db.prepare('SELECT id FROM job LIMIT 1').get() as { id: number }).id
 
     // 未处理 rejection 会让 vitest 直接报错（unhandled rejection 监听）
-    startScheduler(db, 60_000) // 启动即 tick 一次：claim → processJob → 损坏 payload 路径
+    startJobScheduler(db, 60_000) // 启动即 tick 一次：claim → processJob → 损坏 payload 路径
     await new Promise((r) => setTimeout(r, 50))
 
     const row = db.prepare('SELECT status, error FROM job WHERE id = ?').get(jobId) as {
@@ -43,7 +43,7 @@ describe('scheduler 损坏 payload 防御（批次 A1）', () => {
       "INSERT INTO job (type, status, progress, payload_json, result_json, error, created_at, updated_at) VALUES ('mystery-type', 'queued', 0, '{\"novelId\":1}', '{}', '', datetime('now'), datetime('now'))"
     ).run()
 
-    startScheduler(db, 60_000)
+    startJobScheduler(db, 60_000)
     await new Promise((r) => setTimeout(r, 50))
 
     const row = db.prepare('SELECT status, error FROM job LIMIT 1').get() as {

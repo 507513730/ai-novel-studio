@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { ConfigError } from '../server/src/services/llm'
+import { ConfigError } from '../server/src/services/llm/errors'
 import { selectPendingChapters, isGenerationSubstandard, isBatchFatalError } from '../server/src/services/production/chapterPolicy'
 
 function makeDb(): DatabaseSync {

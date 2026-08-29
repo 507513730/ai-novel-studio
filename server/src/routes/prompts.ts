@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { callLlm } from '../services/llm'
+import { callLlm } from '../services/llm/caller'
 import { invalidatePromptCache } from '../prompts/promptAsset'
 
 // P17-5A：提示词工作台端点（资产列表 / 更新 / 试跑）

@@ -1,7 +1,7 @@
 // 整本生产章节策略（重构计划 R4.3 / spec §3.4）：批次边界决策的唯一事实源——
 // 跳过已有产物（artifact 驱动）、普通失败继续、ConfigError 整批熔断、生成不达标判定。
 import { DatabaseSync } from 'node:sqlite'
-import { ConfigError } from '../llm'
+import { ConfigError } from '../llm/errors'
 
 export interface ChapterSelection {
   id: number

@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { callLlmJson } from '../services/jsonSafe'
-import { buildFrozenContext } from '../services/context'
+import { buildFrozenContext } from '../services/context/frozen'
 import { detectAntiAiHits, getBoundStyleRules, extractAntiAiWordsFromRules } from '../services/styleEngine'
 // v0.21.0（审查 M8 残）：统一 import JSON_FORMAT（此前本地副本与 prompts/index.ts 重复）
 import { JSON_FORMAT } from '../prompts'

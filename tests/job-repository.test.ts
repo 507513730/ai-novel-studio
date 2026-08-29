@@ -6,7 +6,7 @@ import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
 import { claimNextJob, updateClaimedJob, finishClaimedJob } from '../server/src/services/jobs/repository'
 import { resetStaleRunning } from '../server/src/services/jobs/lifecycle'
-import { enqueueDirectorJob } from '../server/src/services/jobQueue'
+import { enqueueDirectorJob } from '../server/src/services/jobs/repository'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 5000 })

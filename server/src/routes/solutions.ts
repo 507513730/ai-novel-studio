@@ -13,7 +13,7 @@ import {
   type SolutionStep
 } from '../services/solutionAssets'
 import { runSolutionById, summarizeRun } from '../services/solutionRunner'
-import { enqueueProductionJob, enqueueTypedJob } from '../services/jobQueue'
+import { enqueueProductionJob, enqueueTypedJob } from '../services/jobs/repository'
 import { parseAgentMd } from '../services/solutionAssets'
 
 // ============================================================

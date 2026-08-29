@@ -7,7 +7,7 @@
 // 本服务把 chapters.ts 的 /fix 路由核心抽为可复用函数（路由与 job 共用）
 
 import { DatabaseSync } from 'node:sqlite'
-import { buildChapterReviewContext, buildFixContext } from './context'
+import { buildChapterReviewContext, buildFixContext } from './context/dynamic'
 import { callLlmJson } from './jsonSafe'
 
 const PASS_SCORE = 75

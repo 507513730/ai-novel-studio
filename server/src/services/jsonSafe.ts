@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
-import { callLlm, type LlmCallOptions } from './llm'
+import { callLlm } from './llm/caller'
+import type { LlmCallOptions } from './llm/types'
 import { getGuidance, buildGuidanceBlock, getWritingSettings, buildWritingRules } from './guidance'
 import type { TaskType } from '../db/seed'
 

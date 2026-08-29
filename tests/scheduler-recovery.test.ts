@@ -5,7 +5,7 @@ import { describe, expect, it, afterEach, vi } from 'vitest'
 const { runDirectorPipelineMock } = vi.hoisted(() => ({
   runDirectorPipelineMock: vi.fn()
 }))
-vi.mock('../server/src/services/director', async (importOriginal) => {
+vi.mock('../server/src/services/director/pipeline', async (importOriginal) => {
   const orig = (await importOriginal()) as Record<string, unknown>
   return { ...orig, runDirectorPipeline: runDirectorPipelineMock }
 })
@@ -13,8 +13,8 @@ vi.mock('../server/src/services/director', async (importOriginal) => {
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { startScheduler, stopScheduler } from '../server/src/services/scheduler'
-import { enqueueDirectorJob } from '../server/src/services/jobQueue'
+import { startJobScheduler, stopJobScheduler } from '../server/src/services/jobs/scheduler'
+import { enqueueDirectorJob } from '../server/src/services/jobs/repository'
 import { finishClaimedJob, updateClaimedJob } from '../server/src/services/jobs/repository'
 
 function makeDb(): DatabaseSync {
@@ -35,7 +35,7 @@ function readJob(db: DatabaseSync, jobId: number): { status: string; error: stri
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 afterEach(() => {
-  stopScheduler()
+  stopJobScheduler()
   runDirectorPipelineMock.mockReset()
 })
 
@@ -52,7 +52,7 @@ describe('scheduler 恢复与故障注入（R3）', () => {
     runDirectorPipelineMock.mockImplementation(() => gate)
     const { jobId } = enqueueDirectorJob(db, novelId)
 
-    startScheduler(db, 40)
+    startJobScheduler(db, 40)
     await sleep(80)
     // job 已被 claim（running）；把 started_at/updated_at 回拨 31 分钟模拟挂死
     db.prepare(
@@ -87,7 +87,7 @@ describe('scheduler 恢复与故障注入（R3）', () => {
     // 模拟 kill：job 卡在 running 且持有已失效 token
     db.prepare("UPDATE job SET status = 'running', claim_token = 'dead-token', started_at = datetime('now') WHERE id = ?").run(jobId)
 
-    startScheduler(db, 60_000)
+    startJobScheduler(db, 60_000)
     await sleep(150)
 
     const job = readJob(db, jobId)
@@ -111,7 +111,7 @@ describe('scheduler 恢复与故障注入（R3）', () => {
     runDirectorPipelineMock.mockResolvedValueOnce(undefined)
     const { jobId } = enqueueDirectorJob(db, novelId)
 
-    startScheduler(db, 40)
+    startJobScheduler(db, 40)
     await sleep(80)
     // claim A 执行中回拨时间戳 → watchdog 回收
     db.prepare(

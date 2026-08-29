@@ -27,8 +27,8 @@ vi.mock('../server/src/services/solutionRunner', async (importOriginal) => {
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { startScheduler, stopScheduler } from '../server/src/services/scheduler'
-import { enqueueTypedJob } from '../server/src/services/jobQueue'
+import { startJobScheduler, stopJobScheduler } from '../server/src/services/jobs/scheduler'
+import { enqueueTypedJob } from '../server/src/services/jobs/repository'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 5000 })
@@ -53,7 +53,7 @@ function setupNovelWithChapters(db: DatabaseSync, goals: string[]): { novelId: n
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 afterEach(() => {
-  stopScheduler()
+  stopJobScheduler()
   refineOneMock.mockReset()
   runProductionChapterMock.mockReset()
 })
@@ -87,7 +87,7 @@ describe('refine-range job（批次 D2）', () => {
       from: chapterIds[0],
       to: chapterIds[1]
     })
-    startScheduler(db, 60_000)
+    startJobScheduler(db, 60_000)
     await sleep(80)
 
     const job = db.prepare('SELECT status, result_json FROM job WHERE id = ?').get(jobId) as {
@@ -117,7 +117,7 @@ describe('refine-range job（批次 D2）', () => {
       from: chapterIds[0],
       to: chapterIds[2]
     })
-    startScheduler(db, 50)
+    startJobScheduler(db, 50)
     // 等第一章执行中（job 已 running）后取消
     await sleep(60)
     db.prepare("UPDATE job SET status = 'cancelled' WHERE id = ?").run(jobId)
@@ -150,7 +150,7 @@ describe('solution-chapter job（批次 D1）', () => {
       chapterId: chapterIds[0],
       solutionId: 7
     })
-    startScheduler(db, 60_000)
+    startJobScheduler(db, 60_000)
     await sleep(80)
 
     const job = db.prepare('SELECT status, result_json FROM job WHERE id = ?').get(jobId) as {

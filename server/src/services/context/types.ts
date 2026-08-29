@@ -1,5 +1,5 @@
 // 上下文域共享类型（重构计划 R6.1 / spec §3.5）
-import type { LlmMessage } from '../llm'
+import type { LlmMessage } from '../llm/types'
 
 export interface CharacterLedgerEntry {
   id: number

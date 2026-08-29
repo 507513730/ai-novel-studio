@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### 重构：R9 兼容层删除 / 架构守护 / 文档架构 / 最终验收（2026-08-29，分支 codex/refactor-r0-r1，D119）
+
+- 删除全部七个兼容入口（generate/context/llm/scheduler/director/production/jobQueue），调用方迁移至域模块——全仓不再存在双轨
+- 新增架构守护测试 6 例：routes 不导 pipeline、版本落库唯一入口、后处理不写章表、scheduler 不内联业务执行器等（源码扫描固化）
+- 文档架构：新增 docs/user（6）/ development（6）/ operations（3）/ reference（2）按受众组织，README 索引同批更新
+- 最终验收：62 文件 366 用例 + db-smoke + 双产物 + 打包态验收通过 + E2E 两轮（剩余失败为网关波动，已记录）
+
 ### 重构：R8 Electron 主进程模块化（2026-08-29，分支 codex/refactor-r0-r1，D118）
 
 - 659 行 electron/main.ts 缩为 46 行纯装配，拆出 state/window/serverProcess/shutdown/ipc/theme/updater 七模块；export-backup 复制的 checkpoint 协议收拢 shutdown.requestCheckpoint

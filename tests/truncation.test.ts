@@ -2,14 +2,14 @@
 // 注入精简反馈重试（不解析必不完整的 JSON），成功后正常返回
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
-vi.mock('../server/src/services/llm', () => ({
+vi.mock('../server/src/services/llm/caller', () => ({
   callLlm: vi.fn()
 }))
 
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { callLlm } from '../server/src/services/llm'
+import { callLlm } from '../server/src/services/llm/caller'
 import { callLlmJson } from '../server/src/services/jsonSafe'
 
 const callLlmMock = vi.mocked(callLlm)

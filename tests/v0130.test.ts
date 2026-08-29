@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
 import { writeFactionStates } from '../server/src/services/ledger'
-import { buildChapterWriteContext } from '../server/src/services/context'
+import { buildChapterWriteContext } from '../server/src/services/context/dynamic'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 5000 })

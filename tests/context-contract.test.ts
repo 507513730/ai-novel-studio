@@ -7,11 +7,11 @@ import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
 import {
-  buildChapterWriteContext,
-  buildFrozenContext,
-  estimateTokens,
-  trimFromEnd
-} from '../server/src/services/context'
+  buildChapterWriteContext
+} from '../server/src/services/context/dynamic'
+import { buildFrozenContext } from '../server/src/services/context/frozen'
+import { estimateTokens } from '../server/src/services/context/hash'
+import { trimFromEnd } from '../server/src/services/context/budget'
 import { getSystemPrompt } from '../server/src/prompts/promptAsset'
 
 function makeDb(): DatabaseSync {

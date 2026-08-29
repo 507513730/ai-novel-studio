@@ -2,8 +2,8 @@
 import type { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { buildChapterWriteContext } from '../../services/context'
-import { generateChapter } from '../../services/generate'
+import { buildChapterWriteContext } from '../../services/context/dynamic'
+import { generateChapter } from '../../services/chapterGeneration/orchestrator'
 
 export function registerChapterGenerationRoutes(router: Router, db: DatabaseSync): void {
   router.post('/:novelId/chapters/:chapterId/generate', async (req, res) => {

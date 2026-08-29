@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { buildCandidates, setActiveModelOverride, getActiveModelOverride } from '../server/src/services/llm'
+import { buildCandidates, setActiveModelOverride, getActiveModelOverride } from '../server/src/services/llm/candidates'
 
 // P13 G1：换模型重试候选链
 describe('buildCandidates（P13 G1）', () => {

@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { callLlm, ConfigError } from '../server/src/services/llm'
-import { generateChapter } from '../server/src/services/generate'
-import { runProductionPipeline } from '../server/src/services/production'
+import { callLlm } from '../server/src/services/llm/caller'
+import { ConfigError } from '../server/src/services/llm/errors'
+import { generateChapter } from '../server/src/services/chapterGeneration/orchestrator'
+import { runProductionPipeline } from '../server/src/services/production/pipeline'
 
 // v0.24.3（写书实战纠错）：配置级错误熔断——历史 bug：key 解密失败时生产管线逐章空转
 // 标 failed（任务 28/29 共 27 章误标）而 job 仍 done。此组测试锁定：

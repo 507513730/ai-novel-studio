@@ -17,7 +17,7 @@ import {
   getGenreTemplate,
   getPrevVolumeHook
 } from '../services/planner'
-import { enqueueTypedJob } from '../services/jobQueue'
+import { enqueueTypedJob } from '../services/jobs/repository'
 
 export function createVolumesRouter(db: DatabaseSync): Router {
   const router = Router()

@@ -3,12 +3,12 @@
 // 批次边界决策（跳过产物/失败继续/熔断/不达标重试）统一走 chapterPolicy。
 // 执行面隔离：由 scheduler 的 production 执行器驱动，API 不得直接调用。
 import { DatabaseSync } from 'node:sqlite'
-import { generateChapter } from '../generate'
+import { generateChapter } from '../chapterGeneration/orchestrator'
 import { callLlmJson } from '../jsonSafe'
-import { ConfigError } from '../llm'
-import { buildChapterReviewContext, buildBackfillContext, buildFixContext, buildPatchContext, applyPatches } from '../context'
+import { ConfigError } from '../llm/errors'
+import { buildChapterReviewContext, buildBackfillContext, buildFixContext, buildPatchContext, applyPatches } from '../context/dynamic'
 import { writeCharacterStates } from '../ledger'
-import { isJobAborted } from '../jobQueue'
+import { isJobAborted } from '../jobs/repository'
 import { enqueueDebtFixJob } from '../jobs/repository'
 import { runProductionChapter } from '../solutionRunner'
 import { parseSolutionSteps } from '../solutionAssets'

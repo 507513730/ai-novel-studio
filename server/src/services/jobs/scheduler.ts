@@ -1,8 +1,8 @@
 // job 调度器（重构计划 R3 / spec §3.2）：只负责轮询、claim、watchdog、执行器调用与运行锁。
 // 五类任务的业务循环全部在 executors.ts 注册表；本文件不含任何业务分支。
 import type { DatabaseSync } from 'node:sqlite'
-import { setActiveModelOverride } from '../llm'
-import { isJobCancelled, isJobAborted } from '../jobQueue'
+import { setActiveModelOverride } from '../llm/candidates'
+import { isJobCancelled, isJobAborted } from './repository'
 import { claimNextJob, updateClaimedJob, finishClaimedJob } from './repository'
 import { resetStaleRunning } from './lifecycle'
 import { parseJobPayload, JobPayloadError } from './payload'

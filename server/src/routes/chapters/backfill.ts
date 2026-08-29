@@ -2,7 +2,7 @@
 import type { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { buildBackfillContext } from '../../services/context'
+import { buildBackfillContext } from '../../services/context/dynamic'
 import { callLlmJson } from '../../services/jsonSafe'
 import { writeCharacterStates, writeFactionStates } from '../../services/ledger'
 import { updateSmartContext } from '../../services/smartContext'

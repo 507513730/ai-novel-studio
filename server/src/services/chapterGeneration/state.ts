@@ -3,7 +3,7 @@
 // 新一轮抢占覆盖 token 后，旧协程的失败处理被守卫拒绝（不得触碰新 claim 的数据）。
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { ConfigError } from '../llm'
+import { ConfigError } from '../llm/errors'
 import type { ClaimedChapter } from './types'
 
 export function claimChapter(db: DatabaseSync, novelId: number, chapterId: number): ClaimedChapter {

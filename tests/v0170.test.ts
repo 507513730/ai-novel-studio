@@ -5,7 +5,7 @@ import type { Server } from 'node:http'
 import express from 'express'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { startScheduler } from '../server/src/services/scheduler'
+import { startJobScheduler } from '../server/src/services/jobs/scheduler'
 import { createAgentAdminRouter } from '../server/src/routes/agents'
 import { createSettingsRouter } from '../server/src/routes/settings'
 import { createNovelsRouter } from '../server/src/routes/novels'
@@ -45,11 +45,11 @@ async function withServer(app: express.Express, fn: (base: string) => Promise<vo
 const PREFIX = 'v0.17.0 审查修复'
 
 describe(`${PREFIX} · H3 重启重置章节 generating`, () => {
-  it('startScheduler 将遗留 generating 章节重置为 planned', () => {
+  it('startJobScheduler 将遗留 generating 章节重置为 planned', () => {
     const db = makeDb()
     db.prepare("INSERT INTO novel (id, title, inspiration, status) VALUES (1, '书', '灵感', 'planned')").run()
     db.prepare("INSERT INTO chapter (novel_id, title, status) VALUES (1, '第一章', 'generating')").run()
-    startScheduler(db, 60_000) // 长间隔——只触发启动重置，不干扰
+    startJobScheduler(db, 60_000) // 长间隔——只触发启动重置，不干扰
     const st = db.prepare("SELECT status FROM chapter WHERE novel_id = 1").get() as { status: string }
     expect(st.status).toBe('planned')
     db.close()

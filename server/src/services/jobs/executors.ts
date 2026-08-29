@@ -2,8 +2,9 @@
 // 每个执行器只负责自己的业务循环与收尾（done / 业务性 failed / cancelled）；
 // 意外异常逃逸由 jobs/scheduler 的统一兜底转为 failed。未知类型在分发层立即失败。
 import type { DatabaseSync } from 'node:sqlite'
-import { runDirectorPipeline } from '../director'
-import { runProductionPipeline, type ProductionProgress } from '../production'
+import { runDirectorPipeline } from '../director/pipeline'
+import { runProductionPipeline } from '../production/pipeline'
+import type { ProductionProgress } from '../production/progress'
 import { fixAllDebts } from '../debtFix'
 import { refineOne } from '../planner'
 import { runProductionChapter } from '../solutionRunner'

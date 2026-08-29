@@ -753,3 +753,11 @@
 - **复核结论（R8 清单）**：f404bdb 全请求 X-App-Token + sender 校验在位；52fca79 升级前 db 快照在位（migrate.ts snapshotBeforeMigration，迁移批次外不触碰用户库）；00dcbc1 三平台构建矩阵在位（electron-builder 配置未动，Windows NSIS+portable 本批验证）。
 - **打包态验收修复（两个既有遗留，非本重构引入）**：其一，v072-pack-verify 就绪探测缺 X-App-Token——v0.25.0（f404bdb）全请求强制 token 后 403 循环误报「server 未就绪」；其二，spawn 环境缺 AI_NOVEL_ALLOW_PLAINTEXT=1——v0.17.0（M2）fail-closed 后 import-opencode 存 key 被 500（release.mjs 一直带此 env，独立运行未带）。修复后打包态等价验收全部通过（真实网关 SSE 生成 483 字 + 导出 TXT + 鉴权矩阵）。
 - **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 61 文件 360 用例（+9 安全契约）/ 双产物 16:34 / pack-verify PASS。
+
+### D119 · 2026-08-29 · R9 兼容层删除 / 架构守护 / 文档架构 / 最终验收（分支 codex/refactor-r0-r1）
+
+- **兼容层删除（R9.2）**：七个兼容入口全部删除（services/generate、context、llm、scheduler、director、production、jobQueue.ts），调用方逐个迁移至域模块；jobQueue 的 isJobCancelled/isJobAborted 读助手迁入 jobs/repository.ts。全仓 git grep 复核无残留引用；enqueueDirectorJob 恢复原三参签名（与既有调用点一致，最小扰动）。
+- **架构守护测试**（tests/architecture-guard.test.ts，6 例，源码扫描）：兼容入口不复存在；routes 不导入 director/production pipeline 与 scheduler；生产域不写版本快照、不做章节抢占；后处理不写 chapter；scheduler 不内联五类业务执行器；chapter_version INSERT 仅允许章节生成域 persistence 与版本路由两处。
+- **文档架构（R9.1，按 spec §6 按需落地）**：docs/user/（首启/写作/模型/备份/排障/导出更新 6 篇）、docs/development/（仓库地图/本地开发/测试/数据模型/API 契约/错误模型 6 篇）、docs/operations/（打包/发版检查单/CI 3 篇）、docs/reference/（校准索引/决策归档索引 2 篇）；docs/README.md 索引同批更新；权威治理入口保持原路径不动。
+- **最终验收（R9.3）**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 62 文件 366 用例 / db-smoke 7 项（schema v22）/ build / dist 双产物 / v072-pack-verify 通过（真实网关 SSE + 导出 + 鉴权）/ e2e round 两轮（R1：T2 因网关超时部分失败；R2：T1 10/10、T2 9/14、T3 6/6、T4 全过、T5 11/13——失败项为网关在不同调用上轮替超时，属供应商侧波动；T1/T3/T4 两轮全绿，T2/T5 主链通过）。kill/restart 幂等由 scheduler-recovery（看门狗回收/重启恢复/迟到协程）与 chapter-generation（stale claim）具名测试覆盖。
+- **完成定义对照（计划 §5）**：R0-R9 均有独立提交与门禁；核心域单一事实源；大文件仅剩装配/兼容职责并已删除；REST/数据/流程兼容；架构守护固化边界；文档按受众组织。残余：e2e 网关波动项（环境侧）、R0-F6（production 无守卫置状态，属域内一致性问题，保留至下轮功能批）、发布/tag 需用户单独授权。

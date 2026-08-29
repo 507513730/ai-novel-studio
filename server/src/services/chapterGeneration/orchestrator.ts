@@ -1,8 +1,11 @@
 // 章节生成编排域（spec §3.1）：只协调上下文、LLM、截断检测、后处理与持久化，
 // 不直接写 chapter / chapter_version（状态走 state.ts，落库走 persistence.ts）。
 import { DatabaseSync } from 'node:sqlite'
-import { getRouteConfig, callLlm, ConfigError } from '../llm'
-import { buildChapterWriteContext, estimateTokens } from '../context'
+import { getRouteConfig } from '../llm/routes'
+import { callLlm } from '../llm/caller'
+import { ConfigError } from '../llm/errors'
+import { buildChapterWriteContext } from '../context/dynamic'
+import { estimateTokens } from '../context/hash'
 import { recordUsage } from '../usage'
 import { runTripleReview } from '../tripleReview'
 import { claimChapter, failClaimedChapter } from './state'

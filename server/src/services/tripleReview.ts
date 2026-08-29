@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { callLlmJson } from './jsonSafe'
-import { buildFrozenContext } from './context'
+import { buildFrozenContext } from './context/frozen'
 
 // ============================================================
 // P2.3 轻量三方会审（审查优化 #1，前置到 P3）

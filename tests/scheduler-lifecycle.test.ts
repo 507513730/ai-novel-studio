@@ -1,16 +1,16 @@
 // 重构计划 R3：scheduler 生命周期契约——取消终态不被 done 覆盖、全部失败不虚报 done、
-// 意外异常逃逸兜底 failed 且进程存活、stopScheduler 后不再产生新 claim。
+// 意外异常逃逸兜底 failed 且进程存活、stopJobScheduler 后不再产生新 claim。
 import { describe, expect, it, afterEach, vi } from 'vitest'
 
 const { runDirectorPipelineMock, runProductionPipelineMock } = vi.hoisted(() => ({
   runDirectorPipelineMock: vi.fn(),
   runProductionPipelineMock: vi.fn()
 }))
-vi.mock('../server/src/services/director', async (importOriginal) => {
+vi.mock('../server/src/services/director/pipeline', async (importOriginal) => {
   const orig = (await importOriginal()) as Record<string, unknown>
   return { ...orig, runDirectorPipeline: runDirectorPipelineMock }
 })
-vi.mock('../server/src/services/production', async (importOriginal) => {
+vi.mock('../server/src/services/production/pipeline', async (importOriginal) => {
   const orig = (await importOriginal()) as Record<string, unknown>
   return { ...orig, runProductionPipeline: runProductionPipelineMock }
 })
@@ -18,8 +18,8 @@ vi.mock('../server/src/services/production', async (importOriginal) => {
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
 import { seedIfEmpty } from '../server/src/db/seed'
-import { startScheduler, stopScheduler } from '../server/src/services/scheduler'
-import { enqueueDirectorJob, enqueueProductionJob, enqueueTypedJob } from '../server/src/services/jobQueue'
+import { startJobScheduler, stopJobScheduler } from '../server/src/services/jobs/scheduler'
+import { enqueueDirectorJob, enqueueProductionJob, enqueueTypedJob } from '../server/src/services/jobs/repository'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, timeout: 5000 })
@@ -41,7 +41,7 @@ function readJob(db: DatabaseSync, jobId: number): { status: string; error: stri
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 afterEach(() => {
-  stopScheduler()
+  stopJobScheduler()
   runDirectorPipelineMock.mockReset()
   runProductionPipelineMock.mockReset()
 })
@@ -56,7 +56,7 @@ describe('scheduler 生命周期（R3）', () => {
     })
     const { jobId } = enqueueDirectorJob(db, novelId)
 
-    startScheduler(db, 60_000)
+    startJobScheduler(db, 60_000)
     await sleep(60)
     db.prepare("UPDATE job SET status = 'cancelled' WHERE id = ?").run(jobId)
     await sleep(250)
@@ -71,7 +71,7 @@ describe('scheduler 生命周期（R3）', () => {
     runProductionPipelineMock.mockResolvedValue({ total: 3, done: 0, failed: 3, qualityDebts: 0 })
     const { jobId } = enqueueProductionJob(db, novelId)
 
-    startScheduler(db, 60_000)
+    startJobScheduler(db, 60_000)
     await sleep(120)
 
     const job = readJob(db, jobId)
@@ -89,7 +89,7 @@ describe('scheduler 生命周期（R3）', () => {
     const second = enqueueDirectorJob(db, novelId + 1000)
     if (!('jobId' in first) || !('jobId' in second)) throw new Error('enqueue conflict unexpectedly')
 
-    startScheduler(db, 40)
+    startJobScheduler(db, 40)
     await sleep(400)
 
     expect(readJob(db, first.jobId).status).toBe('failed')
@@ -98,15 +98,15 @@ describe('scheduler 生命周期（R3）', () => {
     db.close()
   })
 
-  it('stopScheduler 后不再产生新 claim（queued 任务保持排队）', async () => {
+  it('stopJobScheduler 后不再产生新 claim（queued 任务保持排队）', async () => {
     const db = makeDb()
     const novelId = seedNovel(db)
     runDirectorPipelineMock.mockResolvedValue(undefined)
     const { jobId } = enqueueDirectorJob(db, novelId)
 
-    startScheduler(db, 60_000)
+    startJobScheduler(db, 60_000)
     await sleep(100)
-    stopScheduler()
+    stopJobScheduler()
 
     const later = enqueueTypedJob(db, 'refine-range', { novelId, from: 0, to: 0 })
     expect('jobId' in later).toBe(true)
@@ -114,7 +114,7 @@ describe('scheduler 生命周期（R3）', () => {
     expect(readJob(db, later.jobId as number).status).toBe('queued')
 
     // 重启后恢复消费
-    startScheduler(db, 60_000)
+    startJobScheduler(db, 60_000)
     await sleep(150)
     expect(readJob(db, later.jobId as number).status).toBe('done')
     expect(readJob(db, jobId).status).toBe('done')

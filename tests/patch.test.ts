@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyPatches } from '../server/src/services/context'
+import { applyPatches } from '../server/src/services/context/dynamic'
 
 describe('applyPatches（P2.1 局部补丁）', () => {
   const content = '他推开门，走进昏暗的房间。桌子上的灯闪烁了一下。他深吸一口气，开始调查。'

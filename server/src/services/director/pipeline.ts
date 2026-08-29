@@ -2,7 +2,7 @@
 // 产物驱动幂等跳过、重试、supervised 暂停与 done 收尾。
 // 执行面隔离：由 scheduler 的 director 执行器驱动（AGENTS #23/#25），API 不得直接调用。
 import { DatabaseSync } from 'node:sqlite'
-import { isJobCancelled, isJobAborted } from '../jobQueue'
+import { isJobCancelled, isJobAborted } from '../jobs/repository'
 import { STAGE_LABELS, STAGE_ORDER } from './stages'
 import { loadDirectorTask, saveDirectorTask } from './checkpoint'
 import { isStageDone } from './artifacts'
