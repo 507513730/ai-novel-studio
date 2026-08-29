@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
-import { Annotation, type AnnotationType } from '@codemirror/state'
-import { novelApi, generateChapterSse, studioApi, assetsApi, authHeaders, waitForJob, apiFetch } from '../api'
+import { novelApi, studioApi, assetsApi, authHeaders, waitForJob, apiFetch } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { onShortcut } from '../utils/shortcuts'
 import type { VersionDiffInfo } from '../types'
@@ -11,13 +10,12 @@ import { SelectionToolbar } from '../editor/SelectionToolbar'
 import { HubChat } from '../components/HubChat'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
-import { estimateCost, estimateTokens, fmtCost } from '../utils/costEstimate'
 // v0.23.1（批次 B6）：主角名提取统一 utils（此前双实现且正则漂移）
 import { extractProtagonistName } from '../utils/protagonist'
 // v0.25.0（审查 S1）：UI 面板全部分拆至 ./chapter/——
 // 本文件只保留章节生产链路的状态与动作编排（生成/审核/修复/回灌/版本/方案）
+// R7：编辑会话/正文加载/生成控制三块异步编排抽至 ./chapter/hooks/
 import {
-  countCjk,
   type ChapterVersion,
   type CtxSection,
   type MemoryData,
@@ -39,9 +37,9 @@ import {
 } from './chapter/ChapterPanels'
 import { MemoryPanel, ReviewResultPanel } from './chapter/ReviewPanel'
 import { VersionHistoryPanel, type VersionActions } from './chapter/VersionHistoryPanel'
-
-// v0.19.0：AI 写入标记（字数分离：区分 AI 插入与人工输入）
-const aiWrite = Annotation.define<boolean>()
+import { useEditorSession } from './chapter/hooks/useEditorSession'
+import { useChapterLoader } from './chapter/hooks/useChapterLoader'
+import { useGenerationController } from './chapter/hooks/useGenerationController'
 
 export function ChapterExecutionPage(): React.JSX.Element {
   const { novelId } = useParams()
@@ -52,31 +50,22 @@ export function ChapterExecutionPage(): React.JSX.Element {
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null)
   // v0.22.0（审查 ALOW）：themed confirm 统一
   const [confirmFn, confirmDialog] = useConfirm()
-// v0.21.0（审查 N2）：当前章节 ref（续写响应校验用——防切章后旧章建议串入）
-const selectedChapterRef = useRef<number | null>(null)
-  const [content, setContent] = useState('')
-  const [streaming, setStreaming] = useState(false)
-  const [contentLoading, setContentLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  // v0.21.0（审查 N2）：当前章节 ref（续写响应校验用——防切章后旧章建议串入）
+  const selectedChapterRef = useRef<number | null>(null)
   const [actionBusy, setActionBusy] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
-  // P12 C2：生成中实时估算显示
-  const [streamStat, setStreamStat] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [reviewResult, setReviewResult] = useState<Record<string, unknown> | null>(null)
   const [backfillResult, setBackfillResult] = useState<Record<string, unknown> | null>(null)
   const [showPending, setShowPending] = useState(false)
   const [pending, setPending] = useState<PendingData | null>(null)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
-  const abortRef = useRef<AbortController | null>(null)
-  // P9 A1：正文加载/保存防护
+  // R7：加载器/生成器/会话三方的协调管道（页面创建，ref 语义跨渲染稳定）
   const contentLoadingRef = useRef(false)
   const loadedChapterRef = useRef<number | null>(null)
   const savedContentRef = useRef('')
-  const detailSeqRef = useRef(0)
   const dirtyRef = useRef(false)
   const streamingRef = useRef(false)
-  const generateBusyRef = useRef(false)
   // v0.17.0（审查 A2）：withBusy 用 ref 做 TOCTOU 守卫（state 更新前双击会双跑）
   const actionBusyRef = useRef<string | null>(null)
   // v0.17.0（审查 A5）：快捷键闭包缓存——effect 固定注册，回调始终取最新版函数
@@ -94,11 +83,6 @@ const selectedChapterRef = useRef<number | null>(null)
   } | null>(null)
   // P27 0b：应用内输入对话框（替代 window.prompt）
   const { prompt: askChapterTitle, element: chapterPromptElement } = usePrompt()
-  // P20（U6）：流式 rAF 合并缓冲
-  const pendingDeltaRef = useRef('')
-  const rAFRef = useRef<number | null>(null)
-  // 批1-#3（v0.7.2）：内容已由 onDone/onAborted/onError 落定的标记——落定后不再 flush rAF 缓冲（防尾段重复追加）
-  const contentSettledRef = useRef(false)
   // P19 ④：单次生成引导输入（生成后保留，供参考）
   const [guidanceDraft, setGuidanceDraft] = useState('')
   // P12 A3：章节进度矩阵信号（跨渲染记录，不新增请求）
@@ -106,16 +90,10 @@ const selectedChapterRef = useRef<number | null>(null)
   const backfillDoneRef = useRef(false)
   const confirmDoneRef = useRef(false)
   const snapshotDoneRef = useRef(false)
-  // P20（U5）：字数统计 memo（避免每次击键重渲染时 O(n) 扫描）
-  const hanCount = useMemo(() => (content.match(/[\u4e00-\u9fff]/g) ?? []).length, [content])
   // P27 1-6：正文自动保存节流
   const [focusMode, setFocusMode] = useState(false)
   // v0.24.2（F1）：阅读/复盘视图模式
   const [viewMode, setViewMode] = useState<'edit' | 'read'>('edit')
-  // A1：选区/光标状态（ref 缓存防 onUpdate 无限重渲染）
-  const [selectionInfo, setSelectionInfo] = useState<{ text: string; cursor: number }>({ text: '', cursor: -1 })
-  const selectionRef = useRef({ text: '', cursor: -1 })
-  // A2：标题内联编辑态已随 ChapterToolbar 拆出（工具条自持 editingTitle/titleDraft）
   // A3：版本历史
   const [versions, setVersions] = useState<ChapterVersion[] | null>(null)
   const [showVersions, setShowVersions] = useState(false)
@@ -127,106 +105,104 @@ const selectedChapterRef = useRef<number | null>(null)
   // D1：资源详情浮层（左栏资源树与版本「查看」共用；树本身的状态随 ResourcePanel 拆出）
   const [resourceDetail, setResourceDetail] = useState<ResourceDetail | null>(null)
 
-  const updateSelectionInfo = (): void => {
-    const view = editorRef.current?.view
-    if (!view) return
-    const { from, to } = view.state.selection.main
-    const text = view.state.doc.sliceString(from, to)
-    const prev = selectionRef.current
-    if (prev.text !== text || prev.cursor !== from) {
-      selectionRef.current = { text, cursor: from }
-      setSelectionInfo({ text, cursor: from })
-    }
+  // 非静默结果提示（保存/生成/动作完成；2s 自动清除）
+  const notify = (msg: string): void => {
+    setActionMsg(msg)
+    setTimeout(() => setActionMsg(null), 2000)
   }
 
-  // A1：应用选区替换（AI 改写——v0.19.0 标记来源计入 AI 字数）
-  const applySelection = (replacement: string): void => {
-    const view = editorRef.current?.view
-    if (!view) return
-    const { from, to } = view.state.selection.main
-    if (to > from) {
-      view.dispatch({
-        changes: { from, to, insert: replacement },
-        annotations: aiWrite.of(true)
-      })
-      view.dispatch({ selection: { anchor: from + replacement.length } })
-    }
-    const cjk = countCjk(replacement)
-    if (cjk > 0) {
-      aiDeltaRef.current += cjk
-      setWordStats((s) => ({ ...s, ai: s.ai + cjk }))
-    }
-    setContent(view.state.doc.toString())
-    updateSelectionInfo()
+  const invalidate = async (): Promise<void> => {
+    await queryClient.invalidateQueries({ queryKey: ['chapters', id] })
   }
 
-  // A1：在指定位置插入（AI 插入——v0.19.0 标记来源计入 AI 字数）
-  const insertAt = (text: string, pos: number): void => {
-    const view = editorRef.current?.view
-    if (!view) return
-    const insertPos = Math.min(pos, view.state.doc.length)
-    view.dispatch({
-      changes: { from: insertPos, insert: text },
-      selection: { anchor: insertPos + text.length },
-      annotations: aiWrite.of(true)
-    })
-    const cjk = countCjk(text)
-    if (cjk > 0) {
-      aiDeltaRef.current += cjk
-      setWordStats((s) => ({ ...s, ai: s.ai + cjk }))
-    }
-    setContent(view.state.doc.toString())
-    updateSelectionInfo()
+  // R7：编辑会话（正文状态/保存/空内容保护/字数分离/选区与 AI 插入）
+  const session = useEditorSession({
+    novelId: id,
+    selectedChapter,
+    editorRef,
+    streamingRef,
+    contentLoadingRef,
+    loadedChapterRef,
+    savedContentRef,
+    dirtyRef,
+    invalidate,
+    toast,
+    notify,
+    onActionError: setActionError
+  })
+  const {
+    content,
+    setContent,
+    saving,
+    wordStats,
+    setWordStats,
+    aiDeltaRef,
+    humanDeltaRef,
+    selectionInfo,
+    updateSelectionInfo,
+    applySelection,
+    insertAt,
+    insertAi,
+    trackHumanWords,
+    saveContent,
+    hanCount
+  } = session
+
+  // R7：正文加载（详情端点按需 + 竞态序号丢弃过期响应）
+  const { contentLoading } = useChapterLoader({
+    novelId: id,
+    selectedChapter,
+    setContent,
+    savedContentRef,
+    dirtyRef,
+    loadedChapterRef,
+    contentLoadingRef,
+    resetSessionBits: () => {
+      // v0.19.0：切换章节重置会话字数统计与续写建议；v0.24.2（F3）：版本 diff
+      aiDeltaRef.current = 0
+      humanDeltaRef.current = 0
+      setWordStats({ ai: 0, human: 0 })
+      setSuggestion(null)
+      setVersionDiff(null)
+    },
+    onSwitchError: setActionError
+  })
+
+  // B1：生成时带 include（勾选过滤；生成 hook 依赖此闭包，须先于其声明）
+  const buildInclude = (): string[] | undefined => {
+    if (!ctxToggles) return undefined
+    const enabled = Object.entries(ctxToggles)
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+    return enabled.length > 0 ? enabled : undefined
   }
 
-  // ============ v0.19.0：字数分离（人类/AI）+ 光标续写 ============
-  // 会话增量（ref 累计，保存时上报后清零）；总字数 = 服务端累计 + 会话增量
-  const aiDeltaRef = useRef(0)
-  const humanDeltaRef = useRef(0)
-  const [wordStats, setWordStats] = useState<{ ai: number; human: number }>({ ai: 0, human: 0 })
+  // R7：生成控制（SSE 累积/中止兜底/成本确认）
+  const { streaming, streamStat, generate, cancelGenerate } = useGenerationController({
+    novelId: id,
+    selectedChapter,
+    editorRef,
+    content,
+    savedContentRef,
+    dirtyRef,
+    streamingRef,
+    setContent,
+    confirmFn,
+    guidanceDraft,
+    buildInclude,
+    invalidate,
+    onActionError: setActionError,
+    onGenerated: notify
+  })
 
-  /** AI 写入（标记来源 + 累计 AI 字数）——续写插入/选区工具共用 */
-  const insertAi = (text: string, pos: number): void => {
-    const view = editorRef.current?.view
-    if (!view || !text) return
-    const insertPos = Math.min(pos, view.state.doc.length)
-    const cjk = countCjk(text)
-    view.dispatch({
-      changes: { from: insertPos, insert: text },
-      selection: { anchor: insertPos + text.length },
-      annotations: aiWrite.of(true)
-    })
-    if (cjk > 0) {
-      aiDeltaRef.current += cjk
-      setWordStats((s) => ({ ...s, ai: s.ai + cjk }))
-    }
-    setContent(view.state.doc.toString())
-    updateSelectionInfo()
-  }
-
-  /** 人工输入/粘贴统计（CodeMirror onUpdate；流式生成期间跳过——AI 字数已在 onDelta 累计） */
-  const trackHumanWords = (update: {
-    docChanged: boolean
-    transactions: Array<{ annotation: (a: AnnotationType<boolean>) => boolean | undefined }>
-    changes: { inserted?: string }
-  }): void => {
-    if (!update.docChanged || streamingRef.current) return
-    const isAi = update.transactions.some((t) => t.annotation(aiWrite))
-    if (isAi) return
-    const inserted = update.changes.inserted ?? ''
-    const cjk = countCjk(inserted)
-    if (cjk > 0) {
-      humanDeltaRef.current += cjk
-      setWordStats((s) => ({ ...s, human: s.human + cjk }))
-    }
-  }
-
-  // 光标续写：Cmd/Ctrl+J → 建议浮层 → Tab 插入 / Esc 关闭
+  // A1：选区/光标状态（ref 缓存防 onUpdate 无限重渲染）
   const [suggestion, setSuggestion] = useState<{ text: string; pos: number } | null>(null)
   const [sugBusy, setSugBusy] = useState(false)
   // v0.21.0（审查 N2）：续写请求 abort 控制（切章/unmount/新请求时取消 + seq 校验防跨章串内容）
   const sugAbortRef = useRef<AbortController | null>(null)
   const sugSeqRef = useRef(0)
+
+  // A1：在指定位置插入（AI 插入，不计 AI 字数变体——历史入口保持）
   const suggestContinue = async (): Promise<void> => {
     const view = editorRef.current?.view
     if (!view || !selectedChapter || sugBusy || streaming) return
@@ -268,7 +244,6 @@ const selectedChapterRef = useRef<number | null>(null)
   const quickWords = writingSettings.data?.quickWords ?? {}
   // v0.25.0（审查 L1）：memo 化——此前 `?? []` 每次渲染都产生新数组引用，
   // 导致依赖 list 的 useMemo（chapterStats）与 useEffect（初始选中）每渲染都重跑
-  // （ESLint react-hooks/exhaustive-deps 已告警 2 处）
   const list = useMemo(() => chapters.data?.chapters ?? [], [chapters.data])
   const chapter = list.find((c) => c.id === selectedChapter)
   // v0.24.2（F1）：阅读视图上一章/下一章定位
@@ -292,13 +267,6 @@ const selectedChapterRef = useRef<number | null>(null)
       selectedChapterRef.current = first.id
     }
   }, [list, selectedChapter])
-
-  // P2.2 🟢14：组件卸载时中止生成流（防止继续 setState + 浪费额度）
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort()
-    }
-  }, [])
 
   // P9 C6：关闭/刷新前若有未保存内容则提示
   useEffect(() => {
@@ -350,10 +318,6 @@ const selectedChapterRef = useRef<number | null>(null)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const invalidate = async (): Promise<void> => {
-    await queryClient.invalidateQueries({ queryKey: ['chapters', id] })
-  }
-
   // A2：Ctrl+S 保存（CodeMirror keymap）+ P22-C4 快捷键（生成/审核/回灌）
   useEffect(() => {
     // v0.17.0（审查 A5）：依赖从 [selectedChapter, content] 改为 []——此前每按一次键都拆装监听；
@@ -393,194 +357,6 @@ const selectedChapterRef = useRef<number | null>(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChapter])
 
-  const saveContent = async (opts?: { silent?: boolean; force?: boolean }): Promise<void> => {
-    if (!selectedChapter) return
-    if (contentLoadingRef.current || streamingRef.current) return
-    const view = editorRef.current?.view
-    const text = view ? view.state.doc.toString() : content
-    setContent(text)
-    // P9 A1：空内容保护——服务端已有正文时禁止空覆盖、禁止置 written
-    if (!text.trim()) {
-      const hasSaved = loadedChapterRef.current === selectedChapter && savedContentRef.current.trim().length > 0
-      if (hasSaved && !opts?.force) {
-        dirtyRef.current = false
-        if (!opts?.silent) {
-          setActionMsg('内容为空，跳过保存')
-          setTimeout(() => setActionMsg(null), 2000)
-        }
-        return
-      }
-    }
-    // 脏检查：与已保存内容一致则不请求
-    if (
-      !opts?.force &&
-      loadedChapterRef.current === selectedChapter &&
-      text === savedContentRef.current
-    ) {
-      dirtyRef.current = false
-      return
-    }
-    setSaving(true)
-    try {
-      const patch: Record<string, unknown> = { content: text }
-      if (text.trim()) patch.status = 'written'
-      // v0.19.0：字数分离增量上报（累计后清零；0 增量不发）
-      const aiD = aiDeltaRef.current
-      const humanD = humanDeltaRef.current
-      if (aiD > 0) {
-        patch.aiWordsDelta = aiD
-        aiDeltaRef.current = 0
-      }
-      if (humanD > 0) {
-        patch.humanWordsDelta = humanD
-        humanDeltaRef.current = 0
-      }
-      await novelApi.chapterPatch(id, selectedChapter, patch)
-      savedContentRef.current = text
-      dirtyRef.current = false
-      await invalidate()
-      if (!opts?.silent) {
-        setActionMsg('已保存')
-        setTimeout(() => setActionMsg(null), 2000)
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setActionError(`保存失败：${msg}`)
-      toast('error', `保存失败：${msg}`)
-      throw err
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const generate = async (): Promise<void> => {
-    if (!selectedChapter) return
-    if (generateBusyRef.current) return
-    const view = editorRef.current?.view
-    const current = view ? view.state.doc.toString() : content
-    // v0.22.0（审查 ALOW）：themed confirm 统一（未保存 + 成本合并一次确认）
-    const est = estimateCost(current, 4096)
-    const unsaved = current.trim() && current !== savedContentRef.current
-    confirmFn({
-      title: '生成正文',
-      message: (unsaved ? '当前章节有未保存内容，重新生成将丢弃它。\n\n' : '') + `将生成正文（输出预算约 4096 tokens）。输入上下文估算 ${est.tokens.toLocaleString()} tokens，预计${fmtCost(est.cost)}。`,
-      confirmText: '生成',
-      action: () => void generateContinue(current)
-    })
-    return
-  }
-
-  // v0.22.0：确认后的生成主体（拆出：themed confirm 为异步触发；原 generate 主体逻辑不变）
-  const generateContinue = async (current: string): Promise<void> => {
-    if (!selectedChapter) return
-    const prevContent = current
-    generateBusyRef.current = true
-    streamingRef.current = true
-    setStreaming(true)
-    setStreamStat(null)
-    setActionError(null)
-    setContent('')
-    const controller = new AbortController()
-    abortRef.current = controller
-    try {
-      await generateChapterSse(
-        id,
-        selectedChapter,
-        {
-          onDelta: (text) => {
-            // P20（U6）：rAF 合并——每帧只触发一次 setState + 统计（避免高频 delta 全页重渲染）
-            pendingDeltaRef.current += text
-            if (rAFRef.current !== null) return
-            rAFRef.current = requestAnimationFrame(() => {
-              rAFRef.current = null
-              const batch = pendingDeltaRef.current
-              pendingDeltaRef.current = ''
-              setContent((prev) => prev + batch)
-              // v0.21.0（审查 N1）：生成路径改由服务端记账（ai_words += wordCount）——
-              // 此前 onDelta 本地累计会在保存时与服务端计数双计；选区 AI 操作仍走本地 delta
-              const total = (editorRef.current?.view?.state.doc.toString() ?? '').length
-              // v0.9.0（审查 C）：token 估算传正文文本本身——此前传"字数"的字符串（如 "12345" 数成 5 tokens）
-              const t = estimateTokens(editorRef.current?.view?.state.doc.toString() ?? '')
-              // v0.17.0（审查 A27）：删除死代码 `void pending`
-              setStreamStat(`已生成 ${total.toLocaleString()} 字 · 约 ${t.toLocaleString()} tokens · ${fmtCost(estimateCost('', t).cost)}`)
-            })
-          },
-          onDone: async (payload) => {
-            // 批1-#3：内容已全量落定——清缓冲防重复追加
-            if (rAFRef.current !== null) {
-              cancelAnimationFrame(rAFRef.current)
-              rAFRef.current = null
-            }
-            pendingDeltaRef.current = ''
-            contentSettledRef.current = true
-            setContent(payload.content)
-            savedContentRef.current = payload.content
-            dirtyRef.current = false
-            setStreamStat(null)
-            setActionMsg(`生成完成：${payload.wordCount} 字，缓存命中 ${payload.usage.cacheHit ?? 0}`)
-            await invalidate()
-            setStreaming(false)
-            abortRef.current = null
-          },
-          onAborted: async (payload) => {
-            if (rAFRef.current !== null) {
-              cancelAnimationFrame(rAFRef.current)
-              rAFRef.current = null
-            }
-            pendingDeltaRef.current = ''
-            contentSettledRef.current = true
-            setContent(payload.content)
-            savedContentRef.current = payload.content
-            dirtyRef.current = false
-            setStreamStat(null)
-            setActionMsg(`已中止，保留已生成 ${payload.wordCount} 字`)
-            await invalidate()
-            setStreaming(false)
-            abortRef.current = null
-          },
-          onError: (message) => {
-            // P9 A3：失败恢复生成前的内容（残留增量一并丢弃）
-            if (rAFRef.current !== null) {
-              cancelAnimationFrame(rAFRef.current)
-              rAFRef.current = null
-            }
-            pendingDeltaRef.current = ''
-            contentSettledRef.current = true
-            if (prevContent) setContent(prevContent)
-            setStreamStat(null)
-            setActionError(message)
-            setStreaming(false)
-            abortRef.current = null
-          },
-          // P20（D1）：context 事件接入——预算/缓存诊断显示
-          onContext: (payload) => {
-            const p = payload as { budgetUsed?: number; budgetLimit?: number; frozenHash?: string }
-            setStreamStat(
-              `上下文 ${((p.budgetUsed ?? 0) / 1000).toFixed(1)}k / ${((p.budgetLimit ?? 0) / 1000).toFixed(1)}k tokens · 冻结 ${String(p.frozenHash ?? '').slice(0, 8)}`
-            )
-          }
-        },
-        controller.signal,
-        buildInclude(),
-        guidanceDraft.trim() || undefined
-      )
-    } catch {
-      /* 异常路径已由 handlers 处理 */
-    } finally {
-      generateBusyRef.current = false
-      streamingRef.current = false
-      setStreaming(false)
-      abortRef.current = null
-      // 批1-#3（v0.7.2）：仅当无终端 handler 落定内容时才 flush rAF 缓冲（防尾段重复追加）
-      if (!contentSettledRef.current && pendingDeltaRef.current) {
-        const tail = pendingDeltaRef.current
-        pendingDeltaRef.current = ''
-        setContent((prev) => prev + tail)
-      }
-      contentSettledRef.current = false
-    }
-  }
-
   // P21-3：方案流水线（跑在章节上）
   const solutionsForRun = useQuery({ queryKey: ['studio-solutions', 'run'], queryFn: studioApi.solutions })
   const [solutionId, setSolutionId] = useState<number | null>(null)
@@ -608,7 +384,7 @@ const selectedChapterRef = useRef<number | null>(null)
       setContent(fresh)
       savedContentRef.current = fresh
       dirtyRef.current = false
-      setActionMsg(`方案生产完成：${r.wordCount ?? 0} 字${r.degraded ? '（部分步骤降级）' : ''}`)
+      notify(`方案生产完成：${r.wordCount ?? 0} 字${r.degraded ? '（部分步骤降级）' : ''}`)
       setSolutionRunSummary((r.outputs ?? []).map((o, i) => `${i + 1}.${o.role}${o.ok ? '' : ' ✗'}`).join(' | '))
       await invalidate()
     } catch (err) {
@@ -623,14 +399,10 @@ const selectedChapterRef = useRef<number | null>(null)
     try {
       const r = await studioApi.solutionRun(solutionId, id, selectedChapter)
       setSolutionRunSummary(r.run.degraded ? `⚠ 部分步骤降级\n${r.summary}` : r.summary)
-      setActionMsg(`方案完成${r.run.degraded ? '（部分降级）' : ''}`)
+      notify(`方案完成${r.run.degraded ? '（部分降级）' : ''}`)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
     }
-  }
-
-  const cancelGenerate = (): void => {
-    abortRef.current?.abort()
   }
 
   // P9 B1：per-action busy 锁（防重复提交）
@@ -647,14 +419,15 @@ const selectedChapterRef = useRef<number | null>(null)
     }
   }
 
-  const runReview = async (): Promise<void> => {    if (!selectedChapter) return
+  const runReview = async (): Promise<void> => {
+    if (!selectedChapter) return
     setActionError(null)
-    setActionMsg('审核中…')
+    notify('审核中…')
     try {
       const r = await novelApi.review(id, selectedChapter)
       setReviewResult(r.review)
       const score = r.review.score as number
-      setActionMsg(`审核完成：${score} 分${(r.review.needsFix as boolean) ? '，需要修复' : ''}`)
+      notify(`审核完成：${score} 分${(r.review.needsFix as boolean) ? '，需要修复' : ''}`)
       await invalidate()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
@@ -670,7 +443,7 @@ const selectedChapterRef = useRef<number | null>(null)
     try {
       const r = await novelApi.proofread(id, selectedChapter, content || undefined)
       setProofreadIssues(r.issues)
-      setActionMsg(`校对完成：${r.issues.length} 条${r.localCount > 0 ? `（${r.localCount} 条本地确定性问题）` : ''}`)
+      notify(`校对完成：${r.issues.length} 条${r.localCount > 0 ? `（${r.localCount} 条本地确定性问题）` : ''}`)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
     }
@@ -679,7 +452,7 @@ const selectedChapterRef = useRef<number | null>(null)
   const fix = async (): Promise<void> => {
     if (!selectedChapter) return
     setActionError(null)
-    setActionMsg('修复中…')
+    notify('修复中…')
     try {
       const r = await novelApi.fix(id, selectedChapter)
       setContent(r.content)
@@ -688,11 +461,11 @@ const selectedChapterRef = useRef<number | null>(null)
       fixDoneRef.current = true
       if (r.rescore) {
         setReviewResult({ score: r.rescore.score, needsFix: r.rescore.needsFix } as Record<string, unknown>)
-        setActionMsg(
+        notify(
           `修复完成（第 ${r.round} 轮），重审评分 ${r.rescore.score}${r.rescore.passed ? '，已达标 ✓' : '，未达标（建议人工修改）'}`
         )
       } else {
-        setActionMsg(`修复完成（第 ${r.round} 轮）`)
+        notify(`修复完成（第 ${r.round} 轮）`)
       }
       await invalidate()
     } catch (err) {
@@ -703,11 +476,11 @@ const selectedChapterRef = useRef<number | null>(null)
   const backfill = async (): Promise<void> => {
     if (!selectedChapter) return
     setActionError(null)
-    setActionMsg('回灌提取中…')
+    notify('回灌提取中…')
     try {
       const r = await novelApi.backfill(id, selectedChapter)
       setBackfillResult(r)
-      setActionMsg('回灌完成：角色状态 / 新事实 / 伏笔已进入待确认区')
+      notify('回灌完成：角色状态 / 新事实 / 伏笔已进入待确认区')
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
     }
@@ -716,15 +489,15 @@ const selectedChapterRef = useRef<number | null>(null)
   // v0.17.0（审查 A5）：每渲染刷新快捷键闭包缓存（effect 固定注册仍取最新实现）
   useEffect(() => {
     latestActionsRef.current = {
-    saveContent,
-    generate,
-    withBusy,
-    runReview,
-    backfill,
-    suggestContinue,
-    acceptSuggestion,
-    hasSuggestion: () => suggestion !== null
-  }
+      saveContent,
+      generate,
+      withBusy,
+      runReview,
+      backfill,
+      suggestContinue,
+      acceptSuggestion,
+      hasSuggestion: () => suggestion !== null
+    }
   })
 
   const loadPending = async (): Promise<void> => {
@@ -802,7 +575,7 @@ const selectedChapterRef = useRef<number | null>(null)
     if (!selectedChapter) return
     try {
       await novelApi.createVersion(id, selectedChapter, '手动快照')
-      setActionMsg('已创建版本快照')
+      notify('已创建版本快照')
       await loadVersions()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err))
@@ -826,15 +599,6 @@ const selectedChapterRef = useRef<number | null>(null)
     }
   }
 
-  // B1：生成时带 include（勾选过滤）
-  const buildInclude = (): string[] | undefined => {
-    if (!ctxToggles) return undefined
-    const enabled = Object.entries(ctxToggles)
-      .filter(([, v]) => v)
-      .map(([k]) => k)
-    return enabled.length > 0 ? enabled : undefined
-  }
-
   const confirmStates = async (): Promise<void> => {
     if (!backfillResult || !Array.isArray(backfillResult.characterStates)) return
     await withBusy('confirm', async () => {
@@ -842,47 +606,9 @@ const selectedChapterRef = useRef<number | null>(null)
       confirmDoneRef.current = true
       setBackfillResult(null)
       setShowPending(false)
-      setActionMsg('角色状态已确认入账')
+      notify('角色状态已确认入账')
     })
   }
-
-  // P9 A1：选中章节变化 → 按需加载正文（竞态序号丢弃过期响应）
-  useEffect(() => {
-    if (!selectedChapter) return
-    const seq = ++detailSeqRef.current
-    contentLoadingRef.current = true
-    setContentLoading(true)
-    setContent('')
-    loadedChapterRef.current = null
-    savedContentRef.current = ''
-    dirtyRef.current = false
-    // v0.19.0：切换章节重置会话字数统计与续写建议
-    aiDeltaRef.current = 0
-    humanDeltaRef.current = 0
-    setWordStats({ ai: 0, human: 0 })
-    setSuggestion(null)
-    // v0.24.2（F3）：切章重置版本 diff
-    setVersionDiff(null)
-    void novelApi
-      .chapterDetail(id, selectedChapter)
-      .then((d) => {
-        if (seq !== detailSeqRef.current) return
-        setContent(d.chapter.content ?? '')
-        savedContentRef.current = d.chapter.content ?? ''
-        loadedChapterRef.current = selectedChapter
-      })
-      .catch((err) => {
-        if (seq !== detailSeqRef.current) return
-        setActionError(`正文加载失败：${err instanceof Error ? err.message : String(err)}（重新选择章节可重试）`)
-      })
-      .finally(() => {
-        if (seq === detailSeqRef.current) {
-          contentLoadingRef.current = false
-          setContentLoading(false)
-        }
-      })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChapter])
 
   const selectChapter = async (chapterId: number): Promise<void> => {
     if (streamingRef.current) {
@@ -914,8 +640,7 @@ const selectedChapterRef = useRef<number | null>(null)
     try {
       await novelApi.chapterPatch(id, selectedChapter, { title: t })
       await invalidate()
-      setActionMsg('标题已更新')
-      setTimeout(() => setActionMsg(null), 2000)
+      notify('标题已更新')
     } catch (err) {
       toast('error', `标题保存失败：${err instanceof Error ? err.message : String(err)}`)
     }
@@ -1021,7 +746,7 @@ const selectedChapterRef = useRef<number | null>(null)
               setContent(r.content)
               savedContentRef.current = r.content
               dirtyRef.current = false
-              setActionMsg(`已恢复版本 #${v.id}（${r.wordCount} 字），原内容已存为新版本`)
+              notify(`已恢复版本 #${v.id}（${r.wordCount} 字），原内容已存为新版本`)
               await invalidate()
             } catch (err) {
               setActionError(err instanceof Error ? err.message : String(err))
@@ -1068,7 +793,7 @@ const selectedChapterRef = useRef<number | null>(null)
               setActionError(null)
               void withBusy('chapter-create', async () => {
                 const r = await assetsApi.chapterCreate(id, { title: t.trim() || undefined })
-                setActionMsg(`已创建章节 #${r.id}（空章，可编辑标题或直接生成）`)
+                notify(`已创建章节 #${r.id}（空章，可编辑标题或直接生成）`)
                 await invalidate()
               })
             })
@@ -1422,3 +1147,4 @@ const selectedChapterRef = useRef<number | null>(null)
 
 // P22-C1 章节列表项已拆至 ./chapter/ChapterListItem.tsx（批次 E1）
 // v0.25.0（审查 S1）：资源树/编辑器/工具条/审核/记忆面/版本/上下文面板一并拆至 ./chapter/
+// R7：编辑会话/正文加载/生成控制抽至 ./chapter/hooks/（useEditorSession/useChapterLoader/useGenerationController）
