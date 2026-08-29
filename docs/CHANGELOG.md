@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-（暂无）
+### 图标换用「简约字母」设计（B 变体）
+- 应用图标替换为第 3 张候选图 B 槽「简约字母」设计（米色瓦片 + 衬线 A + 羽笔 + I + 星光），覆盖安装包/任务栏/窗口与介绍站（resources/icon-512.png、icon-256.png、site/icon-512.png）
+- 图标候选素材入库 resources/icon-candidates/（两组九宫各拆 9 张去白透明化 + AI NOVEL STUDIO 终稿 + 透明总览图 + 原始素材归档），SCRIPT 见 scripts/icon-candidates.mjs
 
 ## v0.25.0（2026-08-29）
 

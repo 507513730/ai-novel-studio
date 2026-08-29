@@ -1,7 +1,7 @@
-// 图标候选素材处理：三张候选图入库 resources/icon-candidates/
+// 图标素材处理：候选图入库 resources/icon-candidates/
 // - 两张 3x3 九宫各拆成 9 个（保留下方标签）
 // - 全部白底去除 → 透明（从边缘洪水填充纯白 + 抗锯齿羽化）
-// - 第 3 张（A-I 变体）B 槽换成使用终稿 logo（第 2 张 AI NOVEL STUDIO）
+// - B 槽（简约字母）即应用使用中的图标：生成应用图标（B 瓦片 → icon-512/256 + 介绍站）
 // 用法: node scripts/icon-candidates.mjs <grid1> <logo> <grid3>
 import { copyFileSync, mkdirSync } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
@@ -27,10 +27,6 @@ async function saveRaw(img, path) {
 function px(img, x, y) {
   const i = (y * img.w + x) * img.ch
   return [img.data[i], img.data[i + 1], img.data[i + 2], img.data[i + 3]]
-}
-function setPx(img, x, y, r, g, b, a) {
-  const i = (y * img.w + x) * img.ch
-  img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = a
 }
 
 // 距白 (254) 的最大通道差
@@ -187,50 +183,6 @@ async function main() {
   const g1 = detectGrid(grid1)
   const g3 = detectGrid(grid3)
 
-  // B 槽（第 3 张、中上格）替换为 logo：
-  const logoTile = { x0: g3.cb[1][0], y0: g3.tiles[0][0], x1: g3.cb[1][1], y1: g3.tiles[0][1] }
-  const logoProc = whiten(logo)
-  const lb = contentBBox(logoProc)
-  const logoContent = crop(logoProc, lb.x0, lb.y0, lb.x1 + 1, lb.y1 + 1)
-  const logoFull = await sharp(logoContent.data, { raw: { width: logoContent.w, height: logoContent.h, channels: 4 } })
-    .resize(logoTile.x1 - logoTile.x0, logoTile.y1 - logoTile.y0, { fit: 'fill' })
-    .raw().toBuffer({ resolveWithObject: true })
-  const logoFit = { data: Buffer.from(logoFull.data), w: logoFull.info.width, h: logoFull.info.height, ch: 4 }
-
-  function replaceB(img, g) {
-    // 复制原始 cell，将瓦片区清空（alpha 0），再贴 logo，保留标签
-    const r = cellRect(g, 0, 1)
-    const cell = crop(img, r.x0, r.y0, r.x1, r.y1)
-    for (let y = 0; y < cell.h; y++) {
-      for (let x = 0; x < cell.w; x++) {
-        const gy = r.y0 + y, gx = r.x0 + x
-        if (gx >= logoTile.x0 && gx <= logoTile.x1 && gy >= logoTile.y0 && gy <= logoTile.y1) {
-          setPx(cell, x, y, 0, 0, 0, 0)
-        }
-      }
-    }
-    // 贴 logo（居中覆盖瓦片区）
-    for (let y = 0; y < cell.h; y++) {
-      for (let x = 0; x < cell.w; x++) {
-        const gy = r.y0 + y, gx = r.x0 + x
-        if (gx < logoTile.x0 || gx > logoTile.x1 || gy < logoTile.y0 || gy > logoTile.y1) continue
-        const sx = Math.round(((gx - logoTile.x0) / (logoTile.x1 - logoTile.x0)) * (logoFit.w - 1))
-        const sy = Math.round(((gy - logoTile.y0) / (logoTile.y1 - logoTile.y0)) * (logoFit.h - 1))
-        const si = (sy * logoFit.w + sx) * 4
-        const ea = logoFit.data[si + 3]
-        if (ea === 0) continue
-        const di = (y * cell.w + x) * 4
-        const a = ea / 255
-        cell.data[di] = Math.round(logoFit.data[si] * a + cell.data[di] * (1 - a))
-        cell.data[di + 1] = Math.round(logoFit.data[si + 1] * a + cell.data[di + 1] * (1 - a))
-        cell.data[di + 2] = Math.round(logoFit.data[si + 2] * a + cell.data[di + 2] * (1 - a))
-        cell.data[di + 3] = Math.max(cell.data[di + 3], ea)
-      }
-    }
-    whiten(cell)
-    return cell
-  }
-
   console.log('拆分第 1 张（1-9 概念）…')
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
@@ -244,19 +196,14 @@ async function main() {
     }
   }
 
-  console.log('拆分第 3 张（A-I 变体，B=使用终稿）…')
+  console.log('拆分第 3 张（A-I 变体，B=简约字母 使用中）…')
   const labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
       const L = labels[r * 3 + c]
-      let cell
-      if (L === 'B') {
-        cell = replaceB(grid3, g3)
-      } else {
-        const rect = cellRect(g3, r, c)
-        cell = crop(grid3, rect.x0, rect.y0, rect.x1, rect.y1)
-        whiten(cell)
-      }
+      const rect = cellRect(g3, r, c)
+      const cell = crop(grid3, rect.x0, rect.y0, rect.x1, rect.y1)
+      whiten(cell)
       const file = join(OUT, `variants-${L}.png`)
       await saveRaw(cell, file)
       console.log(`  ✓ variants-${L}.png (${cell.w}x${cell.h})`)
@@ -264,42 +211,61 @@ async function main() {
   }
 
   console.log('整图去白（三张全图）…')
-  // 第 3 张整图：先替换 B 瓦片再整体去白
   await saveRaw(whiten(grid1), join(OUT, 'sheet-concepts.png'))
-  const g3b = { ...grid3, data: Buffer.from(grid3.data) }
-  {
-    const r = cellRect(g3, 0, 1)
-    // 清空 B 瓦片区
-    for (let y = r.y0; y < r.y1; y++) {
-      for (let x = r.x0; x < r.x1; x++) {
-        if (x >= logoTile.x0 && x <= logoTile.x1 && y >= logoTile.y0 && y <= logoTile.y1) setPx(g3b, x, y, 0, 0, 0, 0)
-      }
-    }
-    for (let y = r.y0; y < r.y1; y++) {
-      for (let x = r.x0; x < r.x1; x++) {
-        if (x < logoTile.x0 || x > logoTile.x1 || y < logoTile.y0 || y > logoTile.y1) continue
-        const sx = Math.round(((x - logoTile.x0) / (logoTile.x1 - logoTile.x0)) * (logoFit.w - 1))
-        const sy = Math.round(((y - logoTile.y0) / (logoTile.y1 - logoTile.y0)) * (logoFit.h - 1))
-        const si = (sy * logoFit.w + sx) * 4
-        const ea = logoFit.data[si + 3]
-        if (ea === 0) continue
-        const di = (y * g3b.w + x) * 4
-        const a = ea / 255
-        g3b.data[di] = Math.round(logoFit.data[si] * a + g3b.data[di] * (1 - a))
-        g3b.data[di + 1] = Math.round(logoFit.data[si + 1] * a + g3b.data[di + 1] * (1 - a))
-        g3b.data[di + 2] = Math.round(logoFit.data[si + 2] * a + g3b.data[di + 2] * (1 - a))
-        g3b.data[di + 3] = Math.max(g3b.data[di + 3], ea)
-      }
-    }
-  }
-  await saveRaw(whiten(g3b), join(OUT, 'sheet-variants.png'))
+  await saveRaw(whiten({ ...grid3, data: Buffer.from(grid3.data) }), join(OUT, 'sheet-variants.png'))
 
   console.log('处理 logo（第 2 张）…')
-  const logoOut = whiten({ data: Buffer.from(logoProc.data), w: logoProc.w, h: logoProc.h, ch: logoProc.ch })
+  const logoProc = whiten(logo)
+  const lb = contentBBox(logoProc)
+  const logoOut = { data: Buffer.from(logoProc.data), w: logoProc.w, h: logoProc.h, ch: logoProc.ch }
   const lb2 = contentBBox(logoOut)
   const logoCropped = crop(logoOut, Math.max(0, lb2.x0 - 20), Math.max(0, lb2.y0 - 20), Math.min(logoOut.w, lb2.x1 + 21), Math.min(logoOut.h, lb2.y1 + 21))
   await saveRaw(logoCropped, join(OUT, 'logo-ai-novel-studio.png'))
   console.log(`  ✓ logo-ai-novel-studio.png (${logoCropped.w}x${logoCropped.h})`)
+
+  console.log('生成应用图标（B 简约字母 瓦片）…')
+  const tB = g3.tiles[0], cB = g3.cb[1]
+  const tile = crop(grid3, cB[0], tB[0], cB[1] + 1, tB[1] + 1)
+  whiten(tile)
+  await saveRaw(tile, join(OUT, 'app-icon-B-tile.png'))
+  // 构图比例对齐现有 icon-512.png（内容 bbox 同比例放置）
+  const cur512 = await loadRaw(join(ROOT, 'resources', 'icon-512.png'))
+  let cbx0 = cur512.w, cby0 = cur512.h, cbx1 = -1, cby1 = -1
+  for (let y = 0; y < cur512.h; y++) {
+    for (let x = 0; x < cur512.w; x++) {
+      if (cur512.data[(y * cur512.w + x) * 4 + 3] > 30) {
+        if (x < cbx0) cbx0 = x
+        if (x > cbx1) cbx1 = x
+        if (y < cby0) cby0 = y
+        if (y > cby1) cby1 = y
+      }
+    }
+  }
+  const boxW = cbx1 - cbx0 + 1, boxH = cby1 - cby0 + 1
+  console.log(`  现有 icon-512 内容盒: (${cbx0},${cby0}) ${boxW}x${boxH}`)
+  const tileFit = await sharp(tile.data, { raw: { width: tile.w, height: tile.h, channels: 4 } })
+    .resize(boxW, boxH, { fit: 'fill' })
+    .raw().toBuffer({ resolveWithObject: true })
+  const SIZE = 512
+  const canvas = Buffer.alloc(SIZE * SIZE * 4)
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      if (x < cbx0 || x >= cbx0 + boxW || y < cby0 || y >= cby0 + boxH) continue
+      const sx = Math.round(((x - cbx0) / (boxW - 1)) * (tileFit.info.width - 1))
+      const sy = Math.round(((y - cby0) / (boxH - 1)) * (tileFit.info.height - 1))
+      const si = (sy * tileFit.info.width + sx) * 4
+      const di = (y * SIZE + x) * 4
+      const a = tileFit.data[si + 3] / 255
+      canvas[di] = Math.round(tileFit.data[si] * a)
+      canvas[di + 1] = Math.round(tileFit.data[si + 1] * a)
+      canvas[di + 2] = Math.round(tileFit.data[si + 2] * a)
+      canvas[di + 3] = tileFit.data[si + 3]
+    }
+  }
+  await sharp(canvas, { raw: { width: SIZE, height: SIZE, channels: 4 } }).png().toFile(join(ROOT, 'resources', 'icon-512.png'))
+  await sharp(canvas, { raw: { width: SIZE, height: SIZE, channels: 4 } }).resize(256, 256).png().toFile(join(ROOT, 'resources', 'icon-256.png'))
+  await sharp(canvas, { raw: { width: SIZE, height: SIZE, channels: 4 } }).png().toFile(join(ROOT, 'site', 'icon-512.png'))
+  console.log('  ✓ resources/icon-512.png + icon-256.png + site/icon-512.png')
 
   console.log('归档原始素材…')
   copyFileSync(grid1Path, join(srcDir, 'sheet-grid1-concepts.png'))
