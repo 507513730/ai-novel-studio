@@ -54,6 +54,7 @@ generate.ts（兼容转发，公共签名不变）
 截断检测先于一切后处理副作用；后处理全部完成后单事务落库——
 chapter.content 恒等于最新 chapter_version.content（降级原因经 GenerateResult.degradedReasons 透出）
 调用方：routes/chapters.ts（SSE）/ production.ts（整本）/ hub.ts（chapter_generate 工具）
+抢占身份：chapter.generation_token（R4.1）——重启恢复后旧协程落库/失败处理被守卫拒绝（D114）
 ```
 
 ### 任务调度（执行面隔离）

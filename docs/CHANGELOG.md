@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 重构：R4.1 章节级 generation_token（2026-08-29，分支 codex/refactor-r0-r1，D114）
+
+- 迁移 22 新增 `chapter.generation_token`：`claimChapter` 抢占即颁发章节级生成身份，落库/失败恢复守卫升级为 `id+novel_id+generation_token+status='generating'`
+- 旧生成协程迟到落库 → stale claim 错误 + 事务回滚零数据变更；迟到失败处理静默跳过（不触碰新 claim）；重启恢复清空 token
+- 测试 +1 stale claim 故障注入（全量 51 文件 293 用例）；db-smoke schema version=22
+
 ### 重构：R3 scheduler token 作用域化（2026-08-29，分支 codex/refactor-r0-r1，D113）
 
 - 五类 job 业务循环迁入 `jobs/executors.ts` 显式注册表；trace/进度收拢 `jobs/progress.ts`；`jobs/scheduler.ts` 只负责轮询/claim/watchdog/分发/运行锁；旧 `services/scheduler.ts` 缩为兼容转发

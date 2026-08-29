@@ -74,14 +74,19 @@ function readLatestVersion(db: DatabaseSync, chapterId: number): { content: stri
 }
 
 describe('chapter generation state and persistence contracts', () => {
-  it('atomically claims a planned chapter and rejects a second claim', () => {
+  it('atomically claims a planned chapter, issues a generation token, and rejects a second claim', () => {
     const db = makeDb()
     const { novelId, chapterIds } = makeNovelWithChapters(db, 1)
 
     const claimed: ClaimedChapter = claimChapter(db, novelId, chapterIds[0])
 
     expect(claimed.previousStatus).toBe('planned')
-    expect(readStatus(db, chapterIds[0])).toBe('generating')
+    expect(claimed.generationToken).toBeTruthy()
+    const row = db
+      .prepare('SELECT status, generation_token FROM chapter WHERE id = ?')
+      .get(chapterIds[0]) as { status: string; generation_token: string | null }
+    expect(row.status).toBe('generating')
+    expect(row.generation_token).toBe(claimed.generationToken)
     expect(() => claimChapter(db, novelId, chapterIds[0])).toThrow(/正在生成/)
     db.close()
   })
@@ -149,7 +154,7 @@ describe('chapter generation state and persistence contracts', () => {
     const claim = claimChapter(db, novelId, chapterIds[0])
     db.prepare("UPDATE chapter SET status='planned' WHERE id=? AND novel_id=?").run(claim.id, claim.novelId)
 
-    expect(() => persistGeneratedChapter(db, claim, { content: '  ', aborted: false })).toThrow(/不处于生成状态/)
+    expect(() => persistGeneratedChapter(db, claim, { content: '  ', aborted: false })).toThrow(/已失效/)
     expect(readLatestVersion(db, chapterIds[0])).toBeUndefined()
     expect(readChapter(db, chapterIds[0])).toMatchObject({ content: '', status: 'planned' })
     db.close()
@@ -170,6 +175,33 @@ describe('chapter generation state and persistence contracts', () => {
     )
     expect(readLatestVersion(db, chapterIds[0])).toBeUndefined()
     expect(readChapter(db, chapterIds[0])).toMatchObject({ content: '', status: 'generating' })
+    db.close()
+  })
+
+  it('rejects a stale claim: old coroutine persistence after restart-recovery + new claim leaves the new claim untouched', () => {
+    const db = makeDb()
+    const { novelId, chapterIds } = makeNovelWithChapters(db, 1)
+    const staleClaim = claimChapter(db, novelId, chapterIds[0])
+    // 重启恢复（startJobScheduler 行为）：generating → planned 且清空 generation_token
+    db.prepare("UPDATE chapter SET status='planned', generation_token=NULL WHERE id=?").run(chapterIds[0])
+    // 新一轮抢占（新 token）
+    const newClaim = claimChapter(db, novelId, chapterIds[0])
+    expect(newClaim.generationToken).not.toBe(staleClaim.generationToken)
+    // 新 claim 已先行写入正文
+    persistGeneratedChapter(db, newClaim, { content: '新一轮正文', aborted: false })
+
+    // 旧协程迟到落库：抛 stale claim 错误，不得触碰新 claim 的数据
+    expect(() => persistGeneratedChapter(db, staleClaim, { content: '旧协程正文', aborted: false })).toThrow(/已失效/)
+    expect(readChapter(db, chapterIds[0])).toMatchObject({ content: '新一轮正文', status: 'written' })
+    expect(readLatestVersion(db, chapterIds[0])?.content).toBe('新一轮正文')
+
+    // 旧协程迟到失败处理同样被守卫拒绝（不覆盖新 claim 的 generating）
+    db.prepare("UPDATE chapter SET status='generating', generation_token=? WHERE id=?").run(
+      newClaim.generationToken,
+      chapterIds[0]
+    )
+    failClaimedChapter(db, staleClaim, new Error('旧协程失败'))
+    expect(readStatus(db, chapterIds[0])).toBe('generating')
     db.close()
   })
 })

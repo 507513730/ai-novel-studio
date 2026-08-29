@@ -481,6 +481,13 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     // 每次 claim 重新生成，重排队（retry/重启恢复）置 NULL。向前兼容：旧数据默认 NULL。
     version: 21,
     statements: [`ALTER TABLE job ADD COLUMN claim_token TEXT`]
+  },
+  {
+    // 重构计划 R4.1：chapter.generation_token——章节级生成身份（与 job claim token 不同源不同生命周期）。
+    // 新一轮抢占覆盖 token 后，旧生成协程的落库/失败处理因 id+novel_id+generation_token+status='generating'
+    // 不匹配被拒；重启恢复（generating→planned）一并清空。
+    version: 22,
+    statements: [`ALTER TABLE chapter ADD COLUMN generation_token TEXT`]
   }
 ]
 

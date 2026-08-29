@@ -104,12 +104,12 @@ function tick(): void {
 }
 
 // 重启幂等（修正 #3 / R2）：遗留 running job 重置 queued 并清空旧 claim token；
-// 遗留 generating 章节重置 planned（v0.17.0 H3——章节域接管前暂留此处）
+// 遗留 generating 章节重置 planned 并清空 generation_token（v0.17.0 H3 / R4.1）
 export function startJobScheduler(db: DatabaseSync, intervalMs = 1500): void {
   dbRef = db
   resetStaleRunning(db)
   db.prepare(
-    "UPDATE chapter SET status = 'planned', updated_at = datetime('now') WHERE status = 'generating'"
+    "UPDATE chapter SET status = 'planned', generation_token = NULL, updated_at = datetime('now') WHERE status = 'generating'"
   ).run()
   if (timer) clearInterval(timer)
   active = true

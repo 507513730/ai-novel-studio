@@ -716,3 +716,10 @@
 - **R3 决策（本地设计）**：五类 job 业务循环迁入 `jobs/executors.ts` 显式注册表（`JobExecutor` 接收 `{db, claim, isAborted, reportProgress}`，未知类型分发层立即失败）；trace 去重/上限 300/完成率收拢 `jobs/progress.ts`；`jobs/scheduler.ts` 只负责轮询/claim/watchdog/分发/运行锁。watchdog 置 failed 即失效当前 claim（迟到协程写入被 id+token+running 守卫拒绝——R2 守卫的直接消费方）；`stopScheduler` 停止接受新 claim，当前执行器经 `isAborted`（`!active || isJobAborted`）在下一安全边界观察停止；启动恢复 `resetStaleRunning`（R2 迁入）。旧 `services/scheduler.ts` 缩为 3 行兼容转发。测试 +7（取消不被 done 覆盖、全失败不虚报 done、异常逃逸兜底且调度器存活、stop 后不再 claim、watchdog 回收、重启恢复、claim A/B 故障注入）。
 - **环境观测（重要，非代码问题）**：约 12:00 起，本机对 vite 构建产物（out/renderer/assets/*.js）出现跨命令删除拒绝（读/写正常、删除 EPERM），vite `emptyOutDir` 连锁失败，两棵工作树均复现。证据：文件 ACL 含 `JING\CodexSandboxUsers` 与 `S-1-4-*` 会话级 SID；DSH 沙箱命令行带 `--write-sid/--temp-write-sid`（Defender 检测记录可见）——会话 ACL 轮换后旧会话创建的文件对新会话不可删，`emptyOutDir` 每次撞上一轮产物即失败。R0-R2 期间的打包（11:31/11:48/11:52）均正常。**处置**：R3 提交保留分支，main 不合并；待环境恢复（重启会话/机器或调整沙箱策略）后重跑 `pnpm dist` 完成交付。协作提示：同症状下勿反复重试构建（每次失败留下一批不可删产物），优先换全新 outDir 或恢复环境。
 - **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 51 文件 292 用例（+7）/ db-smoke 7 项；打包门禁被上述环境问题阻塞，未宣称交付。
+
+### D114 · 2026-08-29 · R4.1 章节级 generation_token（分支 codex/refactor-r0-r1）
+
+- **背景**：重构计划 R4.1——章节生成此前无身份标识，重启恢复（generating→planned）后旧协程若仍存活，其落库/失败处理可污染新一轮生成（与 job 域 R2 同类问题，D112）。
+- **决策（本地设计）**：迁移 22 新增 `chapter.generation_token TEXT`（向前兼容）。`claimChapter` 原子抢占时颁发章节级 token（node:crypto randomUUID）；persistence/failClaimedChapter 的守卫升级为 `id+novel_id+generation_token+status='generating'`。语义分层：旧协程迟到**落库** → 抛 stale claim 错误（'章节生成会话已失效'）且短事务整体回滚、零数据变更；旧协程迟到**失败处理**（failClaimedChapter）→ 守卫失配静默跳过（失败处理是尽力而为的清理，不得触碰新 claim）。重启恢复（startJobScheduler）重置 generating→planned 时一并清空 token。token 与 job claim token 严格不同源不同生命周期（R0 基线预扫描结论）。
+- **边界（未动，留后续批次）**：hub.ts 的兜底复位与 solutionRunner.ts 复制的 claim SQL 尚未 token 化——solutionRunner 在 R4.3 收拢进统一 generateChapter 时自然消解；hub 兜底复位属防御性写，收敛于 R4.3/R9 复核。
+- **验收**：typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 51 文件 293 用例（+1 stale claim 故障注入：重启恢复后旧协程落库被拒且新 claim 数据零触碰）/ db-smoke 7 项（schema version=22）/ 打包双产物时间戳更新。
