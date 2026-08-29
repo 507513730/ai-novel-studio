@@ -43,6 +43,19 @@
 详见 docs/archive/PLAN-history.md §9.2 决策 + decision-log D51。
 ```
 
+### 章节生成域（R1 重构后，spec §3.1）
+
+```
+generate.ts（兼容转发，公共签名不变）
+  → chapterGeneration/orchestrator.ts（只编排：上下文 → LLM 流式 → 截断检测 → 后处理 → 落库）
+      ├─ state.ts        抢占/失败恢复唯一入口（ConfigError 恢复抢占前状态）
+      ├─ postProcess.ts  主角名替换 → 约束登记(质量债) → 反 AI 重写（只变换文本，禁写章节表）
+      └─ persistence.ts  正文/版本/字数/状态短事务唯一入口（空正文不建版本；守卫失配回滚）
+截断检测先于一切后处理副作用；后处理全部完成后单事务落库——
+chapter.content 恒等于最新 chapter_version.content（降级原因经 GenerateResult.degradedReasons 透出）
+调用方：routes/chapters.ts（SSE）/ production.ts（整本）/ hub.ts（chapter_generate 工具）
+```
+
 ### 任务调度（执行面隔离）
 
 ```
@@ -79,7 +92,8 @@ Retriever 接口：TfidfRetriever（默认，零依赖）/ EmbeddingRetriever（
 ```
 client/src/      React：pages/（33 页含 settings/ chapter/ 子目录）workspace/（8 面板）
                  components/ editor/ utils/ hooks/
-server/src/      服务：routes/（15 个路由文件，~17 路由面）services/（generate/context/llm/planner/
+server/src/      服务：routes/（15 个路由文件，~17 路由面）services/（chapterGeneration/（章节生成域：
+                 state/persistence/postProcess/orchestrator）generate(兼容转发)/context/llm/planner/
                  ledger/jobQueue/scheduler/director/production/retrieval…）db/ prompts/
 electron/        主进程：窗口/菜单/安全/utilityProcess
 shared/          前后端共享类型（@shared/types）

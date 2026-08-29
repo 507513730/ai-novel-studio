@@ -686,3 +686,16 @@
   - 本批低风险 devDeps 手动升级（与 Dependabot PR #6/#7/#8/#10 内容一致，直接本地实施 + lockfile 更新 + 三绿 200/200）：@commitlint/cli 21.2.1→21.2.2、@commitlint/config-conventional 21.2.0→21.2.2（配套一致）、eslint-plugin-react-refresh 0.5.3→0.5.4、typescript-eslint 8.66→8.68（^ 解析）。
   - **electron 43.3.0→43.4.1（PR #9）不升级**：43 系含 Chromium/Node 更新，打破已验证基线，需全量验证 + 打包冒烟 + e2e + 重发版；与 `AGENTS #2` 冲突。PR 关闭留痕，待下次重大升级评估。
 - **验收**：三绿（typecheck 0 err / lint 0 err / vitest 200/200，升级后重跑）+ PR 全部关闭并注明。
+
+### D111 · 2026-08-29 · R0 基线 + R1 章节生成域重放（重构计划前两批，分支 codex/refactor-r0-r1）
+
+- **背景**：全仓库兼容重构（spec：docs/superpowers/specs/2026-08-24-full-repository-deep-refactor-design.md；计划：docs/superpowers/plans/2026-08-29-full-repository-refactor-remaining-work.md）。旧隔离分支 `codex/core-writing-pipeline`（f1cae17）已完成一版章节生成域实现，但落后主线数百提交，只能作行为参考逐片重放；基线事实见 `docs/superpowers/audits/2026-08-29-refactor-baseline.md`（R0 产物，测试基线 45 文件/257 用例 + db-smoke 7 项）。
+- **R1 重放决策（均为本地设计，无外部 API 依赖）**：
+  1. **截断检测前置**：`!aborted && llmResult.truncated` 判定移至主角名替换等一切后处理副作用之前（原 generate.ts 先替换再检测）——spec §4.1 要求截断不产生后处理副作用。
+  2. **单事务落库消除版本分叉（R0-F1，P1）**：原实现在反 AI 重写成功后二次 UPDATE 仅改 chapter（content/word_count/ai_words）不更新 chapter_version，重写后正文与最新版本快照不一致；重放版后处理全部完成后由 persistence.ts 单事务落库（INSERT version + guarded UPDATE），两处恒一致。
+  3. **约束登记绑定被生成章节（R0-F4）**：参考分支 postProcess 用 `ORDER BY id DESC LIMIT 1` 取"该书最后一章"登记质量债，多章并发/非末章生成时归因错误；重放版签名改为显式传 chapterId，行为与原 generate.ts:156 对齐并新增回归测试。
+  4. **守卫与降级显式化**：章节 UPDATE 补 novel_id 守卫（R0-F2）；`GenerateResult` 增可选 `degradedReasons`（加法兼容），反 AI 短重写/重写失败保留原文并告警（spec §4.1 显式降级不回滚）。
+- **行为保真清单**：公共签名（generateChapter/GenerateOptions/GenerateResult）不变，调用方（routes/chapters.ts SSE、production.ts、hub.ts、config-circuit.test.ts）零改动；claim 错误文案、ai_words 覆盖语义（N1）、abort 补账（C4）、ConfigError 恢复抢占前状态（v0.24.3）、空内容保护（H2）、SSE/重启恢复路径全部不变。
+- **域边界**：state.ts 抢占/失败恢复唯一入口；persistence.ts 落库唯一入口；postProcess.ts 禁写 chapter/chapter_version；orchestrator.ts 只编排；generate.ts 缩为 3 行兼容转发（待 R9 删除）。
+- **遗留**：solutionRunner 复制 claim SQL（R0-F5）与 production 无守卫置状态（R0-F6）→ R4.3；generation_token（R4.1）；R2（job 域）起未动。
+- **验收**：typecheck 0 err / lint 0 err（5 条既有警告）/ vitest 46 文件 267 用例（基线 257 + 新增 10）/ db-smoke 7 项 / 打包双产物验证；打包态与 e2e 在合并 main 前按批次门禁执行。

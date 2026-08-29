@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### 重构：R0 基线 + R1 章节生成域重放（2026-08-29，分支 codex/refactor-r0-r1，D111）
+
+- 章节生成从 `generate.ts`（245 行单文件）拆为 `chapterGeneration/` 域：`state.ts`（抢占/失败恢复）、`persistence.ts`（正文/版本/字数/状态短事务）、`postProcess.ts`（主角名替换/约束登记/反 AI 重写）、`orchestrator.ts`（编排）；`generate.ts` 缩为兼容转发，公共签名与全部调用方零改动
+- **修复**：反 AI 重写成功后正文与最新版本快照分叉（R0-F1）——最终内容单事务落库，`chapter.content` 恒等于最新 `chapter_version.content`
+- **修复**：截断检测移至一切后处理副作用之前；章节 UPDATE 补 novel_id 守卫（R0-F2）；降级原因经 `GenerateResult.degradedReasons` 透出
+- 测试：新增契约测试 10 例（抢占互斥/ConfigError 恢复/版本一致/中止注释/空正文/守卫失配回滚/约束登记归因等），全量 46 文件 267 用例
+- 用户可见行为（REST/数据/操作流程）保持兼容；合并 main 与发版另行执行
+
 ### 依赖治理（2026-08-24，免发版，D110）
 
 - `dependabot.yml` ignore 对齐版本锁定清单（AGENTS #2：electron/vite/react/typescript/openai/zod 等 23 项全类型忽略）——锁定包不再每周开升级 PR（CVE 例外走人工评估）
