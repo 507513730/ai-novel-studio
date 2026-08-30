@@ -15,7 +15,7 @@ export function registerChapterSearchRoutes(router: Router, db: DatabaseSync): v
       const findSection = (label: string): string => {
         const idx = text.indexOf(label)
         if (idx < 0) return ''
-        const next = ['【本章任务单】', '【前文回顾】', '【未回收伏笔', '【已确认事实', '【流派节奏', '【爽点', '【本章三方会审', '【绑定写法', '【书级合约', '【世界观手册', '【角色账本', '【参考资料', '【本章任务单】', '请直接输出'].map((l) => {
+        const next = ['【本章任务单】', '【前文回顾】', '【未回收伏笔', '【已确认事实', '【流派节奏', '【爽点', '【本章三方会审', '【绑定写法', '【书级合约', '【世界观手册', '【角色账本', '【参考资料', '【知识库检索（按相关性）】', '【词条触发（命中关键词）】', '【已写章节参考（相似片段）】', '【本章任务单】', '请直接输出'].map((l) => {
           const i = text.indexOf(l, idx + label.length)
           return i >= 0 ? i : text.length
         })
@@ -30,7 +30,10 @@ export function registerChapterSearchRoutes(router: Router, db: DatabaseSync): v
         { key: 'genre', label: '【流派节奏模板' },
         { key: 'triple', label: '【本章三方会审约束' },
         { key: 'style', label: '【绑定写法要求' },
-        { key: 'summary', label: '【前文回顾】' }
+        { key: 'summary', label: '【前文回顾】' },
+        { key: 'kb', label: '【知识库检索（按相关性）】' },
+        { key: 'kb-trigger', label: '【词条触发（命中关键词）】' },
+        { key: 'kb-style', label: '【已写章节参考（相似片段）】' }
       ]
       for (const d of defs) {
         const seg = findSection(d.label)

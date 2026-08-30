@@ -797,3 +797,13 @@
 - **A6 演示书**：复核确认无需新增——演示书（「物忆图鉴」，零 LLM 成品样例）+ 书架空态「载入演示书」按钮 + nextSteps 引导卡均已在 v0.24.4 就绪。
 - **验收**：typecheck 0 err / lint 0 err / vitest 63 文件 371 用例（新增 tests/candidates.test.ts 3 + export-docx preview 1）/ db-smoke 7/7；架构守护 6/6。
 - **发版待定**：A 档补强涉及 src 改动（client+server）——按 #57 分层决议属 MINOR 功能批，待批次收尾统一 `pnpm dist` 打包（AGENTS #35/#36）。
+
+### D124 · 2026-08-30 · B 档：词条触发注入 + 已写片段检索地基
+
+- **B1 词条触发注入（修正调研报告判断）**：复核发现 **TF-IDF 相似度检索其实已接入上下文组装**（`getKnowledgeRetrieval`，dynamic.ts L343-347，受 `kb` 开关控制）——所以 B1 核心缺口不是"接 RAG"，而是调研报告明确点的那条 **NovelAI Lorebook 机制：前文内容命中关键词 → 注入该设定条目**（相似度 ≠ 触发）。实现：kb_doc 加 `keywords` 字段（schema v23，逗号分隔触发词）；新增 `services/kbTrigger.ts` 的 `getKbTriggerInjection`，用**正文前文 + 本章标题/摘要**命中 `keywords`，命中 ≤3 条注入可变区（受 `kb-trigger` 开关，进入裁剪顺序表）；排除 `status='direct'`（直塞资料已走冻结区，避免双份进提示词）。知识库页每篇文档可编辑触发词（PATCH /knowledge/:id）。
+- **与相似度检索的关系（本地设计）**：相似度 = 超窗后按相关性召回兜底；触发式 = 前置精准命中（标题/正文里出现触发词即注入）。两者并存、都受 `kb`/`kb-trigger` 开关与预算守卫约束。
+- **B2 写法示例动态检索地基**：`services/context/chapterRetrieval.ts` 的 `getPriorChapterRetrieval` 把作者已写正文（当前章之前的最近 12 章）入 TF-IDF 检索库，按相关性召回相似片段作写法参考（【已写章节参考（相似片段）】）。**关键取舍**：只取当前章节**之前**的已写章节（避免把"前文回顾"重复成整章直塞）；只在正文生成场景注入（有内容时），受 `kb-style` 开关。完整 B2（作者正文入库 → 生成时 few-shot 写法示例注入）在其上扩展。
+- **schema 迁移**：v23（kb_doc.keywords）。db-smoke 从 v22 升到 v23 通过（增量迁移 + 既有表不受影响）。
+- **触发输入用正文前文（用户裁定）**：触发判定用「正在写的正文 + 标题/摘要」，比仅标题/摘要更随写作推进精准。
+- **验收**：typecheck 0 err / lint 0 err / vitest 64 文件 375 用例（新增 tests/kb-trigger.test.ts 7）/ db-smoke 7/7（v23） / 架构守护 6/6；electron-vite build + electron-builder dist 双产物重打。
+- **发版待定**：B 档补强涉及 src 改动（client+server）——按 #57 分层决议属 MINOR 功能批，随批次统一打包。

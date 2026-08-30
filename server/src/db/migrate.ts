@@ -488,6 +488,12 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     // 不匹配被拒；重启恢复（generating→planned）一并清空。
     version: 22,
     statements: [`ALTER TABLE chapter ADD COLUMN generation_token TEXT`]
+  },
+  {
+    // B1 词条触发注入（D124）：kb_doc.keywords——逗号分隔触发词，内容命中即注入该词条设定。
+    // 与相似度检索并存：相似度按相关性召回（超窗兜底），触发式切中关键词即注入（NovelAI Lorebook 机制）。
+    version: 23,
+    statements: [`ALTER TABLE kb_doc ADD COLUMN keywords TEXT NOT NULL DEFAULT ''`]
   }
 ]
 

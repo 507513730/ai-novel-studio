@@ -139,7 +139,9 @@ export function createAssetsRouter(db: DatabaseSync): Router {
         .object({
           title: z.string().min(1).max(100),
           content: z.string().min(10).max(50_000),
-          status: z.enum(['direct', 'indexed', 'draft']).default('indexed')
+          status: z.enum(['direct', 'indexed', 'draft']).default('indexed'),
+          // B1（D124）：触发词（逗号分隔）——内容命中即注入该词条设定
+          keywords: z.string().max(200).optional().default('')
         })
         .parse(req.body ?? {})
       // v0.22.0（kb_doc 标题 ? 前缀事故防再犯）：标题清洗——trim + 去除首部孤立 ? 序列
@@ -150,8 +152,8 @@ export function createAssetsRouter(db: DatabaseSync): Router {
         return
       }
       const rid = db
-        .prepare('INSERT INTO kb_doc (novel_id, title, content, source, status) VALUES (0, ?, ?, ?, ?)')
-        .run(title, input.content, 'imported', input.status)
+        .prepare('INSERT INTO kb_doc (novel_id, title, content, source, status, keywords) VALUES (0, ?, ?, ?, ?, ?)')
+        .run(title, input.content, 'imported', input.status, input.keywords)
       res.status(201).json({ id: Number(rid.lastInsertRowid) })
     } catch (err) {
       next(err)

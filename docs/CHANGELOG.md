@@ -17,6 +17,18 @@
 **A6 演示书与引导（现状核实，无需新增）**
 - 演示书「载入演示书」按钮（书架空态）+ nextSteps 引导卡均已在 v0.24.4 就绪，A6 演示书部分无需新增
 
+### B 档竞品差距（1.0 后补强，D124）
+
+**B1 词条触发注入（NovelAI Lorebook 机制）**
+- kb_doc 新增 `keywords` 字段（schema v23）：逗号分隔触发词，内容命中即注入该词条设定
+- 新增 `server/src/services/kbTrigger.ts`：`getKbTriggerInjection` 用正文前文 + 本章标题/摘要命中 `kb_doc.keywords`，命中 ≤3 条注入可变区；排除 `status='direct'`（直塞资料避免双份进提示词）
+- 接入 `buildChapterWriteContext` 可变区（`kb-trigger` 开关，进入裁剪顺序表）；知识库页每篇文档可编辑触发词（PATCH /knowledge/:id）
+- 与既有相似度检索并存：相似度 = 超窗召回兜底；触发式 = 前置精准命中（比分析报告「相似度即 RAG」更进一步）
+
+**B2 写法示例动态检索地基**
+- 新增 `server/src/services/context/chapterRetrieval.ts`：`getPriorChapterRetrieval` 把作者已写正文（当前章之前的最近 N 章）入 TF-IDF 检索库，按相关性召回相似片段作写法参考（标为【已写章节参考（相似片段）】）
+- 接入 `buildChapterWriteContext`（`kb-style` 开关，正文生成场景才注入，避免与前文回顾重复直塞）；完整版 B2（作者正文入库 → few-shot 写法示例）在其上扩展
+
 ## v1.0.0（2026-08-29）
 
 ### 安装方式

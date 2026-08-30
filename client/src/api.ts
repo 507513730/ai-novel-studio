@@ -323,7 +323,7 @@ export const assetsApi = {
     js('/import/file', { method: 'POST', body: JSON.stringify({ filename, base64, asChapters }) }),
   extract: (type: string, text: string, title?: string): Promise<{ type: string; draft: Record<string, unknown> }> =>
     js('/assets/extract', { method: 'POST', body: JSON.stringify({ type, text, title }) }),
-  knowledgeCreate: (body: { title: string; content: string; status?: string }): Promise<{ id: number }> =>
+  knowledgeCreate: (body: { title: string; content: string; status?: string; keywords?: string }): Promise<{ id: number }> =>
     js('/knowledge', { method: 'POST', body: JSON.stringify(body) }),
   worldTemplateCreate: (body: { name: string; manual?: Record<string, string>; factions?: string[]; map?: Record<string, string>; timeline?: string[] }): Promise<{ id: number }> =>
     js('/world-templates', { method: 'POST', body: JSON.stringify(body) }),
@@ -417,9 +417,11 @@ export const resourcesApi = {
   worldTemplateApply: (templateId: number, novelId: number): Promise<{ ok: boolean }> =>
     j(`/world-templates/${templateId}/apply/${novelId}`, { method: 'POST' }),
   worldTemplateDelete: (id: number): Promise<{ ok: boolean }> => j(`/world-templates/${id}`, { method: 'DELETE' }),
-  knowledge: (): Promise<{ docs: Array<{ id: number; novelId: number; title: string; source: string; status: string; novelTitle: string; createdAt: string }> }> =>
+  knowledge: (): Promise<{ docs: Array<{ id: number; novelId: number; title: string; source: string; status: string; keywords: string; novelTitle: string; createdAt: string }> }> =>
     j('/knowledge'),
   knowledgeDelete: (id: number): Promise<{ ok: boolean }> => j(`/knowledge/${id}`, { method: 'DELETE' }),
+  knowledgePatch: (id: number, body: { keywords: string }): Promise<{ ok: boolean }> =>
+    j(`/knowledge/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   // P18 D1：基础角色模板库
   baseCharacters: (): Promise<{ templates: Array<{ id: number; name: string; profile: Record<string, unknown>; sourceNovelId: number | null; sourceTitle: string; createdAt: string }> }> =>
     j('/base-characters'),

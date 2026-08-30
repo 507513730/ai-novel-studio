@@ -8,6 +8,8 @@ import { getBoundStyleRules } from '../styleEngine'
 import { smartContextText, type SmartContext } from '../smartContext'
 import type { LlmMessage } from '../llm/types'
 import { TfidfRetriever } from '../retrieval'
+import { getKbTriggerInjection } from '../kbTrigger'
+import { getPriorChapterRetrieval } from './chapterRetrieval'
 import { constraintsBlock } from '../constraintEngine'
 import { buildFrozenContext } from './frozen'
 import { estimateTokens, hashOf, truncate } from './hash'
@@ -284,9 +286,9 @@ export function buildChapterWriteContext(
   const has = (key: string): boolean => !include || include.includes(key)
 
   const chapter = db
-    .prepare('SELECT title, summary, goal_json FROM chapter WHERE id = ? AND novel_id = ?')
+    .prepare('SELECT title, summary, goal_json, content FROM chapter WHERE id = ? AND novel_id = ?')
     .get(chapterId, novelId) as
-    | { title: string; summary: string; goal_json: string }
+    | { title: string; summary: string; goal_json: string; content: string }
     | undefined
   if (!chapter) throw new Error(`chapter ${chapterId} not found`)
 
@@ -345,6 +347,20 @@ export function buildChapterWriteContext(
     const kbRetrieval = getKnowledgeRetrieval(db, novelId, `${chapter?.title ?? ''} ${chapter?.summary ?? ''} ${chapter?.goal_json ?? ''}`)
     if (kbRetrieval) variableText += kbRetrieval + '\n\n'
   }
+  // B1 词条触发注入（D124）：内容命中 kb_doc.keywords → 注入该词条设定。
+  // 与相似度检索并存（相似度=超窗召回兜底；触发式=前置精准命中）。query = 正文前文 + 标题/摘要。
+  if (has('kb-trigger')) {
+    const queryText = `${chapter?.content ?? ''} ${chapter?.title ?? ''} ${chapter?.summary ?? ''}`.slice(0, 6000)
+    const kbTrigger = getKbTriggerInjection(db, novelId, queryText)
+    if (kbTrigger) variableText += kbTrigger + '\n\n'
+  }
+  // B2 地基（D124）：已写章节相似片段参考（few-shot 写法示例的地基）。
+  // 正文生成场景才注入（有内容时）；控制器开关 kb-style。
+  if (has('kb-style') && (chapter?.content ?? '').trim().length > 0) {
+    const priorQuery = `${chapter?.title ?? ''} ${chapter?.summary ?? ''} ${chapter?.goal_json ?? ''}`.slice(0, 1500)
+    const priorRef = getPriorChapterRetrieval(db, novelId, chapterId, priorQuery)
+    if (priorRef) variableText += priorRef + '\n\n'
+  }
   // P19 ⑥：当前定位（卷战略 → 节拍 → 本章目标 4 级聚焦，限量 600 字）
   if (has('location')) {
     const location = getChapterLocation(db, chapterId)
@@ -370,6 +386,8 @@ export function buildChapterWriteContext(
     '【前文回顾】',
     '【时间线（最近事件）】',
     '【知识库检索（按相关性）】',
+    '【词条触发（命中关键词）】',
+    '【已写章节参考（相似片段）】',
     '【当前定位】',
     '【绑定写法要求（必须遵守）】',
     '【本章三方会审约束（必须遵守）】',

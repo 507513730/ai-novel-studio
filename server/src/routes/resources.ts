@@ -110,11 +110,11 @@ export function createResourcesRouter(db: DatabaseSync): Router {
   router.get('/knowledge', (_req, res) => {
     const rows = db
       .prepare(
-        `SELECT k.id, k.novel_id, k.title, k.source, k.status, k.created_at, n.title AS novel_title
+        `SELECT k.id, k.novel_id, k.title, k.source, k.status, k.keywords, k.created_at, n.title AS novel_title
          FROM kb_doc k LEFT JOIN novel n ON n.id = k.novel_id
          ORDER BY k.id DESC LIMIT 100`
       )
-      .all() as Array<{ id: number; novel_id: number; title: string; source: string; status: string; created_at: string; novel_title: string | null }>
+      .all() as Array<{ id: number; novel_id: number; title: string; source: string; status: string; keywords: string; created_at: string; novel_title: string | null }>
     res.json({
       docs: rows.map((r) => ({
         id: r.id,
@@ -122,6 +122,7 @@ export function createResourcesRouter(db: DatabaseSync): Router {
         title: r.title,
         source: r.source,
         status: r.status,
+        keywords: r.keywords,
         novelTitle: r.novel_title ?? '',
         createdAt: r.created_at
       }))
@@ -131,6 +132,22 @@ export function createResourcesRouter(db: DatabaseSync): Router {
   router.delete('/knowledge/:id', (req, res) => {
     db.prepare('DELETE FROM kb_doc WHERE id = ?').run(Number(req.params.id))
     res.json({ ok: true })
+  })
+
+  // B1（D124）：知识库词条触发词编辑（逗号分隔）
+  router.patch('/knowledge/:id', (req, res, next) => {
+    try {
+      const id = Number(req.params.id)
+      const input = z.object({ keywords: z.string().max(200) }).parse(req.body ?? {})
+      const result = db.prepare('UPDATE kb_doc SET keywords = ? WHERE id = ?').run(input.keywords, id)
+      if (Number(result.changes) === 0) {
+        res.status(404).json({ error: 'doc not found' })
+        return
+      }
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
   })
 
   // ---------- 基础角色模板库（P18 D1） ----------

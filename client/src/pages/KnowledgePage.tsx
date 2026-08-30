@@ -1,11 +1,56 @@
 import { useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Database, Trash2, Globe, Search, Download } from 'lucide-react'
+import { Database, Trash2, Globe, Search, Download, Tag } from 'lucide-react'
 import { resourcesApi, assetsApi, apiFetch } from '../api'
 import { useToast } from '../components/Toast'
 import { AssetCreator } from '../components/AssetCreator'
 import { useConfirm } from '../components/ConfirmDialog'
+
+// B1（D124）：知识库词条触发词编辑器——逗号分隔，内容命中即注入该词条设定
+function KbKeywordsEditor({
+  docId,
+  initial,
+  onSaved
+}: {
+  docId: number
+  initial: string
+  onSaved: () => void
+}): React.JSX.Element {
+  const { toast } = useToast()
+  const [value, setValue] = useState(initial)
+  const [busy, setBusy] = useState(false)
+  const save = async (): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await resourcesApi.knowledgePatch(docId, { keywords: value })
+      toast('ok', '触发词已保存（内容命中即注入）')
+      onSaved()
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="row" style={{ gap: 6, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Tag size={12} className="muted" style={{ flexShrink: 0 }} />
+      <input
+        style={{ flex: '1 1 200px', minWidth: 160, fontSize: 12 }}
+        placeholder="触发词（逗号分隔）：如 楠木盒, 临江古玩街, 物忆"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => value !== initial && void save()}
+      />
+      {value !== initial && (
+        <button className="sm" disabled={busy} onClick={() => void save()}>
+          {busy ? '保存中…' : '保存触发词'}
+        </button>
+      )}
+    </div>
+  )
+}
 
 interface WebHit {
   title: string
@@ -143,7 +188,7 @@ export function KnowledgePage(): React.JSX.Element {
         <h1 className="ml-2">知识库</h1>
       </div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 16 }}>
-        全局文档库（拆书发布 / 外部资料 / AI 导入）。直塞文档会注入正文生成。
+        全局文档库（拆书发布 / 外部资料 / AI 导入）。直塞文档会注入正文生成；设置「触发词」的文档会在内容命中时自动注入设定。
       </p>
       {/* v0.18.0：联网搜索（设置 → 写作 → 联网查找 开启后可用） */}
       <WebSearchBox onImported={() => void queryClient.invalidateQueries({ queryKey: ['knowledge'] })} />
@@ -193,6 +238,12 @@ export function KnowledgePage(): React.JSX.Element {
                 ><Trash2 size={12} /></button>
               </div>
             </div>
+            {/* B1（D124）：触发词——内容命中即注入该词条设定 */}
+            <KbKeywordsEditor
+              docId={d.id}
+              initial={d.keywords ?? ''}
+              onSaved={() => void queryClient.invalidateQueries({ queryKey: ['knowledge'] })}
+            />
           </div>
         ))}
         {!docs.isLoading && docs.data?.docs.length === 0 && <p className="muted">知识库为空。拆书发布、外部资料直塞后会出现在这里。</p>}
