@@ -807,3 +807,15 @@
 - **触发输入用正文前文（用户裁定）**：触发判定用「正在写的正文 + 标题/摘要」，比仅标题/摘要更随写作推进精准。
 - **验收**：typecheck 0 err / lint 0 err / vitest 64 文件 375 用例（新增 tests/kb-trigger.test.ts 7）/ db-smoke 7/7（v23） / 架构守护 6/6；electron-vite build + electron-builder dist 双产物重打。
 - **发版待定**：B 档补强涉及 src 改动（client+server）——按 #57 分层决议属 MINOR 功能批，随批次统一打包。
+
+### D125 · 2026-08-30 · B3：存量书稿接续创作（外部书 → 工作书转换）
+
+- **现状核查（修正定位）**：外部书容器其实已存在（P23 `/import/book`，is_external=1 + 章节 status='imported'），但 is_external 在迁移/导入之外**无任何消费点**——它只是标记，导入后已是普通 novel。真正缺的是调研报告点的「转为工作书」转换层：**导入书只有正文，没有卷结构/方向/framing/世界/角色等管线产物**，自动导演/方案流水线无法续写。
+- **转换设计（复用而非新建，AGENTS #31）**：`services/bookConversion.ts`，全部复用现有 `callLlmJson`（extraction 路由）+ volume/novel 表，不新建提取逻辑。三步骤分步可选：
+  - **volume**：LLM 从章节标题/首段识别卷边界（`parseVolumeBoundaries` 校验：首卷=1、起点递增、1..N、含末章），写 volume 行 + 每章挂 volume_id（幂等：先 DELETE 再插）。
+  - **direction**：从已写内容反推方向方案（复用方向 scheme 字段）+ framing（summary/sellingPoint 等），写 novel.direction_json + framing_json。
+  - **activate**：翻转 is_external=0、novel.status→draft、章节 imported→written（整书直塞/续写前文可纳入）+ 回填章节摘要（backfillChapterSummaries）。
+- **分步可选（用户裁定）**：转换默认做「卷结构+方向+激活」，世界观/角色/写法由工作区各面板按需补（已是普通工作书路径）。卷边界用 LLM 识别（用户裁定，非均分）。已写状态转 written（用户裁定）。
+- **UI**：novel 详情回传 `isExternal`，工作区 header 对外部书显示「转为工作书」按钮（themed confirm + 转换中 busy）。路由仅允许 is_external=1 的书转换（防误转普通书）。
+- **验收**：typecheck 0 err / lint 0 err / vitest 65 文件 379 用例（新增 tests/book-conversion.test.ts 4）/ db-smoke 7/7 / 架构守护 6/6；electron-vite build + electron-builder dist 双产物重打。
+- **发版待定**：B 档补强涉及 src 改动（client+server）——按 #57 分层决议属 MINOR 功能批，随批次统一打包。

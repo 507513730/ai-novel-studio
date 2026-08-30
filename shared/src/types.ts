@@ -141,6 +141,8 @@ export interface NovelDetail {
   inspiration: string
   status: string
   genre: string
+  // B3（D125）：外部导入书（is_external=1）——工作区提供「转为工作书」入口
+  isExternal?: boolean
   direction: Array<{ id: string; scheme: DirectionScheme }>
   titleGroup: string[]
   framing: Record<string, unknown>

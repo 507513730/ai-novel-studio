@@ -3,6 +3,12 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { extractAsset, splitChapters, parseEpub, type AssetType } from '../services/assetExtractor'
 import { callLlmJson } from '../services/jsonSafe'
+import {
+  deriveVolumeStructure,
+  backfillChapterSummaries,
+  deriveDirectionAndFraming,
+  activateAsWorkingBook
+} from '../services/bookConversion'
 import { JSON_FORMAT } from '../prompts'
 
 // ============================================================
@@ -330,6 +336,41 @@ export function createAssetsRouter(db: DatabaseSync): Router {
         db.exec('ROLLBACK')
         throw err
       }
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // ---------- B3（D125）：外部书 → 工作书转换（分步可选：卷结构+方向+激活；world/characters/style 由工作区面板按需补） ----------
+  router.post('/import/book/:id/convert', async (req, res, next) => {
+    try {
+      const novelId = Number(req.params.id)
+      const input = z
+        .object({ steps: z.array(z.enum(['volume', 'direction', 'activate'])).min(1) })
+        .parse(req.body ?? {})
+      // 仅允许转换外部书（is_external=1），防止误转普通书
+      const novel = db.prepare('SELECT id, is_external FROM novel WHERE id = ?').get(novelId) as
+        | { id: number; is_external: number }
+        | undefined
+      if (!novel) {
+        res.status(404).json({ error: 'novel not found' })
+        return
+      }
+      if (Number(novel.is_external) !== 1) {
+        res.status(400).json({ error: '仅外部导入书可转为工作书' })
+        return
+      }
+
+      const result: Record<string, number | string> = {}
+      for (const step of input.steps) {
+        if (step === 'volume') result.volumes = await deriveVolumeStructure(db, novelId)
+        if (step === 'direction') await deriveDirectionAndFraming(db, novelId)
+        if (step === 'activate') {
+          activateAsWorkingBook(db, novelId)
+          result.summariesFilled = backfillChapterSummaries(db, novelId)
+        }
+      }
+      res.json({ ok: true, steps: input.steps, ...result })
     } catch (err) {
       next(err)
     }

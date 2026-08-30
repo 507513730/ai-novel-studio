@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { novelApi, automationApi } from '../api'
-import { ArrowRight } from 'lucide-react'
+import { novelApi, automationApi, assetsApi } from '../api'
+import { ArrowRight, RefreshCw } from 'lucide-react'
 import { useConfirm } from '../components/ConfirmDialog'
+import { useToast } from '../components/Toast'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { SetupPanel } from '../workspace/SetupPanel'
 import { ConstraintPanel } from '../workspace/ConstraintPanel'
@@ -190,6 +191,31 @@ export function NovelWorkspacePage(): React.JSX.Element {
   }
 
   const n = detail.data?.novel
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+  // B3（D125）：外部书 → 工作书转换（卷结构 + 方向 + 激活）
+  const [converting, setConverting] = useState(false)
+
+  const convertToWorkingBook = (): void => {
+    if (converting || !n) return
+    confirmFn({
+      title: '转为工作书',
+      message: '将基于已导入正文自动划分卷结构、提炼方向与梗概，并激活为可续写的工作书（章节转为已写而可被整书直塞）。世界观/角色/写法可在工作区各面板按需补充。继续？',
+      confirmText: '转换',
+      danger: true,
+      action: () => {
+        setConverting(true)
+        void assetsApi
+          .convertBook(id, ['volume', 'direction', 'activate'])
+          .then(() => {
+            toast('ok', '已转为工作书：卷结构/方向已生成，章节已视为已写')
+            void queryClient.invalidateQueries({ queryKey: ['novel', id] })
+          })
+          .catch((err) => toast('error', err instanceof Error ? err.message : String(err)))
+          .finally(() => setConverting(false))
+      }
+    })
+  }
 
   // 步骤状态推断（done: 已有产物；current: 当前 tab；todo: 未就绪）
   const statusOf = (key: Tab): StepStatus => {
@@ -317,9 +343,16 @@ export function NovelWorkspacePage(): React.JSX.Element {
               <span className="muted t-small">
                 状态：{n.status ?? '...'}
                 {n.genre ? ` · 流派：${n.genre}` : ''}
+                {n.isExternal ? ' · 外部导入书（未转为工作书）' : ''}
               </span>
             )}
           </div>
+          {n?.isExternal && (
+            <button className="sm primary" onClick={convertToWorkingBook} disabled={converting}>
+              <RefreshCw size={12} className="icon-gap" />
+              {converting ? '转换中…' : '转为工作书'}
+            </button>
+          )}
         </div>
 
         {/* P19 ⑦：卡片化创作向导（横排 7 步；全部完成后自动折叠为进度条） */}

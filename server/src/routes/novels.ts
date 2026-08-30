@@ -113,6 +113,8 @@ export function createNovelsRouter(db: DatabaseSync): Router {
         inspiration: row.inspiration,
         status: row.status,
         genre: row.genre,
+        // B3（D125）：外部导入书标记（供工作区「转为工作书」入口）
+        isExternal: Number(row.is_external ?? 0) === 1,
         // v0.17.0（LOW）：safeParseJson 兜底（损坏 JSON 不炸详情页）
         direction: safeParseJson(row.direction_json),
         titleGroup: safeParseJson(row.title_group_json),

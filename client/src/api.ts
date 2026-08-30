@@ -325,6 +325,9 @@ export const assetsApi = {
     js('/assets/extract', { method: 'POST', body: JSON.stringify({ type, text, title }) }),
   knowledgeCreate: (body: { title: string; content: string; status?: string; keywords?: string }): Promise<{ id: number }> =>
     js('/knowledge', { method: 'POST', body: JSON.stringify(body) }),
+  // B3（D125）：外部书 → 工作书转换
+  convertBook: (id: number, steps: Array<'volume' | 'direction' | 'activate'>): Promise<{ ok: boolean; volumes?: number; summariesFilled?: number }> =>
+    js(`/import/book/${id}/convert`, { method: 'POST', body: JSON.stringify({ steps }) }),
   worldTemplateCreate: (body: { name: string; manual?: Record<string, string>; factions?: string[]; map?: Record<string, string>; timeline?: string[] }): Promise<{ id: number }> =>
     js('/world-templates', { method: 'POST', body: JSON.stringify(body) }),
   genrePatch: (id: number, body: Record<string, unknown>): Promise<{ ok: boolean }> =>

@@ -29,6 +29,13 @@
 - 新增 `server/src/services/context/chapterRetrieval.ts`：`getPriorChapterRetrieval` 把作者已写正文（当前章之前的最近 N 章）入 TF-IDF 检索库，按相关性召回相似片段作写法参考（标为【已写章节参考（相似片段）】）
 - 接入 `buildChapterWriteContext`（`kb-style` 开关，正文生成场景才注入，避免与前文回顾重复直塞）；完整版 B2（作者正文入库 → few-shot 写法示例）在其上扩展
 
+**B3 存量书稿接续创作（外部书 → 工作书转换）**
+- 新增 `POST /import/book/:id/convert`（`steps`: volume/direction/activate）：导入的连载稿（is_external=1，只有正文）一键反推管线产物并激活为可续写的工作书
+- volume：LLM 从章节标题/首段识别卷边界 → 写 volume 行 + 每章挂 volume_id（幂等重跑）
+- direction：从已写内容反推方向方案 + framing（复用 extraction 路由）；activate：翻转 is_external=0、novel.status→draft、章节 status imported→written（可被整书直塞/续写前文纳入）+ 回填章节摘要
+- 新增 `server/src/services/bookConversion.ts`；工作区 header 对外部书显示「转为工作书」按钮（分步可选：先卷+方向+激活，世界观/角色/写法由工作区面板按需补）
+- 仅限 is_external=1 的书可转（防误转普通书），novel 详情回传 `isExternal`
+
 ## v1.0.0（2026-08-29）
 
 ### 安装方式
