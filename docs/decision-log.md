@@ -788,3 +788,12 @@
 - **工作台引导收敛（Ulysses 渐进披露）**：GuideStrip 默认收起为一行进度（左步骤导航为常驻层级），消除「步骤导航/横排卡片/NextStepCard」三层同屏冗余；点击可展开。
 - **回归证据**：release/ui-review/23-25（执行面板分组卡、书架新卡、工作台单行引导条）；typecheck 0 err / lint 0 err（既有 5 警告）/ vitest 62 文件全过。
 - **发版**：1.0.0（MAJOR，稳定承诺）——判据见 versioning §1.1 二次修订（D120）；本地 dist 双产物 + tag v1.0.0 + GitHub Release。
+
+### D123 · 2026-08-29 · A 档竞品差距补强（A5 导出预览 + A1 多候选分支生成）
+
+- **A5 导出预览（补 v0.24.4 DOCX 导出的短板）**：章节工具栏导出不再直接下载，改为先打开「导出预览」弹层（`client/src/pages/chapter/ExportPreviewModal.tsx`）——整本书（已写章节）按 `.prose` 渲染，可切换 TXT/MD/EPUB/DOCX（各带格式提示），底部「下载」才真正拉取。数据源新增 `GET /:novelId/export-preview`（camelCase 结构化，与 `/export` 共用同一份已写章节查询，保证预览与导出一致）。落点复核：分析报告里「阅读视图 .prose 可复用」成立（复用 ReadingView 同一套 `.prose` 排印类）。**本地设计**：预览为纯展示弹层，与生成/审核等链路隔离，不新增执行面入口。
+- **A1 多候选分支生成（核心体验，串行生成 → 存版本对比）**：用户裁定策略 = 串行（非并行 SSE）。实现：`server/src/services/chapterGeneration/candidates.ts` 的 `generateChapterCandidates` 串行生成 N 份差异化构想（每份经 `buildChapterWriteContext` 注入不同走向引导 `CANDIDATE_ANGLES`，复用现有「本次引导」可变区槽位；跳过三方会审与章节写库），各存为 `chapter_version` 快照（note=「候选 N」）并返回候选列表；客户端 `client/src/pages/chapter/CandidatesPanel.tsx` 并排对比，选定一份「采用为正文」**复用现有版本恢复流程**（`chapterVersionRestore`）落稿，其余候选留在版本历史。新增 `POST /:novelId/chapters/:chapterId/candidates`（count 1..3，zod 校验）+ `useChapterCandidates` hook（AGENTS #38 hook 先行）。
+- **架构守护约束**：architecture-guard 约定 `INSERT INTO chapter_version` 仅允许在 `chapterGeneration/persistence.ts` 与 `routes/chapters/versions.ts` 两处。候选快照不得在 candidates.ts 直写，新增 `persistence.persistCandidateVersion`（唯一入口）满足该不变量——首版实现曾直写触雷，架构守护测试立即暴露（价值验证）。
+- **A6 演示书**：复核确认无需新增——演示书（「物忆图鉴」，零 LLM 成品样例）+ 书架空态「载入演示书」按钮 + nextSteps 引导卡均已在 v0.24.4 就绪。
+- **验收**：typecheck 0 err / lint 0 err / vitest 63 文件 371 用例（新增 tests/candidates.test.ts 3 + export-docx preview 1）/ db-smoke 7/7；架构守护 6/6。
+- **发版待定**：A 档补强涉及 src 改动（client+server）——按 #57 分层决议属 MINOR 功能批，待批次收尾统一 `pnpm dist` 打包（AGENTS #35/#36）。

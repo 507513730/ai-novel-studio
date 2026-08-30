@@ -115,6 +115,20 @@ export const novelApi = {
     js(`/novels/${id}/macro`, { method: 'POST' }),
   exportUrl: (id: number, format: 'txt' | 'md' | 'epub' | 'docx'): string =>
     `${getApiBaseUrl()}/novels/${id}/export?format=${format}`,
+  // v1.0 后续（A5 导出预览）：整本书导出前的结构化预览数据
+  exportPreview: (id: number): Promise<import('./types').ExportPreview> =>
+    j(`/novels/${id}/export-preview`),
+  // v1.0 后续（A1 多候选分支生成）：串行生成 N 份候选构想
+  generateCandidates: (
+    id: number,
+    chapterId: number,
+    count: number,
+    include?: string[]
+  ): Promise<{ candidates: Array<{ index: number; note: string; content: string; wordCount: number; versionId: number }> }> =>
+    j(`/novels/${id}/chapters/${chapterId}/candidates${include && include.length > 0 ? `?include=${include.join(',')}` : ''}`, {
+      method: 'POST',
+      body: JSON.stringify({ count })
+    }),
 
   // P11-3：流派管理
   genres: (novelId?: number): Promise<{ genres: Array<{ id: number; name: string; novelId: number | null; custom: boolean }> }> =>

@@ -14,6 +14,7 @@ import { useConfirm } from '../components/ConfirmDialog'
 // 本页降至装配层（<400 行 / 4 useState）
 import { ChapterToolbar, EditorPane, type ExportFormat } from './chapter/EditorArea'
 import { ReadingView } from './chapter/ReadingView'
+import { ExportPreviewModal } from './chapter/ExportPreviewModal'
 import { ResourcePanel } from './chapter/ResourcePanel'
 import { ExecutionPanel } from './chapter/ExecutionPanel'
 import { useActionFeedback } from './chapter/hooks/useActionFeedback'
@@ -22,6 +23,7 @@ import { useChapterLoader } from './chapter/hooks/useChapterLoader'
 import { useGenerationController } from './chapter/hooks/useGenerationController'
 import { useChapterActions } from './chapter/hooks/useChapterActions'
 import { useChapterArtifacts } from './chapter/hooks/useChapterArtifacts'
+import { useChapterCandidates } from './chapter/hooks/useChapterCandidates'
 import { useSuggestion } from './chapter/hooks/useSuggestion'
 import { useChapterShortcuts, type ChapterActionRef } from './chapter/hooks/useChapterShortcuts'
 import { useChapterList } from './chapter/hooks/useChapterList'
@@ -214,6 +216,18 @@ export function ChapterExecutionPage(): React.JSX.Element {
     toast
   })
 
+  // v1.0 后续（A1 多候选分支生成）：串行生成 N 份候选 → 面板对比 → 采用为正文
+  const candidates = useChapterCandidates({
+    novelId: id,
+    selectedChapter,
+    setContent,
+    savedContentRef,
+    dirtyRef,
+    invalidate,
+    notify: actions.notify,
+    onActionError: feedback.setActionError
+  })
+
   const selectChapter = async (chapterId: number): Promise<void> => {
     if (streamingRef.current) {
       toast('info', '生成中，请先取消生成再切换章节')
@@ -240,6 +254,16 @@ export function ChapterExecutionPage(): React.JSX.Element {
     <>
       {chapterPromptElement}
       {confirmDialog}
+      {fileOps.exportPreviewFormat && (
+        <ExportPreviewModal
+          novelId={id}
+          format={fileOps.exportPreviewFormat}
+          onClose={fileOps.closeExportPreview}
+          onDownload={(f) => void fileOps.downloadExport(f)}
+          downloadBusy={fileOps.exportBusy}
+          onToggleFormat={fileOps.toggleExportFormat}
+        />
+      )}
       {focusMode && (
         <div style={{ position: 'fixed', top: 8, right: 12, zIndex: 'var(--z-dropdown)', fontSize: 'var(--fs-11)' }} className="muted">
           专注模式 · Ctrl+Shift+F 退出 · Esc 退出
@@ -291,7 +315,7 @@ export function ChapterExecutionPage(): React.JSX.Element {
             onToggleViewMode={() => setViewMode((m) => (m === 'edit' ? 'read' : 'edit'))}
             onPinGuidance={() => fileOps.pinGuidance(guidanceDraft, () => setGuidanceDraft(''))}
             exportBusy={fileOps.exportBusy}
-            onExport={(f: ExportFormat) => void fileOps.exportChapter(f)}
+            onExport={(f: ExportFormat) => void fileOps.openExportPreview(f)}
             onSaveTitle={fileOps.saveTitle}
           />
           <SelectionToolbar
@@ -390,6 +414,8 @@ export function ChapterExecutionPage(): React.JSX.Element {
             }}
             actions={actions}
             artifacts={artifacts}
+            candidates={candidates}
+            buildInclude={buildInclude}
           />
         )}
       </div>

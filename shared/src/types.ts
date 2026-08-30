@@ -204,6 +204,18 @@ export interface ChapterSummary {
 }
 
 // v0.20.0（NovelClaw 学习组）：记忆面——状态机显式视图（v0.21.0 审查 N5：契约类型入 shared）
+// v1.0 后续（A5 导出预览）：整本书导出前的结构化预览数据（camelCase，客户端用 .prose 渲染）
+export interface ExportPreviewChapter {
+  title: string
+  content: string
+}
+
+export interface ExportPreview {
+  title: string
+  inspiration: string
+  chapters: ExportPreviewChapter[]
+}
+
 export interface NovelMemory {
   characters: Array<{ name: string; states: string[] }>
   factions: Array<{ name: string; currentState: string }>

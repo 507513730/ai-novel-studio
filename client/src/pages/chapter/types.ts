@@ -33,6 +33,15 @@ export interface ChapterVersion {
   preview: string
 }
 
+// v1.0 后续（A1 多候选分支生成）：一份候选构想（各为一条 chapter_version 快照）
+export interface CandidateDraft {
+  index: number
+  note: string
+  content: string
+  wordCount: number
+  versionId: number
+}
+
 export interface ResourceDetail {
   title: string
   body: string

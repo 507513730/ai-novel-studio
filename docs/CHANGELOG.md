@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### A 档竞品差距（1.0 后补强，D123）
+
+**A5 导出预览（复用 .prose 排印）**
+- 章节工具栏导出按钮不再直接下载，改为先打开「导出预览」弹层：整本书（已写章节）按 `.prose` 渲染，可先确认版面再下载
+- 弹层内可切换 TXT/MD/EPUB/DOCX（各带格式提示），底部「下载」才真正拉取导出文件
+- 新增 `GET /:novelId/export-preview`（camelCase 结构化数据，与 `/export` 共用同一份已写章节查询，保证预览与导出一致）
+
+**A1 多候选分支生成（串行生成 → 存版本对比）**
+- 章节执行面板新增「多候选分支生成」：串行生成 2 份差异化构想（各注入不同走向引导），各存为 `chapter_version` 快照（note=「候选 N」）
+- 候选并排对比面板逐份预览，选定一份「采用为正文」——复用现有版本恢复流程落稿，其余候选保留在版本历史便于回退
+- 新增 `server/src/services/chapterGeneration/candidates.ts`（`generateChapterCandidates`）+ `POST /:novelId/chapters/:chapterId/candidates`；版本快照经 `persistence.persistCandidateVersion` 唯一入口写入，满足架构守护约定（chapter_version 仅 persistence.ts 与 versions 路由可写）
+
+**A6 演示书与引导（现状核实，无需新增）**
+- 演示书「载入演示书」按钮（书架空态）+ nextSteps 引导卡均已在 v0.24.4 就绪，A6 演示书部分无需新增
+
 ## v1.0.0（2026-08-29）
 
 ### 安装方式

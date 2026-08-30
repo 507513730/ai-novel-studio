@@ -12,6 +12,35 @@ interface JSZipLike {
 export function createExportRouter(db: DatabaseSync): Router {
   const router = Router()
 
+  // v1.0 后续（A5 导出预览）：整本书导出前的结构化预览数据（camelCase，客户端 .prose 渲染）。
+  // 与 /export 共用同一份"已写章节"查询，保证预览与真实导出内容一致。
+  router.get('/:novelId/export-preview', (req, res, next) => {
+    try {
+      const novelId = Number(req.params.novelId)
+      const novel = db.prepare('SELECT title, inspiration FROM novel WHERE id = ?').get(novelId) as
+        | { title: string; inspiration: string }
+        | undefined
+      if (!novel) {
+        res.status(404).json({ error: 'novel not found' })
+        return
+      }
+      const chapters = db
+        .prepare(
+          `SELECT title, content FROM chapter
+           WHERE novel_id = ? AND content != '' AND status IN ('written', 'reviewed', 'done')
+           ORDER BY id`
+        )
+        .all(novelId) as Array<{ title: string; content: string }>
+      res.json({
+        title: novel.title || '未命名小说',
+        inspiration: novel.inspiration,
+        chapters
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   router.get('/:novelId/export', async (req, res, next) => {
     try {
       const novelId = Number(req.params.novelId)

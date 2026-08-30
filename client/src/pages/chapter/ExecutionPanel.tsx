@@ -12,8 +12,10 @@ import {
 } from './ChapterPanels'
 import { MemoryPanel, ReviewResultPanel } from './ReviewPanel'
 import { VersionHistoryPanel } from './VersionHistoryPanel'
+import { CandidatesPanel } from './CandidatesPanel'
 import { useChapterActions } from './hooks/useChapterActions'
 import { useChapterArtifacts } from './hooks/useChapterArtifacts'
+import type { useChapterCandidates } from './hooks/useChapterCandidates'
 
 // v0.26.0（批次 B，审查 P1-3 + D27「每屏一个主行动」）：右栏执行面板重排——
 // 主行动卡（生成）强调，质量/查看动作收进分组卡 + 双列网格，次级动作不再与主行动等权平铺
@@ -38,6 +40,8 @@ interface ExecutionPanelProps {
   onAdoptAdvice: (advice: string) => void
   actions: ReturnType<typeof useChapterActions>
   artifacts: ReturnType<typeof useChapterArtifacts>
+  candidates: ReturnType<typeof useChapterCandidates>
+  buildInclude: () => string[] | undefined
 }
 
 export function ExecutionPanel({
@@ -52,7 +56,9 @@ export function ExecutionPanel({
   onGenerate,
   onAdoptAdvice,
   actions,
-  artifacts
+  artifacts,
+  candidates,
+  buildInclude
 }: ExecutionPanelProps): React.JSX.Element {
   const { actionBusy, actionError } = actions
   const busy = actionBusy !== null
@@ -127,6 +133,25 @@ export function ExecutionPanel({
               ? '根据写作上下文与本章任务单生成本章正文'
               : '请先在左侧选择章节'}
         </div>
+        {/* v1.0 后续（A1 多候选分支生成）：串行生成 2 份候选并排对比，选定为正文 */}
+        {!streaming && selectedChapter && (
+          <button
+            className="sm"
+            style={{ width: '100%', marginTop: 8, color: 'var(--accent-bright)', borderColor: 'var(--accent)' }}
+            disabled={busy || contentLoading || candidates.candidatesBusy}
+            onClick={() =>
+              confirmFn({
+                title: '多候选分支生成',
+                message: '将串行生成 2 份候选构想（各自成为一条版本快照，需消耗 2 次生成额度）。生成后可在面板对比，选定一份作为正文，其余保留在版本历史。继续？',
+                confirmText: '生成 2 份候选',
+                danger: true,
+                action: () => void candidates.generateCandidates(2, buildInclude())
+              })
+            }
+          >
+            {candidates.candidatesBusy ? '候选生成中…' : '多候选分支生成'}
+          </button>
+        )}
       </div>
 
       {/* 分组：质量与连续性 */}
@@ -165,6 +190,17 @@ export function ExecutionPanel({
         {actions.proofreadIssues !== null && (
           <div style={{ marginTop: 8 }}>
             <ProofreadPanel issues={actions.proofreadIssues} onClose={() => actions.setProofreadIssues(null)} />
+          </div>
+        )}
+        {/* v1.0 后续（A1 多候选分支生成）：候选并排对比面板 */}
+        {candidates.openCandidatesPanel && candidates.candidates && candidates.candidates.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <CandidatesPanel
+              candidates={candidates.candidates}
+              busy={candidates.candidatesBusy}
+              onAdopt={(c) => void candidates.adoptCandidate(c)}
+              onClose={candidates.closeCandidates}
+            />
           </div>
         )}
         {/* P21-3：跑创作方案 + P30：以方案生产正文 */}

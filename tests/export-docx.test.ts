@@ -76,4 +76,28 @@ describe('DOCX 导出（A5）', () => {
     })
     db.close()
   })
+
+  it('export-preview 返回 camelCase 结构化章节，且仅含已写章节', async () => {
+    const db = makeDb()
+    const n = db.prepare("INSERT INTO novel (title, inspiration, status) VALUES ('预览测试', '一句灵感', 'draft')").run()
+    const novelId = Number(n.lastInsertRowid)
+    db.prepare("INSERT INTO chapter (novel_id, title, content, status, word_count) VALUES (?, '第一章', '已写正文', 'written', 4)").run(novelId)
+    // 空内容章节（content=''）不应进入导出预览
+    db.prepare("INSERT INTO chapter (novel_id, title, content, status, word_count) VALUES (?, '空章', '', 'written', 0)").run(novelId)
+
+    await withServer(makeApp(db), async (base) => {
+      const res = await fetch(`${base}/api/novels/${novelId}/export-preview`)
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as {
+        title: string
+        inspiration: string
+        chapters: Array<{ title: string; content: string }>
+      }
+      expect(body.title).toBe('预览测试')
+      expect(body.inspiration).toBe('一句灵感')
+      expect(body.chapters).toHaveLength(1)
+      expect(body.chapters[0]).toEqual({ title: '第一章', content: '已写正文' })
+    })
+    db.close()
+  })
 })

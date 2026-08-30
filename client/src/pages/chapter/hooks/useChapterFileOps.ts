@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { novelApi, authHeaders } from '../../../api'
 import { extractProtagonistName } from '../../../utils/protagonist'
+import type { ExportFormat } from '../EditorArea'
 
 // v0.26.0（批次 B）：章节文件/元信息操作从页面拆出（AGENTS #38 先抽 hook）
 // 覆盖：P9 B7 导出下载（fetch 校验）、P9 B8 标题保存、v0.15.0 引导句固定为硬约束
+// v1.0 后续（A5）：导出前先打开排版预览（ExportPreviewModal）——`openExportPreview` 弹预览，
+// 用户确认后在预览内点「下载」才走到 `downloadExport` 实际下载。
 export function useChapterFileOps(options: {
   novelId: number
   selectedChapter: number | null
@@ -13,7 +16,11 @@ export function useChapterFileOps(options: {
   toast: (type: 'ok' | 'error' | 'info', text: string) => void
 }): {
   exportBusy: string | null
-  exportChapter: (format: 'txt' | 'md' | 'epub' | 'docx') => Promise<void>
+  exportPreviewFormat: ExportFormat | null
+  openExportPreview: (format: ExportFormat) => void
+  closeExportPreview: () => void
+  toggleExportFormat: (format: ExportFormat) => void
+  downloadExport: (format: ExportFormat) => Promise<void>
   saveTitle: (t: string) => Promise<void>
   pinGuidance: (guidance: string, onPinned: () => void) => void
 } {
@@ -22,7 +29,20 @@ export function useChapterFileOps(options: {
 
   // P9 B7：导出改为 fetch 下载（校验响应，成功/失败真实反馈）
   const [exportBusy, setExportBusy] = useState<string | null>(null)
-  const exportChapter = async (format: 'txt' | 'md' | 'epub' | 'docx'): Promise<void> => {
+  // A5：导出预览弹层（当前格式非空即为打开态）
+  const [exportPreviewFormat, setExportPreviewFormat] = useState<ExportFormat | null>(null)
+
+  const openExportPreview = (format: ExportFormat): void => {
+    setExportPreviewFormat(format)
+  }
+  const closeExportPreview = (): void => {
+    setExportPreviewFormat(null)
+  }
+  const toggleExportFormat = (format: ExportFormat): void => {
+    setExportPreviewFormat(format)
+  }
+
+  const downloadExport = async (format: 'txt' | 'md' | 'epub' | 'docx'): Promise<void> => {
     if (exportBusy) return
     setExportBusy(format)
     try {
@@ -38,6 +58,7 @@ export function useChapterFileOps(options: {
       a.click()
       URL.revokeObjectURL(a.href)
       toast('ok', `已导出 ${format.toUpperCase()}`)
+      setExportPreviewFormat(null)
     } catch (err) {
       toast('error', `导出失败：${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -80,5 +101,5 @@ export function useChapterFileOps(options: {
     })().catch(() => undefined)
   }
 
-  return { exportBusy, exportChapter, saveTitle, pinGuidance }
+  return { exportBusy, exportPreviewFormat, openExportPreview, closeExportPreview, toggleExportFormat, downloadExport, saveTitle, pinGuidance }
 }

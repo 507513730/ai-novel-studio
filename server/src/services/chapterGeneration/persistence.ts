@@ -64,3 +64,10 @@ export function persistGeneratedChapter(
 function staleClaimError(): Error {
   return new Error('章节生成会话已失效（章节不处于可写生成状态或已被新一轮生成抢占）')
 }
+
+// v1.0 后续（A1 多候选分支生成）：写一条候选版本快照，不触碰章节 content/status。
+// architecture-guard 约定 chapter_version 的 INSERT 仅允许在 persistence.ts（本章节生成域）与
+// versions 路由——候选快照也须经此唯一入口，避免域外直写。
+export function persistCandidateVersion(db: DatabaseSync, chapterId: number, content: string, note: string): number {
+  return Number(db.prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)').run(chapterId, content, note).lastInsertRowid)
+}

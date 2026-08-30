@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { buildChapterWriteContext } from '../../services/context/dynamic'
 import { generateChapter } from '../../services/chapterGeneration/orchestrator'
+import { generateChapterCandidates } from '../../services/chapterGeneration/candidates'
 
 export function registerChapterGenerationRoutes(router: Router, db: DatabaseSync): void {
   router.post('/:novelId/chapters/:chapterId/generate', async (req, res) => {
@@ -90,6 +91,33 @@ export function registerChapterGenerationRoutes(router: Router, db: DatabaseSync
       // v0.9.0（审查 #9）：SSE 事件只发固定文案（详细日志留服务端）
       send('error', { message: '生成失败，详情见服务端日志' })
       res.end()
+    }
+  })
+
+  // v1.0 后续（A1 多候选分支生成）：串行生成 N 份候选构想，各存为 chapter_version 快照，
+  // 不抢占章节、不改 chapter.content/status；返回候选列表供客户端并排对比，选定后走版本恢复。
+  router.post('/:novelId/chapters/:chapterId/candidates', async (req, res, next) => {
+    try {
+      const input = z.object({ count: z.number().int().min(1).max(3).optional() }).parse(req.body ?? {})
+      const novelId = z.coerce.number().int().positive().parse(req.params.novelId)
+      const chapterId = z.coerce.number().int().positive().parse(req.params.chapterId)
+
+      const include = req.query.include
+        ? String(req.query.include)
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined
+
+      const abort = new AbortController()
+      req.on('close', () => {
+        if (!res.writableEnded) abort.abort()
+      })
+
+      const candidates = await generateChapterCandidates(db, novelId, chapterId, { count: input.count, include, signal: abort.signal })
+      res.json({ candidates })
+    } catch (err) {
+      next(err)
     }
   })
 }
