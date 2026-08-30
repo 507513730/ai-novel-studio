@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
-### A 档竞品差距（1.0 后补强，D123）
+## v1.1.0（2026-08-30）
+
+### 安装方式
+- **安装版**：`AI-Novel-Studio Setup 1.1.0.exe`（NSIS 向导版）
+- **便携版**：`AI-Novel-Studio-1.1.0-portable-x64.exe`
+
+### A 档竞品差距补强（D123）
 
 **A5 导出预览（复用 .prose 排印）**
 - 章节工具栏导出按钮不再直接下载，改为先打开「导出预览」弹层：整本书（已写章节）按 `.prose` 渲染，可先确认版面再下载
@@ -17,24 +23,28 @@
 **A6 演示书与引导（现状核实，无需新增）**
 - 演示书「载入演示书」按钮（书架空态）+ nextSteps 引导卡均已在 v0.24.4 就绪，A6 演示书部分无需新增
 
-### B 档竞品差距（1.0 后补强，D124）
+### B 档竞品差距补强（D124/D125）
 
 **B1 词条触发注入（NovelAI Lorebook 机制）**
 - kb_doc 新增 `keywords` 字段（schema v23）：逗号分隔触发词，内容命中即注入该词条设定
 - 新增 `server/src/services/kbTrigger.ts`：`getKbTriggerInjection` 用正文前文 + 本章标题/摘要命中 `kb_doc.keywords`，命中 ≤3 条注入可变区；排除 `status='direct'`（直塞资料避免双份进提示词）
 - 接入 `buildChapterWriteContext` 可变区（`kb-trigger` 开关，进入裁剪顺序表）；知识库页每篇文档可编辑触发词（PATCH /knowledge/:id）
-- 与既有相似度检索并存：相似度 = 超窗召回兜底；触发式 = 前置精准命中（比分析报告「相似度即 RAG」更进一步）
+- 与既有相似度检索并存：相似度 = 超窗召回兜底；触发式 = 前置精准命中
 
 **B2 写法示例动态检索地基**
 - 新增 `server/src/services/context/chapterRetrieval.ts`：`getPriorChapterRetrieval` 把作者已写正文（当前章之前的最近 N 章）入 TF-IDF 检索库，按相关性召回相似片段作写法参考（标为【已写章节参考（相似片段）】）
-- 接入 `buildChapterWriteContext`（`kb-style` 开关，正文生成场景才注入，避免与前文回顾重复直塞）；完整版 B2（作者正文入库 → few-shot 写法示例）在其上扩展
+- 接入 `buildChapterWriteContext`（`kb-style` 开关，正文生成场景才注入）；完整版 B2（作者正文入库 → few-shot 写法示例）在其上扩展
 
 **B3 存量书稿接续创作（外部书 → 工作书转换）**
 - 新增 `POST /import/book/:id/convert`（`steps`: volume/direction/activate）：导入的连载稿（is_external=1，只有正文）一键反推管线产物并激活为可续写的工作书
 - volume：LLM 从章节标题/首段识别卷边界 → 写 volume 行 + 每章挂 volume_id（幂等重跑）
-- direction：从已写内容反推方向方案 + framing（复用 extraction 路由）；activate：翻转 is_external=0、novel.status→draft、章节 status imported→written（可被整书直塞/续写前文纳入）+ 回填章节摘要
-- 新增 `server/src/services/bookConversion.ts`；工作区 header 对外部书显示「转为工作书」按钮（分步可选：先卷+方向+激活，世界观/角色/写法由工作区面板按需补）
-- 仅限 is_external=1 的书可转（防误转普通书），novel 详情回传 `isExternal`
+- direction：从已写内容反推方向方案 + framing（复用 extraction 路由）；activate：翻转 is_external=0、novel.status→draft、章节 status imported→written + 回填章节摘要
+- 新增 `server/src/services/bookConversion.ts`；工作区 header 对外部书显示「转为工作书」按钮；仅限 is_external=1 的书可转
+
+### 安全加固（CodeQL 高危修复 + 依赖）
+- Incomplete multi-character sanitization：webSearch / assetExtractor 的 `/<[^>]+>/g` 正则剥离改为逐字符状态机 `stripHtmlTags`（不依赖正则，可证明完整）
+- Missing rate limiting：`import-opencode` 路由加 express-rate-limit（10 次/分，防凭证导入误触发/耗尽）
+- `epub2>adm-zip` 高危（GHSA-xcpc-8h2w-3j85，构造 ZIP 触发 4GB 内存分配）：pnpm override adm-zip ^0.6.0
 
 ## v1.0.0（2026-08-29）
 

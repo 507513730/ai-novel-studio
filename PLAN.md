@@ -29,7 +29,7 @@ AI 导演式长篇小说生产系统的桌面版（Electron）。借鉴两个参
 | 测试 | ✅ | vitest 366/366、db-smoke 7/7、typecheck/lint 0 error |
 | **当前主线** | 📚 | 真实写书（书 #25「帝路十章」）：全书累计 43 章 ≈11.4 万字；剩卷 74-75 共 49 章待产（应用内执行，绑定方案「帝路十章」）；1.0 后继续 |
 
-**版本记录**：最新 v1.0.0（1.0 收官：UI 全面升级完成——章节执行页拆分+右栏重排/书架升级/HubChat 三态+受限 markdown/引导收敛，D122；判据见 versioning §1.1 二次修订）；v1.0.0 后补强已入库（Unreleased：A5 导出预览 + A1 多候选分支生成 + A6 复核 D123；B1 词条触发注入 + B2 已写片段检索地基 D124；B3 存量书稿转工作书 D125）；上一版 v0.26.0（UI 一致性与 P0 硬伤修复批：工具栏/按钮竖排修复、侧栏 active 重写、遮罩与 z-index token 化、加载/空/错误三态统一、emoji→lucide，D120/D121；附 UI 全面审查报告 docs/ui-review.md）；上一版 v0.25.0（全仓库重构 R0-R9：业务域单一事实源 + 兼容层删除 + 架构守护 + 统一错误模型 + 文档架构，D111-D119）；上一版 v0.24.4（非写书清单批 B，D108/D109）——之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+**版本记录**：最新 v1.1.0（竞品差距补强 + CodeQL 高危修复：A5 导出预览/A1 多候选分支/B1 词条触发注入/B2 已写片段检索地基/B3 存量书稿转工作书 + sanitization/rate-limit/adm-zip 修复，D123-D125）；上一版 v1.0.0（1.0 收官：UI 全面升级完成——章节执行页拆分+右栏重排/书架升级/HubChat 三态+受限 markdown/引导收敛，D122；判据见 versioning §1.1 二次修订）；上一版 v0.26.0（UI 一致性与 P0 硬伤修复批，D120/D121；附 UI 全面审查报告 docs/ui-review.md）；上一版 v0.25.0（全仓库重构 R0-R9，D111-D119）；上一版 v0.24.4（非写书清单批 B，D108/D109）——之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 
 ## 1. 用户已锁定决策（不可再问）
 
