@@ -4,6 +4,7 @@
 
 import type { DatabaseSync } from 'node:sqlite'
 import { getAppSetting, setAppSetting } from './appSettings'
+import { stripHtmlTags } from './sanitize'
 
 export interface WebSearchResult {
   title: string
@@ -65,8 +66,8 @@ async function searchWikipedia(query: string, lang: string): Promise<{ hits: Web
   const hits = ((r.data as { query?: { search?: Array<{ title: string; snippet: string }> } })?.query?.search ?? []).map(
     (s) => ({
       title: String(s.title),
-      // 去除搜索高亮标记
-      snippet: String(s.snippet ?? '').replace(/<[^>]+>/g, ''),
+      // 去除搜索高亮标记（CodeQL：用逐字符扫描替代不完整正则剥离）
+      snippet: stripHtmlTags(String(s.snippet ?? '')),
       url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(String(s.title).replace(/\s+/g, '_'))}`
     })
   )

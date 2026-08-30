@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { callLlmJson } from './jsonSafe'
+import { stripHtmlTags } from './sanitize'
 import { JSON_FORMAT } from '../prompts'
 
 // ============================================================
@@ -127,7 +128,7 @@ export async function parseEpub(buffer: Buffer): Promise<string> {
         /* 单章失败跳过 */
       }
     }
-    const text = parts.join('\n\n').replace(/<[^>]+>/g, '').trim()
+    const text = stripHtmlTags(parts.join('\n\n')).trim()
     if (text.length < 100) throw new Error('EPUB 内容过少或为空')
     return text
   } catch (err) {

@@ -39,6 +39,7 @@
     "epub-gen-memory": "1.1.2",
     "epub2": "^3.0.2",
     "express": "5.2.1",
+    "express-rate-limit": "^8.7.0",
     "gpt-tokenizer": "^3.4.0",
     "lucide-react": "^1.31.0",
     "openai": "7.4.0",

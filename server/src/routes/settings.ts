@@ -10,6 +10,7 @@ import { homedir } from 'node:os'
 import { encryptSecret, decryptSecret } from '../services/keyCrypto'
 import { TASK_TYPES } from '../db/seed'
 import OpenAI from 'openai'
+import { rateLimit } from 'express-rate-limit'
 
 export const OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
 export const OPENCODE_GO_NAME = 'OpenCode Go 网关'
@@ -35,8 +36,12 @@ const routeSchema = z.object({
 export function createSettingsRouter(db: DatabaseSync): Router {
   const router = Router()
 
+  // CodeQL 修复（2026-08-30）：Missing rate limiting——import-opencode 读取本地 opencode 凭证并写入供应商，
+  // 属于有状态/资源消耗操作，加限流（本地 127.0.0.1 应用，限 10 次/分钟/键，防误触发与耗尽）。
+  const importRateLimit = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: true, legacyHeaders: false })
+
   // ---------- import from opencode auth.json ----------
-  router.post('/import-opencode', async (req, res, next) => {
+  router.post('/import-opencode', importRateLimit, async (req, res, next) => {
     try {
       const input = z
         .object({
