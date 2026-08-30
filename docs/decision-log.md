@@ -819,3 +819,15 @@
 - **UI**：novel 详情回传 `isExternal`，工作区 header 对外部书显示「转为工作书」按钮（themed confirm + 转换中 busy）。路由仅允许 is_external=1 的书转换（防误转普通书）。
 - **验收**：typecheck 0 err / lint 0 err / vitest 65 文件 379 用例（新增 tests/book-conversion.test.ts 4）/ db-smoke 7/7 / 架构守护 6/6；electron-vite build + electron-builder dist 双产物重打。
 - **发版待定**：B 档补强涉及 src 改动（client+server）——按 #57 分层决议属 MINOR 功能批，随批次统一打包。
+
+### D126 · 2026-08-30 · CI 红叉排查 + CodeQL 高危修复（v1.1.0）
+
+- **红叉根因（三类，逐一实测确认）**：
+  - **release-readiness**：三个功能提交改了 `client/src|server/src|shared/src` 但版本停在上一 tag `v1.0.0`（`1.0.0 === 1.0.0` → fail）。修复 = bump 1.1.0 + CHANGELOG `## v1.1.0` + versioning §7 / PLAN / onboarding 锚点同步。
+  - **commitlint subject-case**：提交 subject 以大写拉丁开头（`A 档…`/`B 档…`/`B3…`）触发 subject-case。修复 = subject 改中文开头（`竞品差距补强…`/`补强 B 档…`/`推动存量书稿续写…`）。
+  - **build check `pnpm audit --prod --audit-level=high`**：`epub2>adm-zip@0.5.18` 高危（GHSA-xcpc-8h2w-3j85，构造 ZIP 4GB 内存分配）。修复 = pnpm-workspace.yaml `overrides: adm-zip ^0.6.0`（epub2 `^0.5.10` 语义化锁 <0.6.0，override 覆盖）。
+- **CodeQL 3 个 High（用户提供告警，逐一修复）**：
+  - Incomplete multi-character sanitization（webSearch.ts:69 / assetExtractor.ts:130）：`/<[^>]+>/g` 正则剥离改逐字符状态机 `services/sanitize.ts` 的 `stripHtmlTags`（可证明完整）。
+  - Missing rate limiting（settings.ts:39 /import-opencode）：加 `express-rate-limit`（10 次/分，限读本机 opencode 凭证写入供应商）。
+- **发历史提交标题的安全做法（教训）**：`filter-branch --msg-filter` 在 Windows 下 argv 传参不可靠（致空消息，已 reset 回滚）——改用 `git cherry-pick -n` + `git commit -F <UTF-8 消息文件>` 重放 5 个提交（树 diff 与原名一致），`--force-with-lease` + 重指 tag v1.1.0。**AGENTS #62 已固化**：src 变更必须同批过全部 CI + subject 中文开头 + audit 0 高危 + 禁用不完整正则清洗/路由必须限流。
+- **验收**：typecheck 0 / lint 0 / vitest 65 文件 379 用例 / pnpm audit 0 高危 / commitlint 0 problems / verify-docs v1.1.0 全过。

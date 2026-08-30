@@ -113,3 +113,11 @@ docs/          校准报告 + P9 体验修复明细
 61. **每批开工前查证纪律**：每个批次开工前，对涉及的外部依赖/API/框架行为先上网查证（官方文档优先），查证结论与来源记入 decision-log；无外部依据的本地设计决策也要显式标注「本地设计」。禁止凭印象实现关键机制（历史教训：Node close 语义、SDK 重试叠加均为查证发现的认知修正）。
 
 61b. **文档断言纪律**（D87 教训）：docs 更新必须断言验证——脚本化 replace 后 grep 命中目标串，失败即报错；版本台账（versioning §7）每次发布必须同步且与 CHANGELOG 逐条核对；发布前跑 node scripts/verify-docs.mjs（release.mjs [3/7] 已内置）。
+
+62. **CI 红叉强制闭环（v1.1.0 教训，2026-08-30）**：src 变更必须**同批通过全部 CI**，禁止只过本地三绿就 push（CI 与本地门禁不同集）。经验证的三类真实红叉及强制要求：
+    - **release-readiness（变更 src 未 bumped 版本）**：`client/src|server/src|electron|shared/src` 一经改动，本批必须 bump `package.json` 版本 + 写 CHANGELOG `## vX.Y.Z` + 同步 versioning §7 / PLAN / onboarding 当前版本锚点；否则 CI（release-readiness）强制 fail。**禁止"改了 src 却让版本停在上一 tag"**（AGENTS #57 分层决议的强制路径）。
+    - **commitlint subject-case（标题以大写拉丁字母开头）**：提交 subject 首词不得为大写拉丁字母（`A 档…`/`B 档…`/`B3…` 即触发）——**subject 必须以中文开头**（如 `竞品差距补强…`/`推动存量书稿续写…`）；类型前缀（feat/fix/chore）保留英文，其余一律中文（AGENTS #60）。提交前用 `npx commitlint --from <base> --to HEAD --verbose` 自验。
+    - **build check 的 `pnpm audit --prod --audit-level=high` 高危**：依赖安全必须保持 0 高危——升级/实现新依赖后本地必跑 `pnpm audit --prod --audit-level=high` 确认干净；传递依赖高危用 pnpm-workspace.yaml `overrides` 修复（勿绕过）。
+    - **CodeQL 高危**：禁止用"不完整多字符正则"做清洗（`/<[^>]+>/g` 之类）——用逐字符状态机（如 `services/sanitize.ts` 的 `stripHtmlTags`）；有状态/资源消耗型路由必须加 `express-rate-limit`。新增代码后自查既有 CodeQL 告警清单，避免引入同类模式。
+    - **改已发布历史提交标题前**：优先在提交前自验；确实需要 amend 已 push 的提交标题时，用 `git cherry-pick -n` + `git commit -F <UTF-8 消息文件>` 重放（保证中文/换行不乱码），`--force-with-lease` 推送，并同步重指 tag——**禁止用 filter-branch 改消息**（Windows 下 argv 传参不可靠，曾致空消息）。
+    - 若仓库无本地 commitlint 钩子：可在本地手动 `npx commitlint --from $(git rev-list --max-parents=0 HEAD)` 模拟 CI。
