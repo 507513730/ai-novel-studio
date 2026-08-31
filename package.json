@@ -61,7 +61,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "5.2.0",
     "electron": "43.3.0",
     "electron-builder": "26.15.3",
