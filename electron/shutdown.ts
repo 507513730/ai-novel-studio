@@ -1,69 +1,64 @@
-// 优雅关闭（重构计划 R8）：checkpoint 请求与 server 进程优雅退出的唯一实现。
-// 契约：shutdown = 通知 shutdown → 等退出（超时 kill 兜底）→ 清理 URL（Windows 孤儿进程防线，审查 H6）。
+import { randomUUID } from 'node:crypto'
 import { getServerProcess, setLastServerUrl, setServerProcess } from './state'
 
-/** 请求 server 执行 WAL checkpoint（等待应答或超时兜底）——v0.17.0（审查 M15）自动备份/导出备份共用 */
-export function requestCheckpoint(timeoutMs = 5000): Promise<void> {
-  const sp = getServerProcess()
-  if (!sp) return Promise.resolve()
-  const spRef: NonNullable<typeof sp> = sp
-  return new Promise<void>((resolve) => {
-    const id = `cp-${Date.now()}`
-    const timer = setTimeout(() => {
-      try {
-        sp.off('message', onMsg)
-      } catch {
-        /* ignore */
-      }
-      resolve()
-    }, timeoutMs)
-    function onMsg(msg: unknown): void {
-      const m = msg as { type?: string; id?: string }
-      if (m?.id === id && (m.type === 'checkpoint-done' || m.type === 'checkpoint-error')) {
-        clearTimeout(timer)
-        try {
-          spRef.off('message', onMsg)
-        } catch {
-          /* ignore */
-        }
-        resolve()
-      }
+export function requestBackupSnapshot(destination: string, timeoutMs = 30_000): Promise<void> {
+  const server = getServerProcess()
+  if (!server) return Promise.reject(new Error('备份失败：服务未就绪'))
+  return new Promise<void>((resolve, reject) => {
+    const id = randomUUID()
+    const timer = setTimeout(() => finish(new Error('备份超时：未收到快照完成确认')), timeoutMs)
+    function finish(error?: Error): void {
+      clearTimeout(timer)
+      server!.off('message', onMessage)
+      server!.off('exit', onExit)
+      if (error) reject(error)
+      else resolve()
     }
-    spRef.on('message', onMsg)
-    spRef.postMessage({ type: 'checkpoint', id })
+    function onExit(): void { finish(new Error('备份失败：服务已退出')) }
+    function onMessage(value: unknown): void {
+      const message = value as { id?: string; type?: string; error?: string } | null
+      if (message?.id !== id) return
+      if (message.type === 'backup-done') finish()
+      else if (message.type === 'backup-error') finish(new Error(message.error || '备份快照失败'))
+    }
+    server.on('message', onMessage)
+    server.once('exit', onExit)
+    try { server.postMessage({ type: 'backup-snapshot', id, destination }) }
+    catch (error) { finish(error instanceof Error ? error : new Error(String(error))) }
   })
 }
 
-/** v0.17.0（审查 H6/M17/M18）：优雅关闭 server（通知 shutdown → 等退出 → kill 兜底）并清缓存 */
+let shutdownPromise: Promise<void> | null = null
+
 export function shutdownServer(timeoutMs = 3000): Promise<void> {
-  const sp = getServerProcess()
+  if (shutdownPromise) return shutdownPromise
+  const server = getServerProcess()
   setServerProcess(null)
   setLastServerUrl(null)
-  if (!sp) return Promise.resolve()
-  return new Promise<void>((resolve) => {
-    const timer = setTimeout(() => {
-      try {
-        sp.kill()
-      } catch {
-        /* ignore */
-      }
-      resolve()
-    }, timeoutMs)
-    try {
-      sp.postMessage({ type: 'shutdown' })
-    } catch {
+  if (!server) return Promise.resolve()
+  const pending = new Promise<void>((resolve, reject) => {
+    let killTimer: ReturnType<typeof setTimeout> | undefined
+    const timer = setTimeout(forceStop, timeoutMs)
+    function finish(error?: Error): void {
       clearTimeout(timer)
-      try {
-        sp.kill()
-      } catch {
-        /* ignore */
-      }
-      resolve()
-      return
+      if (killTimer) clearTimeout(killTimer)
+      server!.off('exit', onExit)
+      if (error) reject(error)
+      else resolve()
     }
-    sp.once('exit', () => {
+    function onExit(code: number): void {
+      finish(code === 0 ? undefined : new Error('服务异常退出，未执行数据替换'))
+    }
+    function forceStop(): void {
       clearTimeout(timer)
-      resolve()
-    })
+      killTimer = setTimeout(() => finish(new Error('未确认服务退出，禁止替换数据')), 2000)
+      try { server!.kill() }
+      catch (error) { finish(error instanceof Error ? error : new Error(String(error))) }
+    }
+    server.once('exit', onExit)
+    try { server.postMessage({ type: 'shutdown' }) }
+    catch { forceStop() }
   })
+  shutdownPromise = pending.finally(() => { shutdownPromise = null })
+  return shutdownPromise
 }

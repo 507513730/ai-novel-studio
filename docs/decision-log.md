@@ -857,3 +857,17 @@
 - 二次静态复核发现 round.mjs 中 SSE/导出仍绕过 common 客户端直连 3000；已在进入这些阶段之前终止隔离测试，统一改 apiRaw 并加静态回归。首次完整 T1 已通过，T2 只执行到方向生成，未触发旧固定端口生成路径。
 
 - Electron 官方 app 文档说明 app.exit(code) 才显式携带退出码，app.quit() 走窗口关闭流程。测试启动器不只依赖 GUI 子进程退出码：父进程额外读取私有结果文件，缺失结果或任一失败均非零，避免 GUI 退出码吞掉失败。来源：https://www.electronjs.org/docs/latest/api/app。
+
+
+## D129（2026-09-05）：下一批备份一致性与目录安全
+
+- 发布门禁暂缓：首批完整 E2E 的方向定向重做返回 500，尚未判定根因，不打 tag、不发布带失败门禁的版本；后续安全修复先保留本地，不冒充已交付。
+- 官方查证：SQLite VACUUM INTO 的输出是原库一致快照，若进程崩溃输出可能不完整。来源：https://www.sqlite.org/lang_vacuum.html（已读取对应段落）。
+- 官方查证：utilityProcess 的 parentPort message 事件参数为 {data, ports}，现有 server/index.ts 误读外层使 checkpoint/shutdown 不被消费。来源：https://raw.githubusercontent.com/electron/electron/main/docs/api/parent-port.md。
+- 本地设计：备份在 utilityProcess 内通过 prepare(VACUUM INTO ?) + run 生成快照，不再 checkpoint 后跨进程复制主库；不引入 node:sqlite 的扩展 API。
+- 目标目录必须不存在，且规范化真实父目录后不得为活动数据目录或其祖先；独占 mkdir 预留，拒绝覆盖任何已存在目录。快照开始先写进行中标记，收到成功应答并写 manifest 后才移除；失败/超时保留标记，恢复拒绝未完成备份。
+- 请求使用 UUID，错误/超时/服务退出均 reject 并移除监听；自动备份轮转只清理 manifest 确认属于本应用且文件清单完全匹配的目录，不递归删除未知内容。
+
+- 真实备份恢复冒烟进一步复现 Windows EPERM：服务退出后旧 WAL 未能立即删除，恢复未通过，不能按单测绿交付。追加关闭协议修复：服务退出前显式 db.close；主进程监听 exit 后再发命令，超时 kill 后仍等待实际退出，异常退出拒绝恢复。Node 官方确认 close 包装 sqlite3_close_v2，fs.rmSync 的 maxRetries 在非 recursive 模式无效，因此不靠虚设重试参数或递归删除规避。来源：https://nodejs.org/api/sqlite.html 与 https://nodejs.org/docs/latest-v24.x/api/fs.html。
+
+- 数据管理跨操作互斥：自动备份、导出、恢复与清库共享锁，覆盖对话框等待和重启阶段；避免两个恢复同时等待同一个退出后交错替换/重启。以导出对话框占锁、恢复拒绝、取消后可再次导出的行为测试覆盖，不在回归中真的清库。

@@ -61,7 +61,9 @@ app.on('before-quit', (event) => {
   if (quitting) return
   quitting = true
   event.preventDefault()
-  void shutdownServer().then(() => {
+  void shutdownServer().catch((error) => {
+    console.error('[main] shutdown failed:', error)
+  }).finally(() => {
     setMainWindow(null)
     app.quit()
   })

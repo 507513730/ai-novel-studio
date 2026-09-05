@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
-import { mkdir, access, mkdtemp, readFile } from 'node:fs/promises'
+import { mkdir, access, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,12 +13,15 @@ if (packaged) await access(join(root, 'release/win-unpacked/resources/app.asar')
 await mkdir(join(root, 'release'), { recursive: true })
 const resultDir = await mkdtemp(join(root, 'release', 'e2e-runner-'))
 const resultFile = join(resultDir, 'result.json')
+const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+await writeFile(join(resultDir, 'package.json'), JSON.stringify({ name: 'novel-studio-isolated-test', version: pkg.version, main: '../../scripts/e2e/desktop.cjs' }), 'utf8')
 const log = createWriteStream(join(root, 'release', 'desktop-e2e-' + Date.now() + '.log'))
 const env = { ...process.env, SYSTEM_NODE_EXE: process.execPath,
   E2E_RESULT_FILE: resultFile,
+  E2E_BACKUP_ONLY: process.argv.includes('--backup') ? '1' : '0',
   E2E_SMOKE_ONLY: process.argv.includes('--smoke') ? '1' : '0', E2E_PACKAGED: packaged ? '1' : '0' }
 delete env.ELECTRON_RUN_AS_NODE
-const child = spawn(electron, [join(root, 'scripts/e2e/desktop.cjs')], {
+const child = spawn(electron, [resultDir], {
   cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
 })
 child.stdout.on('data', data => { log.write(data); process.stdout.write(data) })

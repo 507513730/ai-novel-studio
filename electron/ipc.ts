@@ -3,10 +3,11 @@
 // （v0.17.0 审查 M19 / v0.23.1 A6——XSS 注入 iframe 无法绕过）。
 import { app, dialog, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { getDataDir } from './serverProcess'
 import { getLastServerUrl, getMainWindow, getServerProcess, SERVER_TOKEN } from './state'
-import { requestCheckpoint, shutdownServer } from './shutdown'
+import { shutdownServer } from './shutdown'
+import { createBackupDirectory, listAutoBackups, removeAutoBackup, resolveBackupDirectory } from './backup'
 
 // v0.25.0（审查 L4）：布尔版 sender 校验（供 ipcMain.on 使用，不抛错）
 // 结构类型兼容 IpcMainInvokeEvent 与 IpcMainEvent（两者均含 sender / senderFrame）
@@ -40,10 +41,28 @@ export function trusted(event: Electron.IpcMainInvokeEvent): boolean {
   }
 }
 
-// v0.9.2（O4）：自动备份——每日 checkpoint 后复制主库到 backups/auto-*（轮转保留 N 份）
+let dataOperationBusy = false
+
+function registerDataHandler(
+  channel: 'wipe-data' | 'export-backup' | 'restore-backup',
+  handler: (event: Electron.IpcMainInvokeEvent) => Promise<unknown>
+): void {
+  ipcMain.handle(channel, async (event) => {
+    if (dataOperationBusy) {
+      return channel === 'wipe-data' ? false : { ok: false, error: '另一个数据管理操作正在进行，请稍后重试' }
+    }
+    dataOperationBusy = true
+    try { return await handler(event) }
+    finally { dataOperationBusy = false }
+  })
+}
+
+// D129：自动备份与手动导出共用一致性快照协议。
 export const AUTO_BACKUP_KEEP = 7
 
 export async function runAutoBackup(): Promise<void> {
+  if (dataOperationBusy) return
+  dataOperationBusy = true
   try {
     const dataDir = getDataDir()
     const dbFile = join(dataDir, 'ai-novel-studio.db')
@@ -52,38 +71,16 @@ export async function runAutoBackup(): Promise<void> {
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
     const outDir = join(dataDir, 'backups', `auto-${stamp}`)
     if (existsSync(outDir)) return
-    // v0.17.0（审查 M15）：await checkpoint 完成（此前 fire-and-forget → 可能复制陈旧主库）
-    await requestCheckpoint()
-    mkdirSync(outDir, { recursive: true })
-    copyFileSync(dbFile, join(outDir, 'ai-novel-studio.db'))
-    writeFileSync(
-      join(outDir, 'backup-info.json'),
-      JSON.stringify(
-        {
-          app: 'AI-Novel-Studio',
-          version: app.getVersion(),
-          createdAt: new Date().toISOString(),
-          auto: true,
-          files: ['ai-novel-studio.db']
-        },
-        null,
-        2
-      ),
-      'utf8'
-    )
-    // 轮转：保留最近 AUTO_BACKUP_KEEP 份，其余删除
     const backupsDir = join(dataDir, 'backups')
-    const dirs = readdirSync(backupsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && d.name.startsWith('auto-'))
-      .map((d) => d.name)
-      .sort()
-    while (dirs.length > AUTO_BACKUP_KEEP) {
-      const oldest = dirs.shift()!
-      rmSync(join(backupsDir, oldest), { recursive: true, force: true })
-    }
+    mkdirSync(backupsDir, { recursive: true })
+    await createBackupDirectory(dataDir, outDir, app.getVersion(), true)
+    const dirs = listAutoBackups(backupsDir)
+    while (dirs.length > AUTO_BACKUP_KEEP) removeAutoBackup(join(backupsDir, dirs.shift()!))
     console.log('[main] 自动备份完成:', outDir)
   } catch (e) {
     console.error('[main] auto-backup error:', e)
+  } finally {
+    dataOperationBusy = false
   }
 }
 
@@ -99,7 +96,7 @@ export function registerIpcHandlers(): void {
     void shell.openPath(getDataDir())
     return true
   })
-  ipcMain.handle('wipe-data', async (event) => {
+  registerDataHandler('wipe-data', async (event) => {
     try {
       assertTrustedSender(event)
     } catch (e) {
@@ -127,10 +124,7 @@ export function registerIpcHandlers(): void {
     try {
       const backupsDir = join(getDataDir(), 'backups')
       if (!existsSync(backupsDir)) return { lastAt: null, count: 0, keep: AUTO_BACKUP_KEEP }
-      const dirs = readdirSync(backupsDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && d.name.startsWith('auto-'))
-        .map((d) => d.name)
-        .sort()
+      const dirs = listAutoBackups(backupsDir)
       const last = dirs.length > 0 ? dirs[dirs.length - 1] : null
       return { lastAt: last ? last.replace('auto-', '').replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/, '$1-$2-$3 $4:$5') : null, count: dirs.length, keep: AUTO_BACKUP_KEEP }
     } catch {
@@ -138,8 +132,8 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  // P18 B + P20（S2）：导出备份（先 checkpoint 保证原子，只导出主库文件）
-  ipcMain.handle('export-backup', async (event) => {
+  // D129：导出到新目录，成功确认快照后才写完成清单。
+  registerDataHandler('export-backup', async (event) => {
     try {
       assertTrustedSender(event)
       const dataDir = getDataDir()
@@ -154,34 +148,8 @@ export function registerIpcHandlers(): void {
         properties: ['createDirectory']
       })
       if (picked.canceled || !picked.filePath) return { ok: false, canceled: true }
-      // P20：请求 server 执行 wal_checkpoint(TRUNCATE)（WAL 落主库），保证备份原子
-      // R8：checkpoint 请求统一走 shutdown.ts（原此处内联复制一份协议代码）
-      await requestCheckpoint()
       const outDir = picked.filePath
-      if (existsSync(outDir)) {
-        // 同名目录已存在 → 清空重建（用户已确认覆盖意图）
-        rmSync(outDir, { recursive: true, force: true })
-      }
-      mkdirSync(outDir, { recursive: true })
-      // 只备份主库（checkpoint 后 wal/shm 为空；恢复时旧 wal/shm 一并清除防脏）
-      const dbFile = join(dataDir, 'ai-novel-studio.db')
-      if (!existsSync(dbFile)) return { ok: false, error: '数据库文件不存在，无法备份' }
-      copyFileSync(dbFile, join(outDir, 'ai-novel-studio.db'))
-      writeFileSync(
-        join(outDir, 'backup-info.json'),
-        JSON.stringify(
-          {
-            app: 'AI-Novel-Studio',
-            version: app.getVersion(),
-            createdAt: new Date().toISOString(),
-            files: ['ai-novel-studio.db'],
-            restoreNote: '恢复方式：设置页「从备份恢复」选择此目录（应用会先停止服务再替换，然后自动重启）'
-          },
-          null,
-          2
-        ),
-        'utf8'
-      )
+      await createBackupDirectory(dataDir, outDir, app.getVersion())
       return { ok: true, path: outDir, copied: 1 }
     } catch (e) {
       console.error('[main] export-backup error:', e)
@@ -191,7 +159,7 @@ export function registerIpcHandlers(): void {
 
   // P18 B + P20（S2）：从备份恢复（停服务 → 替换主库 → 清 wal/shm → 重启服务 → 通知刷新）
   // 复核（52fca79，R8）：恢复前必须 await server 退出（防 SQLITE_BUSY），不触碰运行中数据库
-  ipcMain.handle('restore-backup', async (event) => {
+  registerDataHandler('restore-backup', async (event) => {
     try {
       assertTrustedSender(event)
       const dataDir = getDataDir()
@@ -202,14 +170,8 @@ export function registerIpcHandlers(): void {
       })
       if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true }
       const src = picked.filePaths[0]
-      // 定位备份目录：用户选的目录本身，或选的是文件取其目录
-      const dir = existsSync(src) && !existsSync(join(src, 'ai-novel-studio.db'))
-        ? join(src, '..')
-        : src
+      const dir = resolveBackupDirectory(src)
       const dbFile = join(dir, 'ai-novel-studio.db')
-      if (!existsSync(dbFile)) {
-        return { ok: false, error: '所选位置没有 ai-novel-studio.db（不是有效备份）' }
-      }
       // P20：版本提示（不同版本备份允许恢复——迁移层幂等补齐列；仅提示）
       const infoFile = join(dir, 'backup-info.json')
       let backupVersion = '未知'

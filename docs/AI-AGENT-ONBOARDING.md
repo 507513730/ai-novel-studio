@@ -186,6 +186,11 @@ node out/main/server.js
 - 只读真实库排查可用 `readOnly: true` 打开（绝不写）
 - 修正真实库数据的脚本：先备份（复制 db）→ `applyMigrations` 补齐列 → 短事务写入 → 应用在跑时避免写入（SQLITE_BUSY）
 
+### 备份协议补充（2026-09-05 / D129，待发布）
+
+- 手动与自动备份统一使用 utilityProcess 内的 VACUUM INTO 快照；不得以 checkpoint 超时当成功，再跨进程复制活跃主库。
+- parentPort 消息必须读取 event.data；无服务、错误、超时或退出均拒绝。目标目录不得覆盖，未完成标记必须阻止恢复；轮转不得递归删除未知文件。
+
 ### 安全边界补充（2026-09-05 / D127）
 
 - IPC 必须比较 senderFrame 本身与主窗口 mainFrame，不能以 senderFrame.top 证明发送者为顶层；缺失 frame 或主窗口时拒绝返回 token。

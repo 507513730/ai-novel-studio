@@ -24,6 +24,7 @@ import { initPromptDb } from './prompts/promptAsset'
 import { startJobScheduler as startScheduler, stopJobScheduler as stopScheduler } from './services/jobs/scheduler'
 import { refreshAutoRate } from './services/currency'
 import { originGuard } from './services/security'
+import { handleUtilityCommand } from './services/utilityCommands'
 
 // v0.9.0（审查 #9）：错误中间件独立模块（createApp 使用 + 测试可挂载；index 模块加载有副作用，不可被测试导入）
 import { apiErrorMiddleware } from './services/apiError'
@@ -108,29 +109,26 @@ function start(): void {
     }
   })
 
-  // P20（S2）：备份前 checkpoint 支持（main 通知 → WAL 落主库 → 应答，保证备份原子）
   if (isUtilityProcess()) {
-    process.parentPort.on('message', (msg: unknown) => {
-      const m = msg as { type?: string; id?: string }
-      if (m?.type === 'checkpoint') {
-        try {
-          db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
-          process.parentPort.postMessage({ type: 'checkpoint-done', id: m.id })
-        } catch (err) {
-          process.parentPort.postMessage({ type: 'checkpoint-error', id: m.id, error: String(err) })
-        }
-      }
-      // v0.17.0（审查 M20）：优雅关闭——main 通知 shutdown → server.close + stopScheduler（进程随后退出）
-      if (m?.type === 'shutdown') {
+    process.parentPort.on('message', (event: unknown) => {
+      handleUtilityCommand(event, db, (message) => process.parentPort.postMessage(message), () => {
         try {
           stopScheduler()
-          server.close(() => process.exit(0))
-          // 兜底：3s 内未关闭完成直接退出
-          setTimeout(() => process.exit(0), 3000).unref()
+          const exitClosed = (): void => {
+            try {
+              db.close()
+              process.exit(0)
+            } catch (error) {
+              console.error('[server] database close failed:', String(error))
+              process.exit(1)
+            }
+          }
+          server.close(exitClosed)
+          setTimeout(exitClosed, 3000).unref()
         } catch {
           process.exit(0)
         }
-      }
+      })
     })
   }
 }

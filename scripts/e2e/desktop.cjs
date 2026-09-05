@@ -1,5 +1,5 @@
-const { app, BrowserWindow } = require('electron')
-const { mkdtempSync, mkdirSync, writeFileSync } = require('node:fs')
+const { app, BrowserWindow, dialog } = require('electron')
+const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { spawn } = require('node:child_process')
 const root = join(__dirname, '../..')
@@ -19,6 +19,7 @@ const timer = setTimeout(() => finish(1, 'test timeout'), 40 * 60 * 1000)
 function finish(code, message) {
   if (finished) return
   finished = true
+  code = code === 0 ? 0 : 1
   clearTimeout(timer)
   if (child && child.exitCode === null) child.kill()
   writeFileSync(join(data, 'result.json'), JSON.stringify({ code, message, data, version: require('../../package.json').version }))
@@ -55,6 +56,31 @@ app.on('browser-window-created', (_, win) => {
       if (noToken.status !== 403) throw Error('missing token must return 403')
       const image = await win.webContents.capturePage()
       writeFileSync(join(data, 'renderer.png'), image.toPNG())
+      if (process.env.E2E_BACKUP_ONLY === '1') {
+        const first = await api('/novels', 'POST', { inspiration: '快照前哨兵' })
+        const backup = join(data, 'snapshot-check')
+        dialog.showSaveDialog = async () => ({ canceled: false, filePath: backup })
+        const exported = await win.webContents.executeJavaScript('window.novelStudio.exportBackup()')
+        if (!exported.ok || !existsSync(join(backup, 'backup-info.json')) || existsSync(join(backup, 'backup-in-progress.json'))) throw Error('snapshot IPC failed')
+        const second = await api('/novels', 'POST', { inspiration: '快照后哨兵' })
+        writeFileSync(join(backup, 'user.txt'), 'keep')
+        const refused = await win.webContents.executeJavaScript('window.novelStudio.exportBackup()')
+        if (refused.ok || readFileSync(join(backup, 'user.txt'), 'utf8') !== 'keep') throw Error('existing destination not protected')
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [backup] })
+        const restored = await win.webContents.executeJavaScript('window.novelStudio.restoreBackup()')
+        if (!restored.ok) throw Error('snapshot restore failed')
+        let nextBase
+        for (let i = 0; i < 80; i++) {
+          nextBase = await win.webContents.executeJavaScript('window.novelStudio.getServerUrl()')
+          if (nextBase && nextBase !== config.base) break
+          await new Promise(r => setTimeout(r, 250))
+        }
+        if (!nextBase) throw Error('server did not restart')
+        const novels = await fetch(nextBase + '/novels', { headers }).then(r => r.json())
+        if (!novels.novels.some(n => n.id === first.id) || novels.novels.some(n => n.id === second.id)) throw Error('restored data mismatch')
+        finish(0, 'backup snapshot/restore/guard PASS')
+        return
+      }
       const imported = await api('/settings/import-opencode', 'POST', {provider:'opencode-go'})
       const routes = await api('/settings/model-routes')
       for (const route of routes.routes) {
@@ -83,7 +109,7 @@ app.on('browser-window-created', (_, win) => {
         stdio:['ignore','inherit','inherit'], windowsHide:true
       })
       child.once('error', e => finish(1,e.message))
-      child.once('exit', code => finish(code ?? 1, 'T1-T5 completed'))
+      child.once('exit', code => finish(code ?? 1, code === 0 ? 'T1-T5 completed' : 'T1-T5 failed or interrupted'))
     } catch (error) { finish(1,error.message) }
   })
 })

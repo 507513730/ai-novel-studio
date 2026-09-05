@@ -37,6 +37,7 @@ vi.mock('electron', () => {
   }
 })
 
+import { dialog } from 'electron'
 import { isTrustedSender, registerIpcHandlers } from '../electron/ipc'
 import { isAllowedExternalUrl, isAllowedNavigation } from '../electron/window'
 import { setMainWindow, SERVER_TOKEN } from '../electron/state'
@@ -130,6 +131,27 @@ describe('IPC frame 边界回归', () => {
     const event = { sender: main.webContents, senderFrame: main.mainFrame, returnValue: '' }
     ipcOnHandlers.get('get-server-token')!(event)
     expect(event.returnValue).toBe('')
+  })
+})
+
+describe('数据管理跨操作互斥', () => {
+  it('导出对话框未结束时拒绝恢复，取消后释放锁', async () => {
+    const main = fakeWindow()
+    setMainWindow(main.window as never)
+    let cancelDialog!: () => void
+    vi.mocked(dialog.showSaveDialog).mockImplementationOnce(() => new Promise((resolve) => {
+      cancelDialog = () => resolve({ canceled: true, filePath: '' })
+    }))
+    const event = fakeEvent(main.webContents, main.mainFrame)
+    const exporting = ipcHandlers.get('export-backup')!(event)
+    try {
+      expect(await ipcHandlers.get('restore-backup')!(event)).toEqual({
+        ok: false, error: '另一个数据管理操作正在进行，请稍后重试'
+      })
+    } finally { cancelDialog() }
+    expect(await exporting).toEqual({ ok: false, canceled: true })
+    vi.mocked(dialog.showSaveDialog).mockResolvedValueOnce({ canceled: true, filePath: '' })
+    expect(await ipcHandlers.get('export-backup')!(event)).toEqual({ ok: false, canceled: true })
   })
 })
 
