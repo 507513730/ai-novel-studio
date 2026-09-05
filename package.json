@@ -1,6 +1,6 @@
 {
   "name": "ai-novel-studio",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "AI 小说创作工作台 - AI Novel Production Engine Desktop",
   "main": "out/main/index.js",
   "author": "ai-novel-studio",
@@ -63,7 +63,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "5.2.0",
-    "electron": "43.3.0",
+    "electron": "43.4.1",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "eslint": "^9.30.0",

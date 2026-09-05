@@ -3,6 +3,7 @@
 // 阻止导航离开本应用、titleBarOverlay 配色随主题。
 import { BrowserWindow, Menu, shell } from 'electron'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { getLastServerUrl, setMainWindow } from './state'
 
 // v0.9.0（审查 #16）：只放行 http/https 外链（file:/smb:/自定义协议一律拒绝）
@@ -11,8 +12,26 @@ export function isAllowedExternalUrl(url: string): boolean {
 }
 
 // v0.9.0（审查 #16）：阻止渲染进程将应用窗口导航到外部站点
-export function isAllowedNavigation(url: string, devUrl: string | undefined): boolean {
-  return devUrl ? url.startsWith(devUrl) : url.startsWith('file://')
+export function isAllowedNavigation(
+  url: string,
+  devUrl: string | undefined,
+  rendererUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).href
+): boolean {
+  try {
+    const target = new URL(url)
+    if (target.username || target.password) return false
+    if (devUrl) {
+      const expected = new URL(devUrl)
+      return (expected.protocol === 'http:' || expected.protocol === 'https:')
+        && target.origin === expected.origin
+    }
+    const expected = new URL(rendererUrl)
+    target.hash = expected.hash = ''
+    target.search = expected.search = ''
+    return target.protocol === 'file:' && target.href === expected.href
+  } catch {
+    return false
+  }
 }
 
 export function createWindow(): void {

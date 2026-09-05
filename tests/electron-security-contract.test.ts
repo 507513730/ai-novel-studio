@@ -46,15 +46,16 @@ import { fileURLToPath } from 'node:url'
 
 const MAIN_TS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../electron/window.ts'), 'utf8')
 
-// 模拟主窗口（webContents.mainFrame 与 senderFrame.top 同源比较按引用）
+// 模拟主窗口（webContents.mainFrame 与 senderFrame 本身按引用比较）
 function fakeWindow(): { window: unknown; webContents: unknown; mainFrame: unknown } {
-  const mainFrame = { id: 'top' }
+  const mainFrame: { id: string; top?: unknown; parent: null } = { id: 'top', parent: null }
+  mainFrame.top = mainFrame
   const webContents = { mainFrame }
   return { window: { webContents }, webContents, mainFrame }
 }
 
 function fakeEvent(fromWebContents: unknown, topFrame: unknown): unknown {
-  return { sender: fromWebContents, senderFrame: { top: topFrame } }
+  return { sender: fromWebContents, senderFrame: topFrame }
 }
 
 beforeEach(() => {
@@ -84,10 +85,10 @@ describe('trusted sender 校验矩阵（R8）', () => {
     const other = fakeWindow()
     setMainWindow(main.window as never)
     const handler = ipcOnHandlers.get('get-server-token')!
-    const trustedEv = { sender: main.webContents, senderFrame: { top: main.mainFrame }, returnValue: '' }
+    const trustedEv = { sender: main.webContents, senderFrame: main.mainFrame, returnValue: '' }
     handler(trustedEv)
     expect(trustedEv.returnValue).toBe(SERVER_TOKEN)
-    const untrustedEv = { sender: other.webContents, senderFrame: { top: other.mainFrame }, returnValue: '' }
+    const untrustedEv = { sender: other.webContents, senderFrame: other.mainFrame, returnValue: '' }
     handler(untrustedEv)
     expect(untrustedEv.returnValue).toBe('')
   })
@@ -102,6 +103,36 @@ describe('trusted sender 校验矩阵（R8）', () => {
   })
 })
 
+describe('IPC frame 边界回归', () => {
+  it('同窗口子 frame 即使 top 指向主 frame 也必须拒绝', async () => {
+    const main = fakeWindow()
+    setMainWindow(main.window as never)
+    const child = { top: main.mainFrame, parent: main.mainFrame }
+    const event = { sender: main.webContents, senderFrame: child, returnValue: '' }
+    expect(isTrustedSender(event as never)).toBe(false)
+    ipcOnHandlers.get('get-server-token')!(event)
+    expect(event.returnValue).toBe('')
+    expect(await ipcHandlers.get('wipe-data')!(event)).toBe(false)
+  })
+
+  it.each([null, undefined])('缺失 senderFrame (%s) 时拒绝', (senderFrame) => {
+    const main = fakeWindow()
+    setMainWindow(main.window as never)
+    const event = { sender: main.webContents, senderFrame, returnValue: '' }
+    expect(isTrustedSender(event as never)).toBe(false)
+    ipcOnHandlers.get('get-server-token')!(event)
+    expect(event.returnValue).toBe('')
+  })
+
+  it('主窗口尚未就绪时不能获取 token', () => {
+    setMainWindow(null)
+    const main = fakeWindow()
+    const event = { sender: main.webContents, senderFrame: main.mainFrame, returnValue: '' }
+    ipcOnHandlers.get('get-server-token')!(event)
+    expect(event.returnValue).toBe('')
+  })
+})
+
 describe('窗口安全策略（R8 源级契约）', () => {
   it('外链只放行 http/https；file:/smb:/自定义协议拒绝', () => {
     expect(isAllowedExternalUrl('https://example.com')).toBe(true)
@@ -111,11 +142,28 @@ describe('窗口安全策略（R8 源级契约）', () => {
     expect(isAllowedExternalUrl('javascript:alert(1)')).toBe(false)
   })
 
-  it('导航白名单：打包态仅 file://，dev 态仅 dev URL', () => {
-    expect(isAllowedNavigation('file:///app/index.html', undefined)).toBe(true)
+  it('导航白名单：打包态仅 renderer 入口，dev 态仅相同 origin', () => {
+    expect(isAllowedNavigation('file:///app/index.html', undefined, 'file:///app/index.html')).toBe(true)
     expect(isAllowedNavigation('https://evil.example', undefined)).toBe(false)
     expect(isAllowedNavigation('http://localhost:5173/x', 'http://localhost:5173')).toBe(true)
     expect(isAllowedNavigation('file:///app/index.html', 'http://localhost:5173')).toBe(false)
+  })
+
+  it.each([
+    'http://localhost:51730/x',
+    'http://localhost:5173@evil.example/x',
+    'https://localhost:5173/x',
+    'not a URL'
+  ])('拒绝开发地址前缀伪装或非法导航：%s', (url) => {
+    expect(isAllowedNavigation(url, 'http://localhost:5173')).toBe(false)
+  })
+
+  it('打包入口允许 hash/search，不允许其他本地文件', () => {
+    const entry = 'file:///app/renderer/index.html'
+    expect(isAllowedNavigation(entry + '?theme=dark#/settings', undefined, entry)).toBe(true)
+    expect(isAllowedNavigation('file:///app/other.html', undefined, entry)).toBe(false)
+    expect(isAllowedNavigation('file://remote/app/renderer/index.html', undefined, entry)).toBe(false)
+    expect(isAllowedNavigation('http://localhost/', 'invalid')).toBe(false)
   })
 
   it('webPreferences 安全三件套在源中成立（sandbox/contextIsolation/nodeIntegration）', () => {

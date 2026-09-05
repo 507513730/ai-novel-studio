@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## v1.1.1（2026-09-05）
+
+### 安全修复
+- IPC 直接校验发送 frame，拒绝子 frame、缺失 frame 与启动期未授权 token 请求。
+- 导航白名单使用准确开发 origin 与打包 renderer 入口，拒绝前缀伪装与任意本地文件。
+- Electron 精确锁定 43.4.1，与项目安全版本约束一致。
+
+### 发布验证
+- 新增 9 条 Electron 安全回归测试及 3 条 E2E 门禁测试。
+- E2E 支持独立测试端点和鉴权 token，断言失败返回非零退出码，失败证据不被后续轮次清空。
+- 正式发布状态以 GitHub Release 和 CI 结果为准；完整审查尚在分批进行。
+
+### 安装方式
+- 安装版：`AI-Novel-Studio-Setup-1.1.1.exe`（NSIS）。
+- 便携版：`AI-Novel-Studio-1.1.1-portable-x64.exe`。
+
 ## v1.1.0（2026-08-30）
 
 ### 安装方式

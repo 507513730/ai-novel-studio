@@ -20,7 +20,7 @@ export function isTrustedSender(event: SenderEvent): boolean {
   const w = getMainWindow()
   if (w === null) return false
   const fromMain = event.sender === w.webContents
-  const topFrame = !event.senderFrame || event.senderFrame.top === w.webContents.mainFrame
+  const topFrame = event.senderFrame === w.webContents.mainFrame
   return fromMain && topFrame
 }
 
@@ -89,12 +89,9 @@ export async function runAutoBackup(): Promise<void> {
 
 export function registerIpcHandlers(): void {
   ipcMain.handle('get-server-url', () => getLastServerUrl())
-  // P20（S1）：renderer 请求 token（sendSync 同步返回）
-  // v0.25.0（审查 L4）：sender 校验——此前无校验，注入的 iframe 理论上可经 preload 索取 token，
-  // 从而绕过服务端 null-Origin 的 token 防线。主窗口尚未赋值时（preload 引导竞态）放行，
-  // 窗口就绪后限定主窗口顶层 frame。
+  // D127：主窗口在加载 preload 前已注册；缺失窗口或 frame 时拒绝返回 token。
   ipcMain.on('get-server-token', (event) => {
-    event.returnValue = getMainWindow() && !isTrustedSender(event) ? '' : SERVER_TOKEN
+    event.returnValue = isTrustedSender(event) ? SERVER_TOKEN : ''
   })
 
   // P16 P0：数据管理（打开数据目录 / 清除全部数据）——P20 统一便携版目录

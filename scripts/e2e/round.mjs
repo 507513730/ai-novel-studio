@@ -1,7 +1,7 @@
 // P14 D：全功能测试轮（T1 配置/系统 + T2 创作主链 + T3 资产智能 + T4 导演恢复 + T5 功能回归）
 // T5（v0.24.2 起）：方案整本生产 / 全书检索 / 版本 diff
 // 用法：node scripts/e2e/round.mjs <roundNo>
-import { api, apiTry, ok, startRound, finishRound, sleep, waitJob } from './common.mjs'
+import { api, apiRaw, apiTry, ok, startRound, finishRound, sleep, waitJob } from './common.mjs'
 
 const round = Number(process.argv[2] ?? 1)
 const tag = `R${round}`
@@ -182,14 +182,14 @@ export async function t2() {
   }
   // 导出（4 格式；v0.24.4 A5 加 DOCX）
   for (const fmt of ['txt', 'md', 'epub', 'docx']) {
-    const r = await fetch(`http://127.0.0.1:3000/api/novels/${novelId}/export?format=${fmt}`)
+    const r = await apiRaw(`/novels/${novelId}/export?format=${fmt}`)
     ok(r.ok && (await r.text()).length > 100, `导出 ${fmt.toUpperCase()}`)
   }
   return finishRound(`T2 创作主链（${tag}）`, `novelId=${novelId}`)
 }
 
 async function generateFull(novelId, chapterId, model) {
-  const res = await fetch(`http://127.0.0.1:3000/api/novels/${novelId}/chapters/${chapterId}/generate?model=${model}`, { method: 'POST' })
+  const res = await apiRaw(`/novels/${novelId}/chapters/${chapterId}/generate?model=${model}`, { method: 'POST' })
   if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
   const text = await res.text()
   const done = text.match(/event: done\ndata: (\{.*\})/)
@@ -203,7 +203,7 @@ async function generateFull(novelId, chapterId, model) {
 
 async function generateCancel(novelId, chapterId) {
   const controller = new AbortController()
-  const res = await fetch(`http://127.0.0.1:3000/api/novels/${novelId}/chapters/${chapterId}/generate`, {
+  const res = await apiRaw(`/novels/${novelId}/chapters/${chapterId}/generate`, {
     method: 'POST',
     signal: controller.signal
   })

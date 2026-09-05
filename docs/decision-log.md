@@ -831,3 +831,29 @@
   - Missing rate limiting（settings.ts:39 /import-opencode）：加 `express-rate-limit`（10 次/分，限读本机 opencode 凭证写入供应商）。
 - **发历史提交标题的安全做法（教训）**：`filter-branch --msg-filter` 在 Windows 下 argv 传参不可靠（致空消息，已 reset 回滚）——改用 `git cherry-pick -n` + `git commit -F <UTF-8 消息文件>` 重放 5 个提交（树 diff 与原名一致），`--force-with-lease` + 重指 tag v1.1.0。**AGENTS #62 已固化**：src 变更必须同批过全部 CI + subject 中文开头 + audit 0 高危 + 禁用不完整正则清洗/路由必须限流。
 - **验收**：typecheck 0 / lint 0 / vitest 65 文件 379 用例 / pnpm audit 0 高危 / commitlint 0 problems / verify-docs v1.1.0 全过。
+
+
+## D127（2026-09-05）：全仓审查首批——IPC 顶层 frame 校验
+
+- 官方查证：Electron WebFrameMain 的 top 表示所属 frame 树的顶层，不代表发送者自身为顶层；parent 在顶层为 null。来源：https://www.electronjs.org/docs/latest/api/web-frame-main 与 https://raw.githubusercontent.com/electron/electron/main/docs/api/web-frame-main.md（已读取官方源文档）。
+- 本地设计：sender 必须属于主窗口，senderFrame 必须直接等于主窗口 mainFrame；缺失 frame、子 frame、窗口尚未就绪全部拒绝，token 通道不得保留启动期放行。window.ts 已在 loadURL/loadFile 前 setMainWindow，不需要此放行。
+- 回归测试必须模拟真实父子关系：子 frame.top 与主 frame 相同仍应拒绝；旧 mock 只模拟不同窗口，漏掉此场景。
+- 环境基线：应用 pnpm 命令被桌面 fallback 指向新版 pnpm，导致隐式重装失败；使用已安装 Corepack pnpm 10.13.1，与 node_modules 及 CI 主版本一致，不更换依赖。
+
+- 导航补充查证：Node 24.15 官方 URL 文档确认 origin 是协议/主机/端口序列化；file URL 不能只比较 origin。来源：https://raw.githubusercontent.com/nodejs/node/v24.15.0/doc/api/url.md。
+- 本地设计：开发导航只允许准确匹配的 HTTP(S) origin，拒绝用户名/密码 URL；打包态只允许实际 renderer/index.html，允许 hash/search，禁止任意 file URL。
+
+
+## D128（2026-09-05）：首批发布验证与测试隔离
+
+- 用户已明确批准 v1.1.1 PATCH 发布，完成后进入下一批。
+- 官方查证：Electron app.setPath 可在 ready 前覆盖已存在目录；用独立 userData/sessionData 启动真实主进程与 utilityProcess，保持 safeStorage 加密，绝不以明文导入凭证。来源：https://raw.githubusercontent.com/electron/electron/main/docs/api/app.md。
+- npm 官方 registry 经 pnpm view 确认 electron@43.4.1 存在；按既定安全约束精确锁定此版本，不改其他依赖版本范围。
+- 本地设计：E2E 客户端允许显式传入随机本地服务地址及 X-App-Token；一项断言失败即置非零退出码，测试结果复制 failures 数组，避免后续 startRound 清空证据。默认地址保留兼容，但发布验证只使用独立测试实例。
+- 发布脚本 --bump 已准备 1.1.1，因工作区未提交按设计停止；整理 CHANGELOG 自动草稿的重复标题后再进入正式发布门禁。
+
+- 发布入口的可选 E2E 与发布后 SSE/导出验收统一改用 scripts/e2e/desktop-run.mjs：随机端口、真实 preload token、临时 userData、safeStorage 加密；删除旧固定端口与明文凭证测试路径。原 T1-T5 中的失败现在会阻断发布。
+
+- 二次静态复核发现 round.mjs 中 SSE/导出仍绕过 common 客户端直连 3000；已在进入这些阶段之前终止隔离测试，统一改 apiRaw 并加静态回归。首次完整 T1 已通过，T2 只执行到方向生成，未触发旧固定端口生成路径。
+
+- Electron 官方 app 文档说明 app.exit(code) 才显式携带退出码，app.quit() 走窗口关闭流程。测试启动器不只依赖 GUI 子进程退出码：父进程额外读取私有结果文件，缺失结果或任一失败均非零，避免 GUI 退出码吞掉失败。来源：https://www.electronjs.org/docs/latest/api/app。

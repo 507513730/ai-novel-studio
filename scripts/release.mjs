@@ -225,74 +225,14 @@ if (failures > 0) {
 
 // ---------- 4.5) 可选：真机 e2e（--e2e，P26） ----------
 if (E2E) {
-  console.log('\n[4.5/7] 真机 e2e（round.mjs R1，消耗真实额度）')
-  const userData = join(ROOT, 'release', '.e2e-data')
-  const serverEnv = {
-    ...process.env,
-    AI_NOVEL_USER_DATA: userData,
-    AI_NOVEL_PORT: '3000'
-  }
-  const { spawn } = await import('node:child_process')
-  const server = spawn(process.execPath, [join(ROOT, 'out', 'main', 'server.js')], {
-    env: serverEnv,
-    stdio: 'ignore'
-  })
+  console.log('\n[4.5/7] 独立 Electron E2E（随机端口、safeStorage 加密凭证）')
   try {
-    // 等 server ready（最多 15s）
-    let ready = false
-    for (let i = 0; i < 30; i++) {
-      try {
-        const r = await fetch('http://127.0.0.1:3000/api/health')
-        if (r.ok) {
-          ready = true
-          break
-        }
-      } catch {
-        /* 未就绪 */
-      }
-      await new Promise((r2) => setTimeout(r2, 500))
-    }
-    if (!ready) throw new Error('server 未在 15s 内就绪')
-    run('node scripts/e2e/round.mjs 1', { stdio: 'pipe', timeout: 40 * 60 * 1000 })
-    ok('e2e R1 通过（含 T1 配置 / T2 创作链）')
-    // v0.9.2（O3）：配置了 FF_DIR 时追加跑方案生产真机验收（mc-good2.0 导入 → 10 步流水线 → 章节产出）
-    // p30 脚本自起独立 server（3000 端口 + 独立临时库），先释放本段 server 防端口冲突
-    server.kill()
-    await new Promise((r) => setTimeout(r, 1500))
-    if (process.env.FF_DIR) {
-      try {
-        run('node scripts/p30-mcgood2-e2e.mjs', {
-          stdio: 'pipe',
-          timeout: 30 * 60 * 1000,
-          env: { ...process.env, FF_DIR: process.env.FF_DIR, AI_NOVEL_PORT: '3000' }
-        })
-        ok('p30-mcgood2 方案生产真机验收通过（FF_DIR）')
-      } catch (err) {
-        const out = String(err.stdout ?? '').slice(-800)
-        fail('p30-mcgood2 真机验收失败（FF_DIR 配置下必过）')
-        console.error(out)
-        process.exit(1)
-      }
-    } else {
-      console.log('  ⏭ p30-mcgood2 真机段跳过（未配置 FF_DIR）')
-    }
+    run('node scripts/e2e/desktop-run.mjs', { stdio: 'pipe', timeout: 45 * 60 * 1000 })
+    ok('T1-T5 E2E 通过')
   } catch (err) {
-    const out = String(err.stdout ?? '').slice(-1200)
-    fail('e2e 失败（见输出）')
-    console.error(out)
+    fail('独立 E2E 失败，发布终止')
+    console.error(String(err.stdout ?? '').slice(-1200))
     process.exit(1)
-  } finally {
-    server.kill()
-    // P26 强化：Windows 下文件句柄释放有延迟——等待后重试清理（防 .e2e-data 残留）
-    await new Promise((r) => setTimeout(r, 2000))
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        rmSync(userData, { recursive: true, force: true })
-        break
-      } catch {
-        if (attempt < 2) await new Promise((r) => setTimeout(r, 500))
-      }
-    }
   }
 }
 
@@ -443,36 +383,16 @@ if (PUSH) {
   } catch (e) {
     console.log('  ⚠ versioning 状态更新失败（不影响发布结果）:', String(e))
   }
-  // v0.9.2（O1）：发布后自动跑打包态等价验收——SSE 生成/导出/鉴权 403 全链路
-  // 防"打包态坏了发布照样出"（Node24 SSE 回归教训）
+  // D128：使用真实 Electron + utilityProcess 加密凭证，禁止独立 server 明文直通。
   try {
-    console.log('  运行打包态等价验收（模拟 file:// Origin:null + token）…')
-    const out = execSync(`node scripts/v072-pack-verify.mjs`, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      encoding: 'utf8',
-      cwd: ROOT,
-      timeout: 10 * 60 * 1000,
-      env: {
-        ...process.env,
-        BASE: 'http://127.0.0.1:39999/api',
-        TOKEN: 'release-verify-token',
-        UDATA: join(ROOT, 'release', '.verify-tmp'),
-        // v0.17.0（M2 配套）：验收跑独立 server（非 utilityProcess）——显式允许明文密钥（调试场景开关）
-        AI_NOVEL_ALLOW_PLAINTEXT: '1'
-      }
+    const out = run('node scripts/e2e/desktop-run.mjs --smoke --packaged', {
+      stdio: 'pipe', timeout: 10 * 60 * 1000
     })
-    if (/PASS/.test(out)) ok('打包态等价验收 PASS（SSE/导出/鉴权）')
-    else {
-      fail('打包态等价验收未通过')
-      console.error(out.slice(-600))
-    }
+    if (!out.includes('packaged IPC/auth/SSE/export PASS')) throw new Error('缺少打包验收标记')
+    ok('打包态 IPC/鉴权/SSE/导出验收 PASS')
   } catch (err) {
-    const out = String(err.stdout ?? '')
-    if (/PASS/.test(out)) ok('打包态等价验收 PASS（SSE/导出/鉴权）')
-    else {
-      fail('打包态等价验收失败（v072-pack-verify）——见 versioning.md §8 排查')
-      console.error(out.slice(-600))
-    }
+    fail('打包态验收失败')
+    console.error(String(err.stdout ?? err).slice(-800))
   }
 } else {
   console.log('  □ CI 通过（gh run list）')
@@ -483,3 +403,4 @@ console.log('  □ 本地安装验证（可选）')
 console.log('  □ 发现问题？→ docs/versioning.md §8 回滚决策树')
 
 console.log('\n=== 完成' + (failures > 0 ? `（${failures} 个问题）` : '') + ' ===')
+if (failures > 0) process.exitCode = 1
