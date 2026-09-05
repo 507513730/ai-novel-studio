@@ -57,18 +57,20 @@ export function useWritingSettings() {
     setReloadKey(key => key + 1)
   }, [])
 
-  const patch = useCallback(async (change: WritingPatch): Promise<void> => {
-    if (!mounted.current || !settings || loadingRef.current || savingRef.current) return
+  const patch = useCallback(async (change: WritingPatch): Promise<boolean> => {
+    if (!mounted.current || !settings || loadingRef.current || savingRef.current) return false
     savingRef.current = true
     setSaving(true)
     const current = generation.current
     try {
       await apiFetch('/settings/writing', { method: 'PATCH', body: JSON.stringify(change) })
-      if (!mounted.current || current !== generation.current) return
+      if (!mounted.current || current !== generation.current) return false
       setSettings(previous => previous ? { ...previous, ...change } : previous)
       toast('ok', '已保存，将影响后续生成')
+      return true
     } catch {
       if (mounted.current && current === generation.current) toast('error', '保存失败')
+      return false
     } finally {
       savingRef.current = false
       if (mounted.current) setSaving(false)

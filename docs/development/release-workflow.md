@@ -4,8 +4,8 @@
 
 | 状态 | 当前事实 | 依据 |
 |---|---|---|
-| 工作树候选 | v1.1.1 | package.json |
-| 最新已发布 | v1.0.0 | GitHub 非 draft Release；已核对 48 个 Release |
+| 工作树候选 | v1.1.2 | 已由 `pnpm release --bump=patch` 准备；门禁、指定 SHA CI 和发布尚未完成 |
+| 最新已发布 | v1.1.1 | GitHub 非 draft Release，publishedAt=2026-09-05T09:38:09Z |
 | v1.1.0 | tag 存在，Release 不存在 | Build Release run 33290490484：lockfile overrides 不匹配 |
 | v1.1.1 | 已正式发布 | tag 59b5671、完整 E2E、Build Release 33958310816、资产已核对 |
 
@@ -48,7 +48,7 @@
 
 前两轮的问题包括：先扩大业务修改后收尾发布；重复打包但缺少提交绑定；定向故障未定位便长时间跑后续模型任务；将源码推送与正式发布混为一谈，使远端 CI 无法启动；版本表没有与实际 Release 核对。这些属于流程问题，不应仅归咎于网关波动。
 
-本轮先修流程和证据，不新增业务功能。v1.1.0 的失败 tag 保留不动，修复只进入 v1.1.1 候选。
+v1.1.0 的失败 tag 保留不动。v1.1.1 已正式发布；此后的修复只能进入新的 PATCH 候选。
 
 发布前可运行 `node scripts/verify-release-ledger.mjs` 对已发布台账逐行核对远端正式 Release；远端不可达时返回失败，不将无法核验当作成功。
 

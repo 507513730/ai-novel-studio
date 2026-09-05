@@ -951,6 +951,18 @@
 - 本轮早期机械编辑误写 WritingPanel 与错误 JSX 扩展名，类型检查已拦截，文件从已提交 HEAD 恢复；未提交或交付损坏版本。后续一律 Node 显式 UTF-8 并断言锚点，不使用 PowerShell 文本写入。
 
 
+## D138（2026-09-05）：快捷词重复保存与验证记录纠偏
+
+- 复核发现 D137 的快捷词由子组件和 hook 各发一次 PATCH；子组件还在失败前清空草稿。D136 中列出的专项覆盖是计划，并未在 D137 实现；81 项相关测试和全量 460 项不证明新 hook 的竞态行为。
+- 官方查证：React useEffect 文档要求 cleanup 忽略迟到请求；StrictMode 在开发时额外运行 setup/cleanup。已重新读取 https://react.dev/reference/react/useEffect。
+- 本地设计：写作设置 hook 是唯一 PATCH 入口，以同步 ref 防重并返回成功布尔值；快捷词共享 saving 状态，成功后才清空草稿。新增真实组件/hook 回归，不以静态源码断言代替行为验证。
+- GitHub 只读核实：b64bf79 的 Release Readiness run 33960450290 失败，其余 Build Release/CodeQL/Docs Lint 成功。v1.1.1 已于 2026-09-05T09:38:09Z 正式发布；上一批未 bump，不能将其本地同名包视为正式资产。新候选及正式发布等待本批授权，不重指旧 tag。
+
+## D139（2026-09-05）：v1.1.2 候选准备
+
+- 用户已明确授权 v1.1.2 发布。仅使用 `pnpm release --bump=patch` 将 package.json 与 CHANGELOG 从 1.1.1 准备到 1.1.2；未打 tag、未推送、未创建 Release。
+- 候选包含 D138 的写作偏好保存竞态修复和其回归测试，以及活跃流程文档的正式发布状态纠偏。后续按发布工作流重新运行确定性门禁、打包态 backup/smoke/full 证据和当前 SHA CI；不能复用 v1.1.1 的证据或产物。
+
 ## D137（2026-09-05）：前端反馈组件与写作偏好异步状态
 
 - ConfirmDialog/useConfirm 与 Toast/useToast/toastGlobal 分离为组件文件和非组件 API，消除 Fast Refresh export 警告；所有调用方导入已更新，行为不变。

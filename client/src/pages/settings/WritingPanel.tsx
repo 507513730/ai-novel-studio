@@ -1,5 +1,5 @@
 // v0.23.1（批次 E2）：自 SettingsPage.tsx 机械拆分（同 tab 互引组件同文件）
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '../../api'
 import { useToast } from '../../components/toastGlobal'
 import { Loading } from '../../components/Loading'
@@ -114,9 +114,8 @@ export function WritingPanel(): React.JSX.Element {
       </p>
       <QuickWordsEditor
         dict={settings.quickWords}
-        onSave={(next) => {
-          void patch({ quickWords: next })
-        }}
+        busy={saving}
+        onSave={(next) => patch({ quickWords: next })}
       />
 
       {/* v0.18.0：联网查找（零 key——Wikipedia；知识库联网搜索 + 世界观生成可选注入） */}
@@ -132,32 +131,32 @@ export function WritingPanel(): React.JSX.Element {
   )
 }
 
-// v0.24.4（A2）：快捷词编辑器（词典 CRUD，PATCH /settings/writing）
+// v0.24.4（A2）：快捷词编辑器（词典 CRUD；写作设置 hook 统一持久化）
 function QuickWordsEditor({
   dict,
+  busy,
   onSave
 }: {
   dict: Record<string, string>
-  onSave: (next: Record<string, string>) => void
+  busy: boolean
+  onSave: (next: Record<string, string>) => Promise<boolean>
 }): React.JSX.Element {
   const { toast } = useToast()
   const [keyDraft, setKeyDraft] = useState('')
   const [valueDraft, setValueDraft] = useState('')
-  const [busy, setBusy] = useState(false)
+  const pending = useRef(false)
   const cases = Object.keys(dict).length
-  const save = async (next: Record<string, string>): Promise<void> => {
-    setBusy(true)
+  const save = async (next: Record<string, string>): Promise<boolean> => {
+    if (busy || pending.current) return false
+    pending.current = true
     try {
-      await apiFetch('/settings/writing', { method: 'PATCH', body: JSON.stringify({ quickWords: next }) })
-      onSave(next)
-      toast('ok', `快捷词已保存（${Object.keys(next).length} 条）`)
-    } catch (e) {
-      toast('error', `保存失败：${e instanceof Error ? e.message : String(e)}`)
+      return await onSave(next)
     } finally {
-      setBusy(false)
+      pending.current = false
     }
   }
   const add = (): void => {
+    if (busy || pending.current) return
     const k = keyDraft.trim()
     const v = valueDraft.trim()
     if (!k.startsWith(';')) {
@@ -173,15 +172,17 @@ function QuickWordsEditor({
       toast('error', '快捷词最多 50 条')
       return
     }
-    setKeyDraft('')
-    setValueDraft('')
-    void save(next)
+    void save(next).then(saved => {
+      if (!saved) return
+      setKeyDraft('')
+      setValueDraft('')
+    })
   }
   return (
     <div className="col" style={{ gap: 6, fontSize: 12 }}>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        <input style={{ width: 120 }} placeholder="触发词（;开头）" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} />
-        <input style={{ flex: '1 1 220px' }} placeholder="展开文本（≤500 字）" value={valueDraft} onChange={(e) => setValueDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add() }} />
+        <input disabled={busy} style={{ width: 120 }} placeholder="触发词（;开头）" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} />
+        <input disabled={busy} style={{ flex: '1 1 220px' }} placeholder="展开文本（≤500 字）" value={valueDraft} onChange={(e) => setValueDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add() }} />
         <button className="sm primary" disabled={busy} onClick={add}>+ 添加</button>
       </div>
       {cases === 0 && <p className="muted t-small">还没有快捷词。示例：<code>;zn</code> → 主角名、<code>;fd</code> → 场景里反复出现的修饰语。</p>}

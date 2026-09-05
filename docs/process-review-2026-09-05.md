@@ -1,5 +1,11 @@
 # 流程与文档审查（2026-09-05）
 
+## 当前状态（2026-09-05）
+
+- v1.1.1 已正式发布；历史“候选”或“未发布”描述只反映各小节记录时点，不能作为当前发布结论。
+- 发布后的 b64bf79 前端提交未准备新版本，Release Readiness run 33960450290 已失败。D138 修复其中的快捷词重复 PATCH，并补足 5 项组件/hook 回归；已按授权准备 v1.1.2 候选，仍须重新打包、验收与关闭指定 SHA 的 CI，不能复用 v1.1.1 tag 或安装包。
+- 下文按发生顺序保留审查与发布证据，便于追溯；当前发布操作只以 `docs/development/release-workflow.md`、`docs/versioning.md` 和 GitHub Release 为准。
+
 ## 结论
 
 有实际问题，不只是文案过时。发布状态误报、门禁顺序、证据归属和互相冲突的操作指引都可能导致错误交付。本轮仅修流程、CI、测试工具与活跃文档，不新增业务功能。
@@ -95,7 +101,7 @@
 
 ## 前端批次补充（D137）
 
-- 修复 4 条既有 lint warning：Fast Refresh 导出拆分 3 条、solutionAssets 未使用禁用指令 1 条、WritingPanel effect 依赖 1 条；本批 lint 变为 0 warning。
+- 修复 5 条既有 lint warning：Fast Refresh 导出拆分 3 条、solutionAssets 未使用禁用指令 1 条、WritingPanel effect 依赖 1 条；本批 lint 变为 0 warning。
 - 写作偏好异步状态抽为 useWritingSettings，真实 PATCH 共享锁与 UI disabled，失败/加载可重试，生命周期序号拒绝过期响应。
-- 相关 81 条测试通过；全量 69 文件 / 460 用例通过；dist 产物已按 v1.1.1 重建。
+- 当时只有相关 81 条既有测试通过；没有新增 hook 专项回归，不能据此证明保存竞态。D138 已补写作设置 5 项组件/hook 回归；该源码仍需下一 PATCH 候选与重新打包验证。
 - 目前未拆大页面；大页面重构留给独立批次，防止与状态竞态修复混合。
