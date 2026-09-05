@@ -69,10 +69,12 @@ async function main() {
     console.log('PASS 双安装包构建')
   }
   const gate = mode => {
-    if (REUSE) return
-    const flags = mode === 'full' ? '' : '--' + mode
-    run('node scripts/e2e/desktop-run.mjs --packaged --provider=' + provider + ' ' + flags + ' --evidence=release/gate-' + mode + '.json', { timeout: 45 * 60 * 1000 })
-    console.log('PASS ' + mode)
+    if (!REUSE) {
+      const flags = mode === 'full' ? '' : '--' + mode
+      run('node scripts/e2e/desktop-run.mjs --packaged --provider=' + provider + ' ' + flags + ' --evidence=release/gate-' + mode + '.json', { timeout: 45 * 60 * 1000 })
+    }
+    assertEvidence(JSON.parse(read('release/gate-' + mode + '.json')), { mode, provider, head, version, bundleHash })
+    console.log('PASS ' + mode + (REUSE ? '（复用有效证据）' : ''))
   }
   const evidence = () => {
     clean()

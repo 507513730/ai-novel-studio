@@ -10,8 +10,9 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   esbuild: { jsx: 'automatic' },
   test: {
-    // D133：固定进程预算，不按宿主核心数放大并发；保留完整测试与异常判定。
-    pool: 'forks',
+    // D135：测试使用隔离线程池，避开 fork IPC 关闭路径；应用 utilityProcess 架构不变。
+    pool: 'threads',
+    isolate: true,
     maxWorkers: 4,
     minWorkers: 1,
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],

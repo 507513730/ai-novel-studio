@@ -14,6 +14,7 @@ delete process.env.AI_NOVEL_ALLOW_PLAINTEXT
 BrowserWindow.prototype.show = function () {}
 const { classifyServerError } = require('./diagnostics.cjs')
 const { captureWithRetry, waitForRenderer } = require('./capture.cjs')
+const { writeRunResult } = require('./result.cjs')
 const diagnostics = []
 const originalFork = utilityProcess.fork.bind(utilityProcess)
 utilityProcess.fork = (entry, args, options) => {
@@ -46,13 +47,17 @@ function finish(code, message) {
   code = code === 0 ? 0 : 1
   clearTimeout(timer)
   if (child && child.exitCode === null) child.kill()
-  writeFileSync(join(data, 'result.json'), JSON.stringify({ code, message, data, diagnostics, rendererReady, captureAttempts, version: require('../../package.json').version }))
-  console.log('[isolated-e2e]', message, 'code=' + code, 'data=' + data)
-  if (process.env.E2E_RESULT_FILE) {
-    writeFileSync(process.env.E2E_RESULT_FILE, JSON.stringify({ code, message, data, diagnostics }))
+  const result = { code, message, data, diagnostics, rendererReady, captureAttempts, version: require('../../package.json').version }
+  try {
+    writeRunResult(join(data, 'result.json'), process.env.E2E_RESULT_FILE, result)
+  } catch {
+    code = 1
+    console.error('[isolated-e2e] unable to persist complete results')
+  } finally {
+    console.log('[isolated-e2e]', message, 'code=' + code, 'data=' + data)
+    app.once('will-quit', () => app.exit(code))
+    app.quit()
   }
-  app.once('will-quit', () => app.exit(code))
-  app.quit()
 }
 app.on('browser-window-created', (_, win) => {
   win.webContents.setBackgroundThrottling(false)
@@ -76,7 +81,7 @@ app.on('browser-window-created', (_, win) => {
         return result
       }
       const health = await api('/health')
-      if (!health.ok) throw Error('health check failed')
+      if (!health.ok || health.version !== require('../../package.json').version) throw Error('health/version check failed')
       const noToken = await fetch(base + '/health', {headers: {Origin:'null'}})
       if (noToken.status !== 403) throw Error('missing token must return 403')
       await waitForRenderer(() => win.webContents.executeJavaScript("Boolean(document.querySelector('h1')?.textContent?.includes('欢迎使用'))"))

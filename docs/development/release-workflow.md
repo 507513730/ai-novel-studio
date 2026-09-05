@@ -40,7 +40,7 @@
 ## 证据契约
 
 - 测试结果保存在 release 下私有运行目录；完整模式必须包含且仅包含 T1-T5，每项至少一个成功断言且无失败。
-- 证据包含 mode、provider、head、version、bundleHash、dirty、code 和完成时间。超过 24 小时的旧报告、部分完成、脏工作区报告、GUI 零退出但缺失结果文件均不能发布。
+- 证据包含 mode、provider、head、version、bundleHash、dirty、code、rendererReady、captureAttempts 和完成时间；实际服务版本也必须匹配候选。超过 24 小时的旧报告、部分完成、脏工作区报告、GUI 零退出但缺失结果文件均不能发布。
 - 中止或第一次失败保存 partial，后续命令不得覆盖成成功；供应商诊断仅存枚举类别/耗时，不存 Key 或原始服务错误。
 - 完整套件证据证明执行了 T1-T5，不代表覆盖所有 kill/磁盘故障；专项故障注入范围仍应单独说明。
 
@@ -53,3 +53,5 @@
 发布前可运行 `node scripts/verify-release-ledger.mjs` 对已发布台账逐行核对远端正式 Release；远端不可达时返回失败，不将无法核验当作成功。
 
 包管理器由 package.json 的 packageManager 精确固定；CI 不再另写一个漂移的版本号。安全 overrides 与构建脚本允许列表只维护在 pnpm-workspace.yaml。生产与全依赖审计必须分别通过，不能让打包工具链高危从 prod-only 检查中漏过。
+
+结果对象只构造并序列化一次，原始文件与父进程副本使用同一内容。每个门禁结束立即校验传输后的完整证据，不能等到全部付费步骤做完才发现字段缺失；最终打 tag 前仍复查提交和产物未变化。

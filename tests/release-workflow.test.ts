@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import resultProtocol from '../scripts/e2e/result.cjs'
 import diagnostics from '../scripts/e2e/diagnostics.cjs'
 import captureHelper from '../scripts/e2e/capture.cjs'
 import { join } from 'node:path'
@@ -102,7 +104,8 @@ describe('版本准备与文档', () => {
 describe('工作流与脱敏诊断契约', () => {
   it('测试进程预算有界且不忽略运行器错误', () => {
     const config = readFileSync(join(process.cwd(), 'vitest.config.ts'), 'utf8')
-    expect(config).toContain("pool: 'forks'")
+    expect(config).toContain("pool: 'threads'")
+    expect(config).toContain('isolate: true')
     expect(config).toContain('maxWorkers: 4')
     expect(config).toContain('minWorkers: 1')
     expect(config).not.toContain('ignoreUnhandledErrors')
@@ -170,5 +173,31 @@ describe('截图有限重试', () => {
     const broken = vi.fn(async () => { throw Error('permission denied') })
     await expect(captureHelper.captureWithRetry(broken, vi.fn())).rejects.toThrow('permission denied')
     expect(broken).toHaveBeenCalledOnce()
+  })
+})
+
+describe('真实结果转发契约', () => {
+  it('同一结果写入两个文件，经消费者读取后满足发布契约', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'novel-result-test-'))
+    const primary = join(dir, 'primary.json')
+    const mirror = join(dir, 'mirror.json')
+    const result = { code: 0, rendererReady: true, captureAttempts: 2, diagnostics: [], version }
+    resultProtocol.writeRunResult(primary, mirror, result)
+    expect(readFileSync(primary, 'utf8')).toBe(readFileSync(mirror, 'utf8'))
+    const decoded = resultProtocol.readRunResult(JSON.parse(readFileSync(mirror, 'utf8')), version)
+    expect(() => resultProtocol.readRunResult({ ...result, version: '0.1.0' }, version)).toThrow('版本不匹配')
+    expect(() => assertEvidence({ ...evidence(), ...decoded }, expected)).not.toThrow()
+  })
+  it('成功结果缺失字段时拒绝写入，不能先写一个不完整的绿灯', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'novel-result-invalid-'))
+    const target = join(dir, 'result.json')
+    expect(() => resultProtocol.writeRunResult(target, null, { code: 0 })).toThrow('缺少')
+    expect(existsSync(target)).toBe(false)
+  })
+  it('失败结果可留证，但消费者必须拒绝作为成功', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'novel-result-failed-'))
+    const target = join(dir, 'result.json')
+    resultProtocol.writeRunResult(target, null, { code: 1, rendererReady: false })
+    expect(() => resultProtocol.readRunResult(JSON.parse(readFileSync(target, 'utf8')))).toThrow('未成功')
   })
 })

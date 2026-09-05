@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { dirname, join, resolve, relative, isAbsolute, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertSuites } from '../release-contracts.mjs'
+import resultProtocol from './result.cjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const args = process.argv.slice(2)
@@ -50,9 +51,11 @@ child.on('close', async code => {
   log.end()
   let result = {}
   let suites = []
+  let verified = { rendererReady: false, captureAttempts: 0, diagnostics: [] }
   let passed = false
   try {
     result = JSON.parse(await readFile(resultFile, 'utf8'))
+    verified = resultProtocol.readRunResult(result, pkg.version)
     if (mode === 'full') {
       suites = JSON.parse(await readFile(suitesFile, 'utf8'))
       assertSuites(suites)
@@ -61,7 +64,7 @@ child.on('close', async code => {
   } catch (error) { console.error('测试证据不完整：' + error.message) }
   const changed = dirty || git('rev-parse', 'HEAD') !== head || Boolean(git('status', '--porcelain'))
   const evidence = { code: passed ? 0 : 1, mode, packaged, provider, head, version: pkg.version, bundleHash, dirty: changed,
-    suites, rendererReady: result.rendererReady === true, captureAttempts: result.captureAttempts, diagnostics: result.diagnostics ?? [], completedAt: new Date().toISOString(), resultDirectory: resultDir }
+    suites, rendererReady: verified.rendererReady, captureAttempts: verified.captureAttempts, diagnostics: verified.diagnostics, completedAt: new Date().toISOString(), resultDirectory: resultDir }
   await writeFile(evidenceFile, JSON.stringify(evidence, null, 2), 'utf8')
   console.log('[evidence]', evidenceFile, 'code=' + evidence.code, changed ? '(dirty: 仅供本地调试)' : '')
   process.exitCode = evidence.code

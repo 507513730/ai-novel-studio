@@ -923,3 +923,18 @@
 - 不改变测试范围和断言，采用 forks/maxWorkers=4/minWorkers=1 连续两轮对照，均为 69 文件 / 456 用例通过。不能据此声称已证明 OOM 或完全修复上游 IPC bug，但有依据固定更保守的并发预算。
 - 本地设计：Vitest 配置显式固定 4 个独立进程上限、1 个下限；所有测试、运行器异常和 CI 门禁保持启用，不引入 ignoreUnhandledErrors。
 - 官方配置依据：https://vitest.dev/config/maxworkers.html、https://vitest.dev/config/pool.html。原始通道关闭记录及两轮 JSON 报告保留。
+
+
+## D134（2026-09-05）：结果转发字段丢失与逐门禁验收
+
+- d04b736 的完整 T1-T5 实际通过：10 + 31 + 6 + 7 + 13 = 67 断言、0 失败。但发布证据被拒绝：本 agent 新增的转发写入遗漏 rendererReady/captureAttempts，原始 data/result.json 有字段，父进程收到的副本没有。不是应用功能失败。
+- 本地设计：结果对象只构造一次，统一序列化后写原始和转发文件；消费者验证完整运行结果。用真实文件往返契约验证，而不是只测试手工构造的“理想证据”。
+- 每个 gate 完成后立即按 SHA/版本/包哈希验收，失败不再拖到全部付费测试之后；末尾仍复查防止验证期间变更。
+- 保留缺字段的失败证据，不手改字段顶过门禁；先验证无模型契约和备份，再在冻结提交上重新采集完整证据。
+
+
+## D135（2026-09-05）：测试池传输替换，保留完整隔离
+
+- 四个 forks 仍出现通道关闭，故 D133 的预算限制不是完整修复。PID/退出诊断只记录模块、退出码、signal，不采集环境；观察到测试池频繁回收子进程，没有足够证据指称 OOM。
+- 使用 Vitest 支持的 threads 池，保持 isolate=true、maxWorkers=4/minWorkers=1，对照两轮均为 69 文件 / 460 用例通过，覆盖 node:sqlite、HTTP、jsdom 与子进程契约。
+- 本地设计：只替换测试池传输以避开失败的 fork IPC 路径，不改变应用 utilityProcess 架构、不关闭文件隔离、不减少测试、不忽略未处理错误；此前 forks 失败记录保留。官方依据：https://vitest.dev/config/pool.html、https://vitest.dev/config/isolate.html。
