@@ -83,3 +83,12 @@
 四个 forks 仍复现通道关闭，不能继续声称预算限制已解决；隔离 threads 池两轮各通过 460 用例，现保留 isolate=true 和全部异常判定替换测试传输。原应用独立 utilityProcess 不变。
 
 结果协议与隔离 threads 默认入口最终通过 69 文件 / 460 用例，类型/lint/文档门禁通过；真实父进程证据已核对 rendererReady=true、captureAttempts=1，未修改旧证据。
+
+## v1.1.1 正式发布结果（2026-09-05）
+
+- tag：v1.1.1，SHA：59b5671b6335fe1b035c7428301b5828db3b22c5。
+- 对应 Build Release：33958310816，成功；main 的 Build Release/CodeQL/Release Readiness/Docs Lint 也均成功。
+- GitHub Release：已发布，publishedAt=2026-09-05T09:38:09Z，非 draft、非 prerelease。
+- 资产已核对：Windows NSIS/portable、latest.yml、macOS DMG/latest-mac.yml、Linux AppImage/latest-linux.yml 及 blockmap。
+- 发布流程此前因 GitHub API EOF 停止等待，但只读重试确认构建与 Release 已成功；未删除、重打或复用 tag。
+- v1.1.1 现在才可称为正式发布；更早记录中的“待发布/候选”均为发布前快照。

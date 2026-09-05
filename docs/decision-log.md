@@ -938,3 +938,5 @@
 - 四个 forks 仍出现通道关闭，故 D133 的预算限制不是完整修复。PID/退出诊断只记录模块、退出码、signal，不采集环境；观察到测试池频繁回收子进程，没有足够证据指称 OOM。
 - 使用 Vitest 支持的 threads 池，保持 isolate=true、maxWorkers=4/minWorkers=1，对照两轮均为 69 文件 / 460 用例通过，覆盖 node:sqlite、HTTP、jsdom 与子进程契约。
 - 本地设计：只替换测试池传输以避开失败的 fork IPC 路径，不改变应用 utilityProcess 架构、不关闭文件隔离、不减少测试、不忽略未处理错误；此前 forks 失败记录保留。官方依据：https://vitest.dev/config/pool.html、https://vitest.dev/config/isolate.html。
+
+- v1.1.1 发布闭环最终核实：tag 59b5671、Build Release 33958310816 成功，GitHub Release 非 draft/prerelease，publishedAt 2026-09-05T09:38:09Z，Windows/macOS/Linux 资产齐全。此前发布脚本等待 GitHub API EOF，但重试后只读核对成功；不删除或重打 tag。

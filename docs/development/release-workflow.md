@@ -7,7 +7,7 @@
 | 工作树候选 | v1.1.1 | package.json |
 | 最新已发布 | v1.0.0 | GitHub 非 draft Release；已核对 48 个 Release |
 | v1.1.0 | tag 存在，Release 不存在 | Build Release run 33290490484：lockfile overrides 不匹配 |
-| v1.1.1 | 不能宣称已发布 | 完整 E2E / 对应提交 CI / tag 发布证据尚未闭环 |
+| v1.1.1 | 已正式发布 | tag 59b5671、完整 E2E、Build Release 33958310816、资产已核对 |
 
 以上为核实快照，不是持续监控；后续以实际 GitHub Release 和验收证据更新。版本历史表只发现 v1.1.0 的“已发布”声明不符合远端现状，已纠正。
 
@@ -55,3 +55,8 @@
 包管理器由 package.json 的 packageManager 精确固定；CI 不再另写一个漂移的版本号。安全 overrides 与构建脚本允许列表只维护在 pnpm-workspace.yaml。生产与全依赖审计必须分别通过，不能让打包工具链高危从 prod-only 检查中漏过。
 
 结果对象只构造并序列化一次，原始文件与父进程副本使用同一内容。每个门禁结束立即校验传输后的完整证据，不能等到全部付费步骤做完才发现字段缺失；最终打 tag 前仍复查提交和产物未变化。
+
+
+## 发布完成快照
+
+v1.1.1 已于 2026-09-05 正式发布。后续修复不得重指此 tag；新改动进入下一 PATCH。

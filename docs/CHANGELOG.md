@@ -1,6 +1,6 @@
 # AI-Novel-Studio 发布说明
 
-> 本文件记录版本源码变更，不单独证明已发布；发布状态见 versioning 台账及 GitHub Release。
+> 本文件记录版本源码变更；正式发布状态以 versioning 台账及 GitHub Release 为准。
 
 ## [Unreleased]
 
