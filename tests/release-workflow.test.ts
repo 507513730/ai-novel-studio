@@ -100,6 +100,13 @@ describe('版本准备与文档', () => {
 })
 
 describe('工作流与脱敏诊断契约', () => {
+  it('测试进程预算有界且不忽略运行器错误', () => {
+    const config = readFileSync(join(process.cwd(), 'vitest.config.ts'), 'utf8')
+    expect(config).toContain("pool: 'forks'")
+    expect(config).toContain('maxWorkers: 4')
+    expect(config).toContain('minWorkers: 1')
+    expect(config).not.toContain('ignoreUnhandledErrors')
+  })
   it('包管理器与安全覆盖只有一个配置源', () => {
     const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
     expect(pkg.packageManager).toBe('pnpm@10.34.5')

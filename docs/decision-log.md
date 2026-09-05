@@ -915,3 +915,11 @@
 - 隐藏窗口的截图还可能读取旧绘制帧，因此在 DOM 就绪后等待两帧（3 秒明确超时），capturePage 使用默认页面可见性、保持唤醒，OS 窗口仍隐藏。已实际查看 release/release-e2e-9nlXtA/renderer.png，确认为首启向导而不是加载占位。使用当前 NativeImage.toBitmap 接口，避免已弃用别名。
 
 - 一次全量测试未完成，Vitest worker 报 ERR_IPC_CHANNEL_CLOSED；该次不能记作通过。上游 Vitest #8201 有同类通道关闭报告，但不足以证明本机根因；先保留失败并在不改配置、不改测试范围的情况下复跑，不使用 ignoreUnhandledErrors 或自动吞错。来源：https://github.com/vitest-dev/vitest/issues/8201。
+
+
+## D133（2026-09-05）：固定测试进程预算，禁止碰运气放行
+
+- 发布入口再次遇到 ERR_IPC_CHANNEL_CLOSED；本机 availableParallelism=24，原配置未固定 worker 数。不能把未完成的套件当成功，也不能无限自动重试。
+- 不改变测试范围和断言，采用 forks/maxWorkers=4/minWorkers=1 连续两轮对照，均为 69 文件 / 456 用例通过。不能据此声称已证明 OOM 或完全修复上游 IPC bug，但有依据固定更保守的并发预算。
+- 本地设计：Vitest 配置显式固定 4 个独立进程上限、1 个下限；所有测试、运行器异常和 CI 门禁保持启用，不引入 ignoreUnhandledErrors。
+- 官方配置依据：https://vitest.dev/config/maxworkers.html、https://vitest.dev/config/pool.html。原始通道关闭记录及两轮 JSON 报告保留。
