@@ -1,9 +1,9 @@
-allowBuilds:
-  electron-winstaller: set this to true or false
-  esbuild: set this to true or false
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - electron-winstaller
 
-# 安全（2026-08-30）：epub2 依赖的 adm-zip@0.5.x 含高危漏洞（GHSA-xcpc-8h2w-3j85：构造 ZIP 触发 4GB 内存分配）。
-# epub2 的 ^0.5.10 语义化锁在 <0.6.0，无法直接升级到修复版 0.6.x，用 pnpm override 覆盖到 >=0.6.0。
-# adm-zip 0.5→0.6 为安全修复（unzip API 兼容），对 epub2 的 EPUB 解包用法无破坏。
+# 安全覆盖统一在此维护，禁止与 package.json.pnpm 重复配置。
 overrides:
   adm-zip: ^0.6.0
+  "fast-uri@>=3.0.0 <3.1.6": 3.1.6

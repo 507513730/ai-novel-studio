@@ -104,7 +104,6 @@ app.on('browser-window-created', (_, win) => {
       }
       const provider = process.env.E2E_PROVIDER ?? 'opencode-go'
       if (!['opencode-go', 'deepseek'].includes(provider)) throw Error('unsupported test provider')
-      if (provider !== 'opencode-go') await api('/settings/import-opencode', 'POST', { provider: 'opencode-go' })
       const imported = await api('/settings/import-opencode', 'POST', { provider })
       console.log('[test-provider]', provider)
       const routes = await api('/settings/model-routes')
@@ -143,7 +142,7 @@ app.on('browser-window-created', (_, win) => {
       }
       child = spawn(process.env.SYSTEM_NODE_EXE, [join(root,'scripts/e2e/round.mjs'),'1'], {
         cwd:root,
-        env:{...process.env,E2E_BASE_URL:base,E2E_APP_TOKEN:config.token,E2E_REPORT:join(data,'round-report.md')},
+        env:{...process.env,E2E_BASE_URL:base,E2E_APP_TOKEN:config.token,E2E_PROVIDER_ID:String(imported.id),E2E_REPORT:join(data,'round-report.md')},
         stdio:['ignore','inherit','inherit'], windowsHide:true
       })
       child.once('error', e => finish(1,e.message))

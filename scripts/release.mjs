@@ -56,7 +56,7 @@ async function main() {
   let bundleHash
   let artifactHashes
   const prepare = () => {
-    for (const command of ['node scripts/check-docs.mjs', 'node scripts/verify-docs.mjs', 'pnpm audit --prod --audit-level=high', 'pnpm typecheck', 'pnpm lint', 'pnpm test', 'pnpm db:smoke']) {
+    for (const command of ['node scripts/check-docs.mjs', 'node scripts/verify-docs.mjs', 'pnpm audit --prod --audit-level=high', 'pnpm audit --audit-level=high', 'pnpm typecheck', 'pnpm lint', 'pnpm test', 'pnpm db:smoke']) {
       run(command)
       console.log('PASS ' + command)
     }

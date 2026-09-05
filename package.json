@@ -76,16 +76,6 @@
     "vite": "7.3.6",
     "vitest": "^3.2.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild",
-      "electron-winstaller"
-    ],
-    "overrides": {
-      "adm-zip": ">=0.6.0"
-    }
-  },
   "build": {
     "appId": "com.ai-novel-studio.app",
     "productName": "AI-Novel-Studio",
@@ -137,5 +127,6 @@
       "owner": "507513730",
       "repo": "ai-novel-studio"
     }
-  }
+  },
+  "packageManager": "pnpm@10.34.5"
 }

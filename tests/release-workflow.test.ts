@@ -99,8 +99,21 @@ describe('版本准备与文档', () => {
 })
 
 describe('工作流与脱敏诊断契约', () => {
+  it('包管理器与安全覆盖只有一个配置源', () => {
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
+    expect(pkg.packageManager).toBe('pnpm@10.34.5')
+    expect(pkg.pnpm).toBeUndefined()
+    const workspace = readFileSync(join(process.cwd(), 'pnpm-workspace.yaml'), 'utf8')
+    expect(workspace).toContain('onlyBuiltDependencies:')
+    expect(workspace).toContain('"fast-uri@>=3.0.0 <3.1.6": 3.1.6')
+    expect(workspace).not.toContain('set this to true or false')
+    const lock = readFileSync(join(process.cwd(), 'pnpm-lock.yaml'), 'utf8')
+    expect(lock).toContain('fast-uri@3.1.6:')
+    expect(lock).not.toContain('fast-uri@3.1.5:')
+  })
   it('发布汇总依赖矩阵成功，源码包含 shared 根目录且不吞 diff 失败', () => {
     const build = readFileSync(join(process.cwd(), '.github/workflows/build.yml'), 'utf8')
+    expect(build).toContain('pnpm audit --audit-level=high')
     expect(build).toMatch(/publish:[\s\S]*needs: build/)
     expect((build.match(/softprops\/action-gh-release/g) ?? []).length).toBe(1)
     const readiness = readFileSync(join(process.cwd(), '.github/workflows/release-readiness.yml'), 'utf8')

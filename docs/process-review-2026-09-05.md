@@ -48,3 +48,14 @@
 - db-smoke 7/7；生产依赖审计无 high/critical，仍有 2 moderate。
 - pnpm 10.34.5 frozen-lockfile 安装通过；6 个 workflow YAML 解析通过；文档健康、版本唯一性/安全指引与远端发布台账校验通过。
 - 尚未将这些本地结果称为远端 CI 或正式发布证据；下一阶段先推送当前 SHA，再验证该 SHA 的 CI 与打包候选。
+
+## 构建依赖审计补充（D131）
+
+源码 push 后核对到 4 条 high，均来自开发工具链 fast-uri 3.1.5。此前 prod 审计结果没有错误，但不能扩张为全依赖无高危。现限定修补到官方 3.1.6，并把全依赖审计纳入本地/CI；剩余中危单独披露。
+
+### D131 修补后验证
+
+- 全量 69 个文件 / 448 条测试通过，类型/lint/文档检查通过。
+- 全依赖 audit：0 high/critical，3 moderate；prod audit：0 high/critical，2 moderate。
+- 锁文件包版本集合仅 fast-uri 3.1.5 → 3.1.6；其他变化为 pnpm 平台元数据与单一 overrides 配置规范化，不升级其他包版本。
+- 安全/流程补充不新增应用版本，仍属尚未发布的 v1.1.1 候选。

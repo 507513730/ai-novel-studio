@@ -14,14 +14,15 @@ export async function t1() {
   const provs = await api('/settings/providers')
   ok(provs.providers.length >= 1, '供应商列表 ≥1', `got ${provs.providers.length}`)
   const go = provs.providers.find((p) => p.name.includes('OpenCode'))
-  ok(Boolean(go && go.hasKey), 'OpenCode Go 网关已配置 Key')
+  const selected = process.env.E2E_PROVIDER_ID ? provs.providers.find((p) => p.id === Number(process.env.E2E_PROVIDER_ID)) : go
+  ok(Boolean(selected && selected.hasKey), '测试供应商已配置 Key（' + (process.env.E2E_PROVIDER ?? 'opencode-go') + '）')
   // 测试连接
-  if (go) {
+  if (selected) {
     const t = await apiTry('/settings/test-connection', {
       method: 'POST',
-      body: JSON.stringify({ providerId: go.id, taskType: 'prose', model: 'deepseek-v4-flash' })
+      body: JSON.stringify({ providerId: selected.id, taskType: 'prose', model: 'deepseek-v4-flash' })
     })
-    ok(t.ok && t.body.ok === true, '测试连接成功（网关 deepseek-v4-flash）', t.error ?? '')
+    ok(t.ok && t.body.ok === true, '测试连接成功（' + (process.env.E2E_PROVIDER ?? 'opencode-go') + ' / deepseek-v4-flash）', t.error ?? '')
   }
   // 模型路由
   const routes = await api('/settings/model-routes')

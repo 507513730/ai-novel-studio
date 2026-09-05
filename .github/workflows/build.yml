@@ -23,8 +23,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -38,6 +36,9 @@ jobs:
       # P26：依赖安全（高危漏洞阻断）
       - name: Audit dependencies
         run: pnpm audit --prod --audit-level=high || (echo "::error::存在高危依赖漏洞，请升级或评估"; exit 1)
+
+      - name: Audit build dependencies
+        run: pnpm audit --audit-level=high
 
       - name: Typecheck
         run: pnpm typecheck
@@ -83,8 +84,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

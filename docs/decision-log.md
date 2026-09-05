@@ -887,3 +887,15 @@
 
 - 官方备用定向 probe 通过：首次方向生成 10017ms，定向重做 15440ms；网关同场景已捕获 upstream-timeout。该对照支持供应商请求超时诊断，但专项通过不替代完整 E2E。证据为脏工作区调试结果，不可复用为正式发布证据。
 - 全表远端核对 48 个 Release，仅 v1.1.0 的已发布标记不匹配；当前 pnpm 10.34.5 frozen-lockfile 安装已通过，历史 tag 不重指。AGENTS #36/#48/#62 存在文字冲突，涉及硬约束的改写需用户另行确认，本轮只修普通流程文档和更严格的执行守护。
+
+
+## D131（2026-09-05）：发布审计遗漏构建依赖高危
+
+- GitHub Dependabot 显示 fast-uri 3.1.5 的 4 条 high 告警，路径为 ajv → commitlint / electron-builder，属于 development；先前 prod 审计的 0 high 并不代表全依赖 0 high。
+- 官方 fast-uri v3.1.6 发布说明列明四项安全修复；GHSA-jqff-g426-hqxp 明确 v3.x 的修复版本为 3.1.6。来源：https://github.com/fastify/fast-uri/releases/tag/v3.1.6 与 https://github.com/fastify/fast-uri/security/advisories/GHSA-jqff-g426-hqxp。
+- 本地设计：只对受影响的 v3 范围增加 pnpm override 到 3.1.6，不更改 electron/vite/react/openai 等锁定依赖。发布本地与 CI 同时执行全依赖高危审计及原有 prod 审计。
+- 中危 qs/xmldom 单独记录，不把“无高危”写成“无漏洞”；不顺手升级其他依赖扩大风险。
+
+- 安装实测补充：package.json.pnpm 与 pnpm-workspace.yaml 的重复配置使新 override 未生效，安装仍称 up-to-date 且全量审计仍有 4 high。改为 workspace 单一配置源，迁移原有三项 onlyBuiltDependencies，删除无效 allowBuilds 占位；packageManager 精确固定 pnpm@10.34.5，CI 从该字段读取版本，避免本机 shim 与 CI 读取不同配置。官方 action-setup 支持省略 version 读取 packageManager：https://github.com/pnpm/action-setup。
+
+- D103 备用模式下，T1 连通性现在使用启动器实际选定的 providerId 并显示供应商；不再一边用官方生成、一边硬要求故障网关连通，或把官方结果标成网关结果。增加静态契约，备用不依赖另行导入网关凭证。

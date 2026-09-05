@@ -30,6 +30,8 @@ describe('E2E 发布门禁', () => {
     expect(round).not.toContain('127.0.0.1:3000')
     expect(round).not.toMatch(/\bfetch\s*\(/)
     expect(round).toContain('apiRaw(')
+    expect(round).not.toContain('providerId: go.id')
+    expect(round).toContain('E2E_PROVIDER_ID')
   })
 
   it('使用显式测试地址与 token，保留调用方请求头', () => {

@@ -51,3 +51,5 @@
 本轮先修流程和证据，不新增业务功能。v1.1.0 的失败 tag 保留不动，修复只进入 v1.1.1 候选。
 
 发布前可运行 `node scripts/verify-release-ledger.mjs` 对已发布台账逐行核对远端正式 Release；远端不可达时返回失败，不将无法核验当作成功。
+
+包管理器由 package.json 的 packageManager 精确固定；CI 不再另写一个漂移的版本号。安全 overrides 与构建脚本允许列表只维护在 pnpm-workspace.yaml。生产与全依赖审计必须分别通过，不能让打包工具链高危从 prod-only 检查中漏过。
