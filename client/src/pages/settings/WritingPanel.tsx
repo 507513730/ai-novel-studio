@@ -1,12 +1,42 @@
 // v0.23.1（批次 E2）：自 SettingsPage.tsx 机械拆分（同 tab 互引组件同文件）
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../../api'
-import { useToast } from '../../components/Toast'
+import { useToast } from '../../components/toastGlobal'
 import { Loading } from '../../components/Loading'
+import { useWritingSettings } from './useWritingSettings'
 import { applyFonts, getStoredFonts, type FontSettings } from '../../utils/fonts'
 
-export function WritingPanel(): React.JSX.Element {  const { toast } = useToast()
-  const [settings, setSettings] = useState<{ lang: string; format: string; writingMode: string; quickWords: Record<string, string> } | null>(null)
+interface WritingOptionProps {
+  label: string
+  desc: string
+  current: boolean
+  disabled: boolean
+  onPick: () => void
+}
+
+function WritingOption({ label, desc, current, disabled, onPick }: WritingOptionProps): React.JSX.Element {
+  return (
+    <button
+      disabled={disabled}
+      aria-pressed={current}
+      onClick={onPick}
+      style={{
+        padding: '10px 14px',
+        borderRadius: 'var(--radius-m)',
+        background: 'var(--bg-card)',
+        border: `1px solid ${current ? 'var(--accent)' : 'var(--border)'}`,
+        cursor: disabled ? 'wait' : 'pointer',
+        textAlign: 'left'
+      }}
+    >
+      <div style={{ fontSize: 13, color: 'var(--text)' }}>{label} {current ? '✓' : ''}</div>
+      <div className="muted t-small">{desc}</div>
+    </button>
+  )
+}
+
+export function WritingPanel(): React.JSX.Element {
+  const { settings, saving, loadError, retry, patch } = useWritingSettings()
   // P22-B：排版状态（同步 fonts 工具，即时生效）
   const [typeIndent, setTypeIndent] = useState(getStoredFonts().indent)
   const [typeLineHeight, setTypeLineHeight] = useState(getStoredFonts().lineHeight)
@@ -15,77 +45,35 @@ export function WritingPanel(): React.JSX.Element {  const { toast } = useToast(
   const patchType = (patch: Partial<FontSettings>): void => {
     applyFonts({ ...getStoredFonts(), ...patch })
   }
-  // v0.9.0（审查 #12）：走统一 apiFetch——此前裸 fetch('/api/...') 无 baseUrl/token
-  // 且失败被静默吞掉，页面永远停留在"加载中…"
-  useEffect(() => {
-    let alive = true
-    void apiFetch('/settings/writing')
-      .then((d) => {
-        if (alive) {
-          const v = d as { lang?: string; format?: string; writingMode?: string; quickWords?: Record<string, string> }
-          setSettings((prev) => ({
-            lang: String(v.lang ?? prev?.lang ?? ''),
-            format: String(v.format ?? prev?.format ?? ''),
-            writingMode: String(v.writingMode ?? prev?.writingMode ?? ''),
-            quickWords: v.quickWords ?? prev?.quickWords ?? {}
-          }))
-        }
-      })
-      .catch(() => toast('error', '写作偏好加载失败'))
-    return () => {
-      alive = false
-    }
-  }, [])
-  const patch = async (patch: Record<string, string>): Promise<void> => {
-    try {
-      await apiFetch('/settings/writing', {
-        method: 'PATCH',
-        body: JSON.stringify(patch)
-      })
-      setSettings((prev) => (prev ? { ...prev, ...patch } : prev))
-      toast('ok', '已保存，将影响后续生成')
-    } catch {
-      toast('error', '保存失败')
-    }
-  }
-  const Option = ({ label, desc, current, onPick }: { label: string; desc: string; current: boolean; onPick: () => void }): React.JSX.Element => (
-    <button
-      onClick={onPick}
-      style={{
-        padding: '10px 14px',
-        borderRadius: 'var(--radius-m)',
-        background: 'var(--bg-card)',
-        border: `1px solid ${current ? 'var(--accent)' : 'var(--border)'}`,
-        cursor: 'pointer',
-        textAlign: 'left'
-      }}
-    >
-      <div style={{ fontSize: 13, color: 'var(--text)' }}>{label} {current ? '✓' : ''}</div>
-      <div className="muted t-small">{desc}</div>
-    </button>
+  if (loadError) return (
+    <div className="panel">
+      <p role="alert">写作偏好加载失败，请重试。</p>
+      <button onClick={retry}>重试加载</button>
+    </div>
   )
   if (!settings) return <div className="panel"><Loading label="设置加载中…" lines={3} /></div>
   return (
     <div className="panel col">
       <h2>写作偏好</h2>
+      {saving && <p role="status">正在保存写作偏好…</p>}
       <p className="muted t-small">
         这些规则会注入每次生成的写作要求（改设置后生成缓存自动失效）。仅在不等于默认值时注入，不浪费 token。
       </p>
       <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>语言</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
-        <Option label="简体中文" desc="默认" current={settings.lang === 'simplified'} onPick={() => void patch({ lang: 'simplified' })} />
-        <Option label="繁体中文" desc="全文统一繁体" current={settings.lang === 'traditional'} onPick={() => void patch({ lang: 'traditional' })} />
+        <WritingOption disabled={saving} label="简体中文" desc="默认" current={settings.lang === 'simplified'} onPick={() => void patch({ lang: 'simplified' })} />
+        <WritingOption disabled={saving} label="繁体中文" desc="全文统一繁体" current={settings.lang === 'traditional'} onPick={() => void patch({ lang: 'traditional' })} />
       </div>
       <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>格式</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
-        <Option label="自然分段" desc="默认，一段一意" current={settings.format === 'paragraph'} onPick={() => void patch({ format: 'paragraph' })} />
-        <Option label="长句连续" desc="复合句为主，段落连续" current={settings.format === 'longSentence'} onPick={() => void patch({ format: 'longSentence' })} />
+        <WritingOption disabled={saving} label="自然分段" desc="默认，一段一意" current={settings.format === 'paragraph'} onPick={() => void patch({ format: 'paragraph' })} />
+        <WritingOption disabled={saving} label="长句连续" desc="复合句为主，段落连续" current={settings.format === 'longSentence'} onPick={() => void patch({ format: 'longSentence' })} />
       </div>
       <h3 style={{ fontSize: 13, margin: '8px 0 4px' }}>写作模式</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
-        <Option label="聚焦" desc="严格围绕章节目标，不展开支线" current={settings.writingMode === 'focused'} onPick={() => void patch({ writingMode: 'focused' })} />
-        <Option label="标准" desc="默认，适度铺陈" current={settings.writingMode === 'standard'} onPick={() => void patch({ writingMode: 'standard' })} />
-        <Option label="自由" desc="允许支线发散，结尾回落主线" current={settings.writingMode === 'free'} onPick={() => void patch({ writingMode: 'free' })} />
+        <WritingOption disabled={saving} label="聚焦" desc="严格围绕章节目标，不展开支线" current={settings.writingMode === 'focused'} onPick={() => void patch({ writingMode: 'focused' })} />
+        <WritingOption disabled={saving} label="标准" desc="默认，适度铺陈" current={settings.writingMode === 'standard'} onPick={() => void patch({ writingMode: 'standard' })} />
+        <WritingOption disabled={saving} label="自由" desc="允许支线发散，结尾回落主线" current={settings.writingMode === 'free'} onPick={() => void patch({ writingMode: 'free' })} />
       </div>
 
       {/* P22-B：正文排版（编辑器即时生效） */}
@@ -127,7 +115,7 @@ export function WritingPanel(): React.JSX.Element {  const { toast } = useToast(
       <QuickWordsEditor
         dict={settings.quickWords}
         onSave={(next) => {
-          setSettings((prev) => (prev ? { ...prev, quickWords: next } : prev))
+          void patch({ quickWords: next })
         }}
       />
 

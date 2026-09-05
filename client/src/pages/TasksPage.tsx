@@ -7,8 +7,8 @@ import { useActionRun } from '../hooks/useActionRun'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { EmptyState } from '../components/EmptyState'
 import { Loading } from '../components/Loading'
-import { useToast } from '../components/Toast'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useToast } from '../components/toastGlobal'
+import { useConfirm } from '../components/useConfirm'
 
 // v0.20.0（NovelClaw 学习组）：运行轨迹——job.result_json.trace 时间线（生产/修复任务的阶段轨迹）
 interface JobTraceEntry {

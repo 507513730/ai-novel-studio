@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Upload, FileText, PenLine, Sparkles, Save } from 'lucide-react'
 import { assetsApi } from '../api'
-import { useToast } from './Toast'
+import { useToast } from './toastGlobal'
 
 // ============================================================
 // P23：统一资产创建器（三模式：上传文件 / 粘贴文本 / 手动填写）

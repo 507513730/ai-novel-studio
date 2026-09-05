@@ -5,9 +5,9 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { UsersRound, Star, Trash2 } from 'lucide-react'
 import { novelApi, resourcesApi, assetsApi } from '../api'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { AssetCreator } from '../components/AssetCreator'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useConfirm } from '../components/useConfirm'
 
 // P18 D1：基础角色库（跨书角色模板：从书角色存模板 / 应用模板到书）
 export function BaseCharactersPage(): React.JSX.Element {

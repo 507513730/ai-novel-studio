@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Tags, Plus } from 'lucide-react'
 import { novelApi, assetsApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { AssetCreator } from '../components/AssetCreator'
 
 // P17-1：流派管理全局页（全局预设 + 各书自定义）

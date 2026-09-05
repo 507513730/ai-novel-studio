@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { novelApi, waitForJob } from '../api'
 import { useActionRun } from '../hooks/useActionRun'
 import { usePrompt } from '../components/PromptDialog'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useConfirm } from '../components/useConfirm'
 import type { ChapterSummary } from '../types'
 
 export function VolumePanel({ novelId }: { novelId: number }): React.JSX.Element {

@@ -3,9 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, Plus, Pencil, Trash2, Sparkles, Power } from 'lucide-react'
 import { agentsApi, studioApi, apiFetch } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { usePrompt } from '../components/PromptDialog'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useConfirm } from '../components/useConfirm'
 
 // ============================================================
 // P29 A：智能体库（全局页）——列表/编辑/技能挂载/启停/新建

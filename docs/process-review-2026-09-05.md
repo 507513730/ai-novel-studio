@@ -92,3 +92,10 @@
 - 资产已核对：Windows NSIS/portable、latest.yml、macOS DMG/latest-mac.yml、Linux AppImage/latest-linux.yml 及 blockmap。
 - 发布流程此前因 GitHub API EOF 停止等待，但只读重试确认构建与 Release 已成功；未删除、重打或复用 tag。
 - v1.1.1 现在才可称为正式发布；更早记录中的“待发布/候选”均为发布前快照。
+
+## 前端批次补充（D137）
+
+- 修复 4 条既有 lint warning：Fast Refresh 导出拆分 3 条、solutionAssets 未使用禁用指令 1 条、WritingPanel effect 依赖 1 条；本批 lint 变为 0 warning。
+- 写作偏好异步状态抽为 useWritingSettings，真实 PATCH 共享锁与 UI disabled，失败/加载可重试，生命周期序号拒绝过期响应。
+- 相关 81 条测试通过；全量 69 文件 / 460 用例通过；dist 产物已按 v1.1.1 重建。
+- 目前未拆大页面；大页面重构留给独立批次，防止与状态竞态修复混合。

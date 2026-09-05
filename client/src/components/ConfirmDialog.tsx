@@ -71,21 +71,3 @@ export function ConfirmDialog({ options, onConfirm, onCancel }: ConfirmDialogPro
     </div>
   )
 }
-
-// 状态钩子：confirm({...opts, action}) → 确认后执行 action
-import { useCallback, useState } from 'react'
-
-export function useConfirm(): [(opts: ConfirmOptions & { action: () => void }) => void, React.JSX.Element | null] {
-  const [state, setState] = useState<{ options: ConfirmOptions; action: () => void } | null>(null)
-  const confirm = useCallback((o: ConfirmOptions & { action: () => void }): void => {
-    setState({ options: o, action: o.action })
-  }, [])
-  const dialog = state ? (
-    <ConfirmDialog
-      options={state.options}
-      onConfirm={state.action}
-      onCancel={() => setState(null)}
-    />
-  ) : null
-  return [confirm, dialog]
-}

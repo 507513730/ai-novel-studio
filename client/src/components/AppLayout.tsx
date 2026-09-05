@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { novelApi } from '../api'
-import { useToast } from './Toast'
+import { useToast } from './toastGlobal'
 
 // P11-2：全局侧栏（学习参考项目 Sidebar：数据驱动 navGroups + 激活指示条 + 折叠持久化）
 

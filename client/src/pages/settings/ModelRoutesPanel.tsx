@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ModelRoute, Provider } from '@shared/types'
 import { taskTypeLabels, taskTypes } from '@shared/types'
 import { apiFetch } from '../../api'
-import { useToast } from '../../components/Toast'
+import { useToast } from '../../components/toastGlobal'
 
 export function ModelRoutesPanel(): React.JSX.Element {
   const queryClient = useQueryClient()

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api'
-import { useToast } from './Toast'
+import { useToast } from './toastGlobal'
 
 // v0.11.0（批C）：方案市场——GitHub 仓库 solutions/ 目录即市场（index.json 索引，raw 拉取）
 const MARKET_INDEX_URL = 'https://raw.githubusercontent.com/507513730/ai-novel-studio/main/solutions/index.json'

@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, Trash2, Globe, Search, Download, Tag } from 'lucide-react'
 import { resourcesApi, assetsApi, apiFetch } from '../api'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { AssetCreator } from '../components/AssetCreator'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useConfirm } from '../components/useConfirm'
 
 // B1（D124）：知识库词条触发词编辑器——逗号分隔，内容命中即注入该词条设定
 function KbKeywordsEditor({

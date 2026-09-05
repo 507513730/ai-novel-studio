@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ScanSearch, Upload } from 'lucide-react'
 import { novelApi, analysisApi, assetsApi } from '../api'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { EmptyState } from '../components/EmptyState'
 
 // P23：外部书导入卡片（上传 → 解析分章 → 建外部书 → 拆书）

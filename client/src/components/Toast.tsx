@@ -1,26 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { bindGlobalToast, ToastContext, type ToastType } from './toastGlobal'
 
 // P8-5：轻量全局 toast（操作反馈：成功/错误/信息）
-type ToastType = 'ok' | 'error' | 'info'
 interface Toast {
   id: number
   type: ToastType
   text: string
 }
 
-// P9 B6：模块级广播（供 unhandledrejection 等非组件环境使用）
-let globalListener: ((type: ToastType, text: string) => void) | null = null
-export function toastGlobal(type: ToastType, text: string): void {
-  globalListener?.(type, text)
-}
-
-const ToastContext = createContext<{ toast: (type: ToastType, text: string) => void }>({
-  toast: () => undefined
-})
-
-export function useToast(): { toast: (type: ToastType, text: string) => void } {
-  return useContext(ToastContext)
-}
 
 export function ToastProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -40,12 +27,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
   }, [])
 
   useEffect(() => {
-    globalListener = toast
+    const unbind = bindGlobalToast(toast)
     return () => {
       // v0.17.0（审查 C34）：卸载时清掉未到期的消失定时器
       for (const t of timersRef.current) clearTimeout(t)
       timersRef.current = []
-      globalListener = null
+      unbind()
     }
   }, [toast])
 

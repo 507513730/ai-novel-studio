@@ -4,7 +4,7 @@ import { ErrorMsg } from '../../components/ErrorMsg'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Provider } from '@shared/types'
 import { apiFetch } from '../../api'
-import { useToast } from '../../components/Toast'
+import { useToast } from '../../components/toastGlobal'
 
 export function ProvidersPanel(): React.JSX.Element {
   const queryClient = useQueryClient()

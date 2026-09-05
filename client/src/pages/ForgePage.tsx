@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Hammer, Sparkles, Database } from 'lucide-react'
 import { apiFetch } from '../api'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 
 // v0.24.4（B4）：网文要素生成器——人名/地名/门派/功法/宝物/金手指/桥段 批量生成（extraction 单次调用）
 const CATEGORIES = ['人名', '地名', '门派', '功法', '宝物', '金手指', '桥段'] as const

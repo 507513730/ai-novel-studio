@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { UsageGroup, UsageTotal } from '@shared/types'
 import { taskTypeLabels } from '@shared/types'
 import { apiFetch } from '../../api'
-import { useToast } from '../../components/Toast'
+import { useToast } from '../../components/toastGlobal'
 
 export function UsagePanel(): React.JSX.Element {
   const { toast } = useToast()

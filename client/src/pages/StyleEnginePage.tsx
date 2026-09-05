@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { WandSparkles, Fingerprint } from 'lucide-react'
 import { globalStyleApi, novelApi, assetsApi, styleApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { AssetCreator } from '../components/AssetCreator'
 
 // v0.14.0（批F/I5）：风格指纹面板——结构统计提取（Stylometry：句长均值/方差/短句占比/段落/标点/对话）

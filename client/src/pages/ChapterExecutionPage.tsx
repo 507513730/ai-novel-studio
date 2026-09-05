@@ -5,8 +5,8 @@ import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { assetsApi } from '../api'
 import { usePrompt } from '../components/PromptDialog'
 import { SelectionToolbar } from '../editor/SelectionToolbar'
-import { useToast } from '../components/Toast'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useToast } from '../components/toastGlobal'
+import { useConfirm } from '../components/useConfirm'
 // v0.25.0（审查 S1）：UI 面板全部分拆至 ./chapter/——
 // 本文件只保留章节生产链路的状态与动作编排（生成/审核/修复/回灌/版本/方案）
 // R7：编辑会话/正文加载/生成控制三块异步编排抽至 ./chapter/hooks/

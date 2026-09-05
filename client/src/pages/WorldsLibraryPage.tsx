@@ -5,8 +5,8 @@ import { Globe2, Save, Trash2, Copy } from 'lucide-react'
 import { resourcesApi, novelApi, assetsApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { AssetCreator } from '../components/AssetCreator'
-import { useToast } from '../components/Toast'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useToast } from '../components/toastGlobal'
+import { useConfirm } from '../components/useConfirm'
 
 // P17-2：世界样本库（从书保存样本 / 应用样本到书）
 export function WorldsLibraryPage(): React.JSX.Element {

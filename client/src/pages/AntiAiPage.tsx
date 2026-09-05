@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldCheck, Plus, X } from 'lucide-react'
 import { antiAiApi, assetsApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { AssetCreator } from '../components/AssetCreator'
 
 // P16 P1：反 AI 规则管理（词库查看/增删）

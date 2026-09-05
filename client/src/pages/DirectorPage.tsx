@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useConfirm } from '../components/useConfirm'
 import { useNavigate, useParams } from 'react-router-dom'
 import { automationApi } from '../api'
 import type { DirectorStatus } from '../../../shared/src/types'

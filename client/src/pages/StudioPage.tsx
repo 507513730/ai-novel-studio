@@ -4,9 +4,9 @@ import { WandSparkles, Play, Save, Download, Upload, Pencil, Trash2, Layers } fr
 import { novelApi, studioApi, agentsApi, apiFetch } from '../api'
 import { MarketPanel } from '../components/MarketPanel'
 import { ErrorMsg } from '../components/ErrorMsg'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { usePrompt } from '../components/PromptDialog'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useConfirm } from '../components/useConfirm'
 
 // ============================================================
 // P21-2：创造工坊——对话引导生成创作方案（agent 流水线）

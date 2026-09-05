@@ -421,7 +421,6 @@ export function exportSolutionBundle(
     if (row) nameById.set(aid, row.name)
   }
   bundle.solution.steps = sol.steps.map((s) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { agentId, ...rest } = s
     void agentId
     return { ...rest, agentName: nameById.get(s.agentId) ?? `agent-${s.agentId}` }

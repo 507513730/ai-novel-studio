@@ -1,7 +1,7 @@
 // v0.23.1（批次 E2）：自 SettingsPage.tsx 机械拆分（同 tab 互引组件同文件）
 import { useState, useEffect } from 'react'
-import { useToast } from '../../components/Toast'
-import { useConfirm } from '../../components/ConfirmDialog'
+import { useToast } from '../../components/toastGlobal'
+import { useConfirm } from '../../components/useConfirm'
 import { THEMES, applyTheme, getStoredTheme, type ThemePreference } from '../../utils/theme'
 import { SERIF_FONTS, UI_FONTS, applyFonts, getStoredFonts, DEFAULTS, type FontSettings } from '../../utils/fonts'
 import { SHORTCUT_ACTIONS, getStoredShortcuts, saveShortcut, resetShortcuts, eventToCombo, formatCombo, type ShortcutAction, type ShortcutBinding } from '../../utils/shortcuts'

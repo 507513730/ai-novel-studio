@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { automationApi } from '../../api'
-import { useToast } from '../../components/Toast'
+import { useToast } from '../../components/toastGlobal'
 
 // v0.23.1（批次 E1）：自 ChapterExecutionPage 提取
 // v0.10.0（批B/I2）：质量债待修复徽标——整本生产后自动修复队列的显性入口

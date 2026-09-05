@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Braces, Save, Play, RotateCcw } from 'lucide-react'
 import { apiFetch } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { usePrompt } from '../components/PromptDialog'
 import { useNavigate } from 'react-router-dom'
 

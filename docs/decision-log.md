@@ -940,3 +940,21 @@
 - 本地设计：只替换测试池传输以避开失败的 fork IPC 路径，不改变应用 utilityProcess 架构、不关闭文件隔离、不减少测试、不忽略未处理错误；此前 forks 失败记录保留。官方依据：https://vitest.dev/config/pool.html、https://vitest.dev/config/isolate.html。
 
 - v1.1.1 发布闭环最终核实：tag 59b5671、Build Release 33958310816 成功，GitHub Release 非 draft/prerelease，publishedAt 2026-09-05T09:38:09Z，Windows/macOS/Linux 资产齐全。此前发布脚本等待 GitHub API EOF，但重试后只读核对成功；不删除或重打 tag。
+
+
+## D136（2026-09-05）：写作偏好异步安全与反馈组件拆分
+
+- 范围收窄：仅写作偏好异步状态、确认/通知 hook 分离和既有 lint 警告；大页面只做必要导入调整，不增加功能。
+- 官方查证：React useEffect 文档示例用 cleanup 中的 ignore 标记丢弃迟到响应；网络结果可乱序。来源：https://react.dev/reference/react/useEffect（已读取官方页面）。Fast Refresh 的 only-export-components 规则要求组件与 hook/非组件导出分离，来源：https://github.com/ArnaudBarre/eslint-plugin-react-refresh。
+- 本地设计：写作偏好独立 hook；同一 PATCH 入口使用同步 ref 抢占 + UI disabled，共享锁防止同域交错保存；成功才更新本地偏好，失败不改选中值并允许重试。加载错误显示重试，不永久 loading；effect cleanup 的生命周期序号拒绝已卸载生命周期的响应与 toast。
+- 回归覆盖同 tick 重复调用、保存失败/重试、加载失败/重试、StrictMode 旧响应、保存中卸载、确认与取消行为、toast 全局发送/计时清理。
+- 本轮早期机械编辑误写 WritingPanel 与错误 JSX 扩展名，类型检查已拦截，文件从已提交 HEAD 恢复；未提交或交付损坏版本。后续一律 Node 显式 UTF-8 并断言锚点，不使用 PowerShell 文本写入。
+
+
+## D137（2026-09-05）：前端反馈组件与写作偏好异步状态
+
+- ConfirmDialog/useConfirm 与 Toast/useToast/toastGlobal 分离为组件文件和非组件 API，消除 Fast Refresh export 警告；所有调用方导入已更新，行为不变。
+- WritingPanel 的写作偏好加载/保存抽为 useWritingSettings：加载失败可重试，保存期间按钮 disabled，同一时刻只允许一个 PATCH，成功才更新本地状态，卸载/重载后丢弃迟到响应。快捷词继续使用服务端 quickWords schema，不再用旧 setSettings 闭包。
+- 官方依据：React useEffect cleanup 可忽略迟到网络结果；来源：https://react.dev/reference/react/useEffect。
+- 验证：typecheck 通过，lint 0 error/0 warning，相关测试 81/81，全量 69 文件/460 用例通过，pnpm dist 成功。
+- 本地设计：本批不拆 StudioPage/ChapterExecutionPage 等大页面，避免在保存竞态与组件边界未稳定前扩大变更面；下一批单独按 hook→UI 顺序处理。

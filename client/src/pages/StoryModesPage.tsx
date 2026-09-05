@@ -4,9 +4,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Workflow, Plus, Trash2, Gauge } from 'lucide-react'
 import { resourcesApi } from '../api'
 import { ErrorMsg } from '../components/ErrorMsg'
-import { useToast } from '../components/Toast'
+import { useToast } from '../components/toastGlobal'
 import { AssetCreator } from '../components/AssetCreator'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useConfirm } from '../components/useConfirm'
 
 // P17-2：推进模式库（升级流/日常流等节奏模板管理）
 export function StoryModesPage(): React.JSX.Element {

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ErrorMsg } from '../components/ErrorMsg'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { novelApi } from '../api'
-import { useConfirm } from '../components/ConfirmDialog'
+import { useConfirm } from '../components/useConfirm'
 
 export function CharacterPanel({ novelId }: { novelId: number }): React.JSX.Element {
   const queryClient = useQueryClient()
