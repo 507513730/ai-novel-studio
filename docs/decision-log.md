@@ -899,3 +899,19 @@
 - 安装实测补充：package.json.pnpm 与 pnpm-workspace.yaml 的重复配置使新 override 未生效，安装仍称 up-to-date 且全量审计仍有 4 high。改为 workspace 单一配置源，迁移原有三项 onlyBuiltDependencies，删除无效 allowBuilds 占位；packageManager 精确固定 pnpm@10.34.5，CI 从该字段读取版本，避免本机 shim 与 CI 读取不同配置。官方 action-setup 支持省略 version 读取 packageManager：https://github.com/pnpm/action-setup。
 
 - D103 备用模式下，T1 连通性现在使用启动器实际选定的 providerId 并显示供应商；不再一边用官方生成、一边硬要求故障网关连通，或把官方结果标成网关结果。增加静态契约，备用不依赖另行导入网关凭证。
+
+
+## D132（2026-09-05）：截图就绪与发布参数边界
+
+- 正式门禁在 backup 的辅助截图阶段遇到 UnknownVizError，尚未运行备份请求或付费完整 E2E。Electron 源码将该错误映射自 Chromium CopyFromSurfaceError，不能记作备份业务失败。
+- 官方 capturePage 支持 stayHidden/stayAwake；文档与源码来源：https://github.com/electron/electron/blob/main/docs/api/web-contents.md、https://github.com/electron/electron/blob/main/shell/browser/api/electron_api_web_contents.cc。
+- 本地设计：明确截图隐藏/保持唤醒选项，仅对截图表面瞬时错误有限重试三次；空图不算通过，最终失败仍阻断，不把截图失败吞掉。
+- 顺便补严发布参数边界：--e2e 与 --skip-dist 不能组合，防止请求 E2E 却静默只跑本地检查；构建必须验证产物时间戳不早于本次构建开始，不只检查旧文件存在。
+
+- 视觉核对还发现原截图只是“正在连接本地服务”占位，并不能证明 UI 已就绪。启动器改为等待实际首启 h1，再捕获非空图片；证据强制包含 rendererReady 与捕获次数。超时仍失败，不以加载占位冒充 UI 验证。
+
+- 再次视觉复核发现隐藏页面动画可产生“DOM 已就绪但像素仍为空背景”。依据 Electron setBackgroundThrottling 文档，仅在测试窗口关闭后台节流；截图同时验证像素对比，不把有尺寸的纯背景图当成功。窗口仍隐藏，不改产品样式或禁用应用动画。来源：https://www.electronjs.org/docs/latest/api/web-contents#contentssetbackgroundthrottlingallowed。
+
+- 隐藏窗口的截图还可能读取旧绘制帧，因此在 DOM 就绪后等待两帧（3 秒明确超时），capturePage 使用默认页面可见性、保持唤醒，OS 窗口仍隐藏。已实际查看 release/release-e2e-9nlXtA/renderer.png，确认为首启向导而不是加载占位。使用当前 NativeImage.toBitmap 接口，避免已弃用别名。
+
+- 一次全量测试未完成，Vitest worker 报 ERR_IPC_CHANNEL_CLOSED；该次不能记作通过。上游 Vitest #8201 有同类通道关闭报告，但不足以证明本机根因；先保留失败并在不改配置、不改测试范围的情况下复跑，不使用 ignoreUnhandledErrors 或自动吞错。来源：https://github.com/vitest-dev/vitest/issues/8201。

@@ -13,6 +13,7 @@ delete process.env.ELECTRON_RENDERER_URL
 delete process.env.AI_NOVEL_ALLOW_PLAINTEXT
 BrowserWindow.prototype.show = function () {}
 const { classifyServerError } = require('./diagnostics.cjs')
+const { captureWithRetry, waitForRenderer } = require('./capture.cjs')
 const diagnostics = []
 const originalFork = utilityProcess.fork.bind(utilityProcess)
 utilityProcess.fork = (entry, args, options) => {
@@ -33,6 +34,8 @@ utilityProcess.fork = (entry, args, options) => {
   })
   return worker
 }
+let rendererReady = false
+let captureAttempts = 0
 let started = false
 let child
 let finished = false
@@ -43,7 +46,7 @@ function finish(code, message) {
   code = code === 0 ? 0 : 1
   clearTimeout(timer)
   if (child && child.exitCode === null) child.kill()
-  writeFileSync(join(data, 'result.json'), JSON.stringify({ code, message, data, diagnostics, version: require('../../package.json').version }))
+  writeFileSync(join(data, 'result.json'), JSON.stringify({ code, message, data, diagnostics, rendererReady, captureAttempts, version: require('../../package.json').version }))
   console.log('[isolated-e2e]', message, 'code=' + code, 'data=' + data)
   if (process.env.E2E_RESULT_FILE) {
     writeFileSync(process.env.E2E_RESULT_FILE, JSON.stringify({ code, message, data, diagnostics }))
@@ -52,6 +55,7 @@ function finish(code, message) {
   app.quit()
 }
 app.on('browser-window-created', (_, win) => {
+  win.webContents.setBackgroundThrottling(false)
   win.webContents.on('did-finish-load', async () => {
     if (started) return
     started = true
@@ -75,8 +79,16 @@ app.on('browser-window-created', (_, win) => {
       if (!health.ok) throw Error('health check failed')
       const noToken = await fetch(base + '/health', {headers: {Origin:'null'}})
       if (noToken.status !== 403) throw Error('missing token must return 403')
-      const image = await win.webContents.capturePage()
-      writeFileSync(join(data, 'renderer.png'), image.toPNG())
+      await waitForRenderer(() => win.webContents.executeJavaScript("Boolean(document.querySelector('h1')?.textContent?.includes('欢迎使用'))"))
+      await Promise.race([
+        win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))'),
+        new Promise((_, reject) => setTimeout(() => reject(Error('renderer frame timeout')), 3000))
+      ])
+      rendererReady = true
+      const captured = await captureWithRetry(() => win.webContents.capturePage(undefined, { stayHidden: false, stayAwake: true }))
+      captureAttempts = captured.attempts
+      writeFileSync(join(data, 'renderer.png'), captured.image.toPNG())
+      console.log('[capture] PASS attempts=' + captured.attempts)
       if (process.env.E2E_BACKUP_ONLY === '1') {
         const first = await api('/novels', 'POST', { inspiration: '快照前哨兵' })
         const backup = join(data, 'snapshot-check')

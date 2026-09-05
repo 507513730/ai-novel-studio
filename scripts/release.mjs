@@ -26,7 +26,7 @@ let releaseObserved = false
 async function main() {
   for (const arg of args) if (!['--push', '--e2e', '--skip-dist', '--reuse-evidence'].includes(arg) && !arg.startsWith('--bump=') && !arg.startsWith('--provider=')) throw Error('未知参数：' + arg)
   if (!['opencode-go', 'deepseek'].includes(provider)) throw Error('非法测试供应商')
-  if ((PUSH && SKIP_DIST) || (REUSE && !PUSH) || (BUMP && args.length !== 1)) throw Error('参数组合不合法；准备版本、仅验证和正式发布必须分开')
+  if (((PUSH || E2E) && SKIP_DIST) || (REUSE && !PUSH) || (BUMP && args.length !== 1)) throw Error('参数组合不合法；准备版本、仅验证和正式发布必须分开')
   const pkgText = read('package.json')
   const pkg = JSON.parse(pkgText)
   if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw Error('版本号非法')
@@ -61,8 +61,9 @@ async function main() {
       console.log('PASS ' + command)
     }
     if (SKIP_DIST) { console.log('仅本地检查：未打包、未发布'); return }
+    const buildStarted = Date.now()
     run('pnpm dist')
-    for (const file of artifacts) if (!existsSync(join(ROOT, file)) || statSync(join(ROOT, file)).size === 0) throw Error('安装包缺失：' + file)
+    for (const file of artifacts) if (!existsSync(join(ROOT, file)) || statSync(join(ROOT, file)).size === 0 || statSync(join(ROOT, file)).mtimeMs < buildStarted - 2000) throw Error('安装包缺失：' + file)
     bundleHash = hash('release/win-unpacked/resources/app.asar')
     artifactHashes = artifacts.map(hash)
     console.log('PASS 双安装包构建')

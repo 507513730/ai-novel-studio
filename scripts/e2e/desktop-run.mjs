@@ -61,7 +61,7 @@ child.on('close', async code => {
   } catch (error) { console.error('测试证据不完整：' + error.message) }
   const changed = dirty || git('rev-parse', 'HEAD') !== head || Boolean(git('status', '--porcelain'))
   const evidence = { code: passed ? 0 : 1, mode, packaged, provider, head, version: pkg.version, bundleHash, dirty: changed,
-    suites, diagnostics: result.diagnostics ?? [], completedAt: new Date().toISOString(), resultDirectory: resultDir }
+    suites, rendererReady: result.rendererReady === true, captureAttempts: result.captureAttempts, diagnostics: result.diagnostics ?? [], completedAt: new Date().toISOString(), resultDirectory: resultDir }
   await writeFile(evidenceFile, JSON.stringify(evidence, null, 2), 'utf8')
   console.log('[evidence]', evidenceFile, 'code=' + evidence.code, changed ? '(dirty: 仅供本地调试)' : '')
   process.exitCode = evidence.code

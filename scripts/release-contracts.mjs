@@ -12,7 +12,7 @@ export function assertSuites(suites) {
 }
 
 export function assertEvidence(evidence, expected) {
-  if (!evidence || evidence.code !== 0 || evidence.mode !== expected.mode || evidence.provider !== expected.provider || evidence.head !== expected.head || evidence.version !== expected.version || evidence.bundleHash !== expected.bundleHash || evidence.dirty !== false || evidence.packaged !== true) {
+  if (!evidence || evidence.code !== 0 || evidence.mode !== expected.mode || evidence.provider !== expected.provider || evidence.head !== expected.head || evidence.version !== expected.version || evidence.bundleHash !== expected.bundleHash || evidence.dirty !== false || evidence.packaged !== true || evidence.rendererReady !== true || !Number.isInteger(evidence.captureAttempts) || evidence.captureAttempts < 1 || evidence.captureAttempts > 3) {
     throw Error('验证证据与当前提交/版本/安装包不匹配')
   }
   const completed = Date.parse(evidence.completedAt)

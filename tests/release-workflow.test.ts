@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import diagnostics from '../scripts/e2e/diagnostics.cjs'
+import captureHelper from '../scripts/e2e/capture.cjs'
 import { join } from 'node:path'
 import {
   assertActiveGuide, assertEvidence, assertRelease, assertSuites, assertVersionDocs,
@@ -13,7 +14,7 @@ const version = '1.1.1'
 const bundleHash = 'b'.repeat(64)
 const expected = { mode: 'full', provider, head, version, bundleHash }
 const suites = () => ['T1', 'T2', 'T3', 'T4', 'T5'].map(id => ({ id, completed: true, pass: 1, fail: 0 }))
-const evidence = () => ({ ...expected, code: 0, packaged: true, dirty: false, completedAt: new Date().toISOString(), suites: suites() })
+const evidence = () => ({ ...expected, code: 0, packaged: true, dirty: false, rendererReady: true, captureAttempts: 1, completedAt: new Date().toISOString(), suites: suites() })
 
 describe('发布证据', () => {
   it('只接受同提交、同供应商、同版本与安装包的完整结果', () => {
@@ -21,7 +22,7 @@ describe('发布证据', () => {
   })
   it.each([
     { head: 'old' }, { version: '1.1.0' }, { bundleHash: 'old' }, { dirty: true },
-    { dirty: undefined }, { code: 1 }, { mode: 'probe-directions' }, { packaged: false },
+    { dirty: undefined }, { rendererReady: false }, { code: 1 }, { mode: 'probe-directions' }, { packaged: false },
     { provider: 'deepseek' }, { completedAt: 'invalid' }, { completedAt: '2000-01-01T00:00:00Z' }
   ])('拒绝不匹配或过期证据：%j', (patch) => {
     expect(() => assertEvidence({ ...evidence(), ...patch }, expected)).toThrow()
@@ -125,5 +126,42 @@ describe('工作流与脱敏诊断契约', () => {
     expect(classifyServerError('[api] error: Request timed out.')).toBe('upstream-timeout')
     expect(classifyServerError('[api] error: API Key sk-sensitive 403')).toBe('credential-or-permission')
     expect(classifyServerError('random private text')).toBeNull()
+  })
+})
+
+describe('截图有限重试', () => {
+  it('有尺寸的纯背景不等于有内容，忽略透明度通道变化', () => {
+    expect(captureHelper.hasPixelContrast(Buffer.from([10, 10, 10, 0, 10, 10, 10, 255]))).toBe(false)
+    expect(captureHelper.hasPixelContrast(Buffer.from([10, 10, 10, 255, 200, 200, 200, 255]))).toBe(true)
+  })
+  it('必须等到真实页面就绪，不能截加载占位当通过', async () => {
+    const check = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    await captureHelper.waitForRenderer(check, vi.fn(), 3)
+    expect(check).toHaveBeenCalledTimes(2)
+  })
+  it('页面一直未就绪仍失败', async () => {
+    await expect(captureHelper.waitForRenderer(async () => false, vi.fn(), 2)).rejects.toThrow('onboarding UI')
+  })
+  const image = { isEmpty: () => false, toBitmap: () => Buffer.from([0, 0, 0, 255, 255, 255, 255, 255]) }
+  it('首次成功不重试', async () => {
+    const capture = vi.fn(async () => image)
+    expect((await captureHelper.captureWithRetry(capture, vi.fn())).attempts).toBe(1)
+    expect(capture).toHaveBeenCalledOnce()
+  })
+  it('瞬时错误后必须真的成功才放行', async () => {
+    const capture = vi.fn().mockRejectedValueOnce(Error('UnknownVizError')).mockResolvedValueOnce(image)
+    expect((await captureHelper.captureWithRetry(capture, vi.fn())).attempts).toBe(2)
+  })
+  it('三次均失败仍抛错，不能假成功', async () => {
+    const capture = vi.fn(async () => { throw Error('UnknownVizError') })
+    await expect(captureHelper.captureWithRetry(capture, vi.fn())).rejects.toThrow('UnknownVizError')
+    expect(capture).toHaveBeenCalledTimes(3)
+  })
+  it('空图与非瞬时错误均不能通过', async () => {
+    const empty = vi.fn(async () => ({ isEmpty: () => true }))
+    await expect(captureHelper.captureWithRetry(empty, vi.fn())).rejects.toThrow('VizSentEmptyBitmap')
+    const broken = vi.fn(async () => { throw Error('permission denied') })
+    await expect(captureHelper.captureWithRetry(broken, vi.fn())).rejects.toThrow('permission denied')
+    expect(broken).toHaveBeenCalledOnce()
   })
 })
