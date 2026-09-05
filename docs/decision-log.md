@@ -871,3 +871,19 @@
 - 真实备份恢复冒烟进一步复现 Windows EPERM：服务退出后旧 WAL 未能立即删除，恢复未通过，不能按单测绿交付。追加关闭协议修复：服务退出前显式 db.close；主进程监听 exit 后再发命令，超时 kill 后仍等待实际退出，异常退出拒绝恢复。Node 官方确认 close 包装 sqlite3_close_v2，fs.rmSync 的 maxRetries 在非 recursive 模式无效，因此不靠虚设重试参数或递归删除规避。来源：https://nodejs.org/api/sqlite.html 与 https://nodejs.org/docs/latest-v24.x/api/fs.html。
 
 - 数据管理跨操作互斥：自动备份、导出、恢复与清库共享锁，覆盖对话框等待和重启阶段；避免两个恢复同时等待同一个退出后交错替换/重启。以导出对话框占锁、恢复拒绝、取消后可再次导出的行为测试覆盖，不在回归中真的清库。
+
+
+## D130（2026-09-05）：流程与文档审查、发布证据闭环
+
+- GitHub 只读核实：最新可见正式 Release 为 v1.0.0；v1.1.0 有 tag，但没有 Release。Build Release run 33290490484 失败原因为 ERR_PNPM_LOCKFILE_CONFIG_MISMATCH。不能把 tag 或本地安装包当成“已发布”。
+- 官方依据：gh run list 支持按 commit SHA 筛选；Electron utilityProcess 的 stdio=pipe 暴露子进程输出；GitHub needs 可将发布汇总任务依赖于整个构建矩阵。来源：https://cli.github.com/manual/gh_run_list、https://raw.githubusercontent.com/electron/electron/main/docs/api/utility-process.md、https://docs.github.com/en/actions/using-jobs/using-jobs-in-a-workflow。
+- 本地设计：源码推送、候选包、正式 Release 分层；推送 main 才能触发该提交的远端检查，不能要求“尚未推送的 SHA 已有 CI”。正式 tag 仍须付费 E2E、打包态冒烟和对应 SHA 的 CI 通过。
+- 本轮范围固定为流程脚本、测试证据、CI 与活跃文档，不继续扩展业务重构。付费故障先用定向 probe 分类诊断，不重复整轮生成。
+- 诊断只输出枚举类别、阶段和耗时，不记录原始服务错误或供应商响应，避免错误文本回显 API Key。
+
+- 定向 probe 已复现：首次方向生成成功（42149ms），重做请求记录 upstream-timeout 后返回 500；确认阻塞来自上游请求超时路径，而非凭空推定 JSON 解析错误。按既有 D103 允许官方 DeepSeek 备用验证，显式记录 provider；不能将备用验证冒充网关通过。正式 full E2E 现在第一处失败即保存 partial 证据并停止，不继续付费生成。
+
+- 本地验证发现 .gitignore 的 release/ 规则也会忽略 scripts/release/ 子目录；发布契约改为 scripts/release-contracts.mjs，避免本地测试可读而 CI 缺失文件。不使用强制 add 绕过忽略规则。
+
+- 官方备用定向 probe 通过：首次方向生成 10017ms，定向重做 15440ms；网关同场景已捕获 upstream-timeout。该对照支持供应商请求超时诊断，但专项通过不替代完整 E2E。证据为脏工作区调试结果，不可复用为正式发布证据。
+- 全表远端核对 48 个 Release，仅 v1.1.0 的已发布标记不匹配；当前 pnpm 10.34.5 frozen-lockfile 安装已通过，历史 tag 不重指。AGENTS #36/#48/#62 存在文字冲突，涉及硬约束的改写需用户另行确认，本轮只修普通流程文档和更严格的执行守护。

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron')
+const { app, BrowserWindow, dialog, utilityProcess } = require('electron')
 const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { spawn } = require('node:child_process')
@@ -12,6 +12,27 @@ delete process.env.PORTABLE_EXECUTABLE_DIR
 delete process.env.ELECTRON_RENDERER_URL
 delete process.env.AI_NOVEL_ALLOW_PLAINTEXT
 BrowserWindow.prototype.show = function () {}
+const { classifyServerError } = require('./diagnostics.cjs')
+const diagnostics = []
+const originalFork = utilityProcess.fork.bind(utilityProcess)
+utilityProcess.fork = (entry, args, options) => {
+  const worker = originalFork(entry, args, { ...options, stdio: 'pipe' })
+  worker.stdout?.on('data', () => {})
+  let buffered = ''
+  worker.stderr?.on('data', chunk => {
+    buffered += chunk.toString()
+    const lines = buffered.split('\n')
+    buffered = lines.pop().slice(-8192)
+    for (const line of lines) {
+      const kind = classifyServerError(line)
+      if (kind) {
+        diagnostics.push({ kind, at: new Date().toISOString() })
+        console.log('[isolated-diagnostic]', kind)
+      }
+    }
+  })
+  return worker
+}
 let started = false
 let child
 let finished = false
@@ -22,10 +43,10 @@ function finish(code, message) {
   code = code === 0 ? 0 : 1
   clearTimeout(timer)
   if (child && child.exitCode === null) child.kill()
-  writeFileSync(join(data, 'result.json'), JSON.stringify({ code, message, data, version: require('../../package.json').version }))
+  writeFileSync(join(data, 'result.json'), JSON.stringify({ code, message, data, diagnostics, version: require('../../package.json').version }))
   console.log('[isolated-e2e]', message, 'code=' + code, 'data=' + data)
   if (process.env.E2E_RESULT_FILE) {
-    writeFileSync(process.env.E2E_RESULT_FILE, JSON.stringify({ code, message, data }))
+    writeFileSync(process.env.E2E_RESULT_FILE, JSON.stringify({ code, message, data, diagnostics }))
   }
   app.once('will-quit', () => app.exit(code))
   app.quit()
@@ -81,12 +102,29 @@ app.on('browser-window-created', (_, win) => {
         finish(0, 'backup snapshot/restore/guard PASS')
         return
       }
-      const imported = await api('/settings/import-opencode', 'POST', {provider:'opencode-go'})
+      const provider = process.env.E2E_PROVIDER ?? 'opencode-go'
+      if (!['opencode-go', 'deepseek'].includes(provider)) throw Error('unsupported test provider')
+      if (provider !== 'opencode-go') await api('/settings/import-opencode', 'POST', { provider: 'opencode-go' })
+      const imported = await api('/settings/import-opencode', 'POST', { provider })
+      console.log('[test-provider]', provider)
       const routes = await api('/settings/model-routes')
       for (const route of routes.routes) {
         await api('/settings/model-routes/' + route.taskType, 'PUT', {providerId: imported.id, model:'deepseek-v4-flash', thinkingEnabled:false, maxTokens:8192})
       }
       console.log('[isolated-e2e] bootstrap, token guard, encrypted credential import ready')
+      if (process.env.E2E_PROBE_DIRECTIONS === '1') {
+        const novel = await api('/novels', 'POST', { inspiration: '一位古董修复师能读取器物记忆，卷入三十年前的调包疑案。' })
+        const start = Date.now()
+        const generated = await api('/novels/' + novel.id + '/directions', 'POST', {})
+        if (generated.directions?.length !== 2) throw Error('directions probe: expected two schemes')
+        console.log('[directions-probe] initial PASS elapsedMs=' + (Date.now() - start))
+        const redoStart = Date.now()
+        const redone = await api('/novels/' + novel.id + '/directions', 'POST', { directionId: generated.directions[0].id })
+        if (!redone.replaced || redone.directions?.length !== 2) throw Error('directions probe: replacement contract failed')
+        console.log('[directions-probe] redo PASS elapsedMs=' + (Date.now() - redoStart))
+        finish(0, 'directions probe PASS')
+        return
+      }
       if (process.env.E2E_SMOKE_ONLY === '1') {
         const novel = await api('/novels', 'POST', { inspiration: '打包态独立冒烟：雨夜守灯人' })
         const created = await api('/novels/' + novel.id + '/chapters', 'POST', { title: '雨夜来客' })

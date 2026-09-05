@@ -3,13 +3,12 @@
 ## 环境
 
 - Windows / pwsh 7；Node 24；pnpm（corepack 激活）；无全局 electron。
-- 首次：`pnpm install`（.npmrc 已配 pnpm store 与 electron 镜像）。
+- 首次：`pnpm install --frozen-lockfile`（pnpm 主版本与 CI 保持一致，当前为 10）。
 
 ## 常用命令
 
 ```
 pnpm dev          # electron-vite 三端；dev 固定 AI_NOVEL_PORT=3000
-                  # 浏览器直连 5173 调试需：AI_NOVEL_TOKEN_OPTIONAL=1 pnpm dev（v0.25.0 起 dev 也强制 X-App-Token，浏览器无 preload 桥拿不到 token）
 pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
 pnpm test         # vitest run
@@ -18,19 +17,14 @@ pnpm build        # 三端构建
 pnpm dist         # NSIS 安装版 + portable（release/）
 ```
 
-## 独立调试 server
+## 隔离调试与验收
 
-```
-AI_NOVEL_USER_DATA=<目录> AI_NOVEL_PORT=3000 AI_NOVEL_ALLOW_PLAINTEXT=1 node out/main/server.js
-```
+`node scripts/e2e/desktop-run.mjs --probe-directions` 定向检查方向生成与重做。
 
-- `AI_NOVEL_ALLOW_PLAINTEXT=1` 仅限调试：允许以明文存取 API Key（正式运行经 safeStorage 加密）。
-- 不设 `SERVER_TOKEN` 时关闭 token 强制；设了则全请求需 `X-App-Token`。
-- dev（electron-vite）始终注入随机 `SERVER_TOKEN`；浏览器直连调试时以 `AI_NOVEL_TOKEN_OPTIONAL=1` 关闭强制（server/src/services/security.ts 预留开关，仅限本机调试）。
+`node scripts/e2e/desktop-run.mjs --backup --packaged` 检查备份恢复；不加专项模式且使用 --packaged 才执行完整 T1-T5。
 
-## 验收脚本
+测试启动器自动管理临时 userData、随机端口、token 和 safeStorage 加密。不得拿固定 3000 端口的未知实例跑 round，不以明文测试 Key 换取便利。Node 直跑仅限零凭证/假凭证逻辑测试，不能代替真实 Electron 主进程与 utilityProcess 的验证。
 
-```
-node scripts/v072-pack-verify.mjs   # 打包态等价验收（鉴权/SSE/导出）
-node scripts/e2e/round.mjs 1        # 全功能 E2E 一轮（T1-T5，走真实网关）
-```
+常规 pnpm dev 可能打开已有用户数据，不作为自动化测试的默认入口。浏览器直连的鉴权豁免仅限明确授权的人工调试，不用于发布验证。
+
+详见 [发布工作流](release-workflow.md)。

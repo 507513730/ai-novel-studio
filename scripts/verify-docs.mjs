@@ -4,6 +4,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertActiveGuide, assertVersionDocs } from './release-contracts.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
@@ -26,6 +27,15 @@ check('CHANGELOG.md 含 ## v' + version, changelog.includes(`## v${version}`), `
 const versioning = readFileSync(join(ROOT, 'docs', 'versioning.md'), 'utf8')
 const versionRow = versioning.split('\n').find((l) => l.startsWith(`| ${version} |`))
 check('versioning.md §7 含版本行', versionRow !== undefined, `缺 "| ${version} |" 行`)
+
+try {
+  assertVersionDocs(changelog, versioning, version)
+  check('候选版本/Unreleased 标题及台账唯一且顺序正确', true)
+} catch (error) { check('候选版本文档结构', false, error.message) }
+for (const file of ['docs/versioning.md', 'docs/AI-AGENT-ONBOARDING.md', 'docs/operations/release-checklist.md', 'docs/operations/packaging.md', 'docs/development/local-development.md']) {
+  try { assertActiveGuide(readFileSync(join(ROOT, file), 'utf8')); check(file + ' 操作指引安全', true) }
+  catch (error) { check(file + ' 操作指引安全', false, error.message) }
+}
 
 // 3) PLAN.md 含对应版本记录
 const plan = readFileSync(join(ROOT, 'PLAN.md'), 'utf8')

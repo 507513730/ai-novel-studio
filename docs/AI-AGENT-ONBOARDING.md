@@ -9,7 +9,7 @@
 - **你是什么**：本仓库（AI-Novel-Studio，Electron 桌面 AI 小说创作工作台）的 AI 协作者。你负责代码/测试/文档/查证。
 - **等级平权（重要）**：**所有 AI 协作者等级相同**——包括当前会话的你与任何其他 agent 实例，都是用户使用的工作代理、直接服务用户，无主次之分。§2 协作边界是**全体统一纪律**（发布/真实库/硬约束等需用户明确授权），不是等级差异；多 agent 协作模式见 §15。
 - **项目一句话**：把"灵感 → 长篇小说"做成可检视的工作空间——导演规划、方案流水线生产、审核修复闭环、状态回灌、创作约束、风格引擎、成本记账，全部本地运行（127.0.0.1 + 随机端口 + 零云端依赖）。
-- **当前版本**：`v1.1.1`（以 package.json 为准；发布经 GitHub Release + 应用内自更新）。
+- **当前版本**：`v1.1.1`（工作树候选，以 package.json 为准；尚未正式发布）。最近核实的正式 Release 为 `v1.0.0`；`v1.1.0` 只有失败构建对应的 tag（2026-09-05 核实，见 D130）。
 - **里程碑（1.0 已达成，2026-08-29）**：O1-O5 + I1-I5 全量完成（v0.9.2→v0.14.0）；学习组收官（联网查找/续写+字数分离/运行轨迹+记忆面+故事板，v0.18-0.20）；两轮全量审查修复（v0.17/v0.21）；**30 万字真实写书进行中**（书 #25，应用内生产）。
 - **1.0 判据**（docs/versioning.md §1.1，2026-08-29 用户裁定二次修订）：**UI 全面升级批次完成即达成 1.0**——全链路真实写书验证通过 + 核心链稳定 + 数据格式冻结；30 万字收官在 1.x 内完成，不再阻塞发版（问题清单见 docs/ui-review.md）。
 
@@ -29,9 +29,9 @@
 
 ### 阶段 0 · 进场（首次）
 1. 读完本文档 → `AGENTS.md` → `PLAN.md`（当前版；历史阶段清单按需查 `docs/archive/PLAN-history.md`）→ `docs/decision-log.md` 最近 10 条
-2. `pnpm install`（依赖已锁定——勿随意升级，见 AGENTS 纪律 #2）
+2. 先核对 pnpm 主版本与 CI 一致（当前为 10），需要安装时执行 `pnpm install --frozen-lockfile`；禁止因桌面 fallback 版本不同而自动升级依赖或重写 lockfile
 3. **安装 pre-push 门禁钩子（一次性）**：`git config core.hooksPath scripts/git-hooks`——push 前自动跑三绿，未过拦截（AGENTS #60b 强制层；新 clone 必须执行）
-4. `pnpm dev` 跑通（Electron 三进程；dev 固定端口 3000，浏览器可直连调试）
+4. 用 §10 的独立 Electron 启动器验证；不要默认启动可能指向真实用户库的 dev 实例
 5. 自验证（文档保鲜锚点）：`pnpm test` 全过、`pnpm typecheck` 0 error——若本文档的基线数字与实际不符，按 §17 规则更新
 
 ### 阶段 1 · 理解任务
@@ -50,7 +50,7 @@
 | 命令 | 门槛 |
 |---|---|
 | `pnpm typecheck` | 0 error |
-| `pnpm lint` | 无新增 error（既有 6 warning 保留） |
+| `pnpm lint` | 无新增 error（既有 warning 以实际输出记录；不得把错误当警告放行） |
 | `pnpm test` | 基线全过（以实际输出为准）；新功能必配测试（tests/vXXXX.test.ts） |
 | `pnpm build` | 三端构建通过 |
 | `pnpm db:smoke` | checks passed（数据层改动时） |
@@ -65,16 +65,17 @@
 - **onboarding 相关章节若被本次改动触及 → 同步回写**（§17 变更驱动纪律）
 
 ### 阶段 6 · 发布（仅用户批准）
-- `pnpm release --bump=minor|patch --push`（7 步自动：工作区检查 → bump → verify-docs 台账 → 全量验证 → dist → 提交推 tag → CI + 打包态等价验收 PASS 门槛）
-- 台账三件：CHANGELOG 补 `[Unreleased]` 占位 / versioning §7 行 / PLAN（当前版版本记录，verify-docs 强制）
-- CI 构建 GitHub Release（exe/blockmap/**latest.yml**）→ 用户应用内自更新（更新页「设置 → 更新」）
+- 先单独执行 `pnpm release --bump=patch` 准备版本；已有未发布候选时继续修正，不重复 bump。不可将 --bump 与 --push 混为一步。
+- 按 [发布工作流](development/release-workflow.md) 完成候选文档、源码推送、指定 SHA 的 CI 与绑定包哈希的测试证据。
+- `pnpm release --push` 强制完整 E2E、打包态冒烟和对应 CI，通过后才打新 tag；所有平台成功并核对正式资产后，才标记已发布。
+- 源码版本、已构建候选包、已推 tag、已发布 Release 是不同状态，汇报必须分开。
 
 ### 阶段 7 · 收尾（完成即推送——AGENTS #60b）
 1. **提交**：门禁全过后立即 `git commit`（一个 commit = 一个逻辑单元，Conventional Commits）
 2. **推送**：`git push origin main`——远程是共享工作面，禁止改动滞留本地（push 前 `git status` + `git log origin/main..HEAD` 预览；被拒则 `git pull --rebase`）
 3. **确认 CI**：push 触发 lint/test/build——CI 红 → push 者本人优先修
 4. 汇报：完成内容 / 验证结果 / 需用户真机验证项
-- **例外（不推）**：发布类 bump/tag/release（走 release.mjs 用户批准）；门禁未过的中间态/本地实验（不建 WIP 分支）
+- **例外（不推）**：未获授权的版本/发布操作，以及本地门禁未过的中间态。已授权候选中通过本地门禁的源码可先推送触发 CI；这不等于允许未过 E2E 就打 tag。硬约束冲突需用户裁定，不以旧事故记录自行扩大权限。
 
 ### 协作边界（全体协作者统一适用——任一 agent 实例均遵守同一授权门槛）
 | 允许 | 禁止（需用户明确授权） |
@@ -107,9 +108,9 @@ server/src/         服务进程（Node 隔离）：routes/（~17 路由）servi
                     / retrieval（TF-IDF） / styleEngine / smartContext / constraintEngine
                     / settingBrief / webSearch / currency / keyCrypto / security
 client/src/         React 19：pages/（~20 页）workspace/（工作台 8 面板）components/ editor/ utils/
-shared/src/         前后端共享类型（@shared/types.ts，camelCase 契约——新增响应必须补类型，AGENTS #20）
+shared/         前后端共享类型（@shared/types.ts，camelCase 契约——新增响应必须补类型，AGENTS #20）
 tests/              vitest 单测（vXXXX.test.ts 按版本命名；143 基线）
-scripts/            db-smoke / calibrate / e2e（round.mjs 全功能 + longbook.mjs 长书）/ release.mjs / verify-docs.mjs / v072-pack-verify.mjs
+scripts/            db-smoke / calibrate / e2e（round.mjs 全功能 + longbook.mjs 长书）/ release.mjs / verify-docs.mjs / e2e/desktop-run.mjs
 solutions/          方案包（mc-good2-0 市场包 / 帝路十章——写书方案）
 site/               GitHub Pages 市场页
 .github/workflows/  build.yml（Release 构建+latest.yml）/ commitlint.yml / pages.yml
@@ -172,19 +173,15 @@ docs/               architecture / decision-log / versioning / CHANGELOG / test-
 - 文件按版本命名：`tests/vXXXX.test.ts`（如 v0210.test.ts）
 - 模式：`makeDb()`（内存库 + applyMigrations + seedIfEmpty）→ `makeApp()`（express + originGuard + json + **按真实应用前缀挂载路由**（如 `/api/novels`——Express 5 下裸 '/' 挂载 + 参数首段路由不匹配，教训③））→ `withServer()`
 - 关键纯逻辑必配单测（planner 解析/状态机重置/约束引擎/记账 SQL 语义/汇率/联网开关等）
-- 凭证纪律：e2e/校准用 OpenCode Go 网关 key（`~/.local/share/opencode/auth.json` 的 `opencode-go` 条目，端点 `https://opencode.ai/zen/go/v1`），不落盘不提交
+- 凭证纪律：e2e/校准用 OpenCode Go 网关 key（`~/.local/share/opencode/auth.json` 的 `opencode-go` 条目，端点 `https://opencode.ai/zen/go/v1`），不以明文落盘；加密临时测试库与凭证均不提交
 
-## 10. 独立 server 调试模式（写书链路排障）
+## 10. 独立 Electron 调试模式（写书链路排障）
 
-```powershell
-# 模拟打包态（非 utilityProcess）——必须 AI_NOVEL_ALLOW_PLAINTEXT=1，数据用临时目录
-$env:AI_NOVEL_USER_DATA = "$env:TEMP\ains-debug"
-$env:AI_NOVEL_PORT = 0
-$env:AI_NOVEL_ALLOW_PLAINTEXT = "1"
-node out/main/server.js
-```
-- 只读真实库排查可用 `readOnly: true` 打开（绝不写）
-- 修正真实库数据的脚本：先备份（复制 db）→ `applyMigrations` 补齐列 → 短事务写入 → 应用在跑时避免写入（SQLITE_BUSY）
+`node scripts/e2e/desktop-run.mjs --probe-directions` 用于方向问题定向诊断；`--backup --packaged` 用于无模型备份恢复验证；不带专项模式才执行完整 T1-T5。
+
+启动器创建独立 userData/sessionData，读取 preload 提供的随机端口与 token，通过 utilityProcess + safeStorage 加密导入凭证。不手动指定真实数据目录，不用明文直通开关跑真实 Key，不直接运行固定 3000 端口的 round 脚本。
+
+只读真实库调查仍需要明确任务范围；任何真实库写入需要用户单独授权。本手册不再提供“先备份再直接修真实库”的默认操作配方。独立 Node 服务仅可用于零凭证/假凭证测试，不能代替真实 Electron 验证。
 
 ### 备份协议补充（2026-09-05 / D129，待发布）
 
@@ -220,7 +217,7 @@ node out/main/server.js
 ### 发布类型分层（v0.22.3 决议，AGENTS #57 / D97——消除"其他 agent 被 #57 拦住"的困惑）
 | 类型 | 触发 | 处理 |
 |---|---|---|
-| **PATCH 修复** | `client/src\|server/src\|electron\|shared/src` 改动 → **CI release-readiness 强制 bump + 发布** | 合规路径：bump PATCH + CHANGELOG 段 → `pnpm release --push`（非"乱发版"） |
+| **PATCH 修复** | `client/src\|server/src\|electron\|shared` 改动 → **CI release-readiness 强制 bump + 发布** | 合规路径：bump PATCH + CHANGELOG 段 → `pnpm release --push`（非"乱发版"） |
 | **MINOR 功能批** | 功能批次完成 | bump minor → release --push（正常流程） |
 | **MAJOR** | 1.0 判据达成 | 稳定承诺 |
 | **免发版** | 仅 docs/scripts/tests 改动（CI 不拦） | 按 #60b 完成即提交推送，**不 bump** |
@@ -229,7 +226,7 @@ node out/main/server.js
 - **优先级**：CI release-readiness 硬约束 > 字面纪律（src 改了就必须发版，不要被"改动即发版不可取"拦住——那是过时语义）
 
 ### 流程
-1. `pnpm release --bump=minor|patch --push`（或先手工 bump 后 `--push`）
+1. 先通过 `pnpm release --bump=patch` 准备候选，提交并验证；正式发布另行执行 `pnpm release --push`，不得手工 bump 或混合两步。
 2. 若 [3/7] verify-docs 失败 → 补台账：CHANGELOG 当前版本段 + `[Unreleased]` 占位、versioning §7 行、PLAN（当前版版本记录）→ 提交 → 重跑
 3. [5/7] 本地 dist；[6/7] 提交 + tag 推送；[7/7] CI 构建 Release（等 5-10 分钟）→ `node scripts/release.mjs --release-notes-only` 补 Release body
 4. 打包态等价验收 PASS 是放行门槛（release.mjs 自动跑，失败则修）

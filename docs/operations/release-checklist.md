@@ -1,24 +1,12 @@
 # 发布检查单
 
-> 版本规则与发布命令见 [versioning](../versioning.md)（发版 = `pnpm release`，禁止手动 bump/tag）。
+完整流程只维护在 [发布工作流](../development/release-workflow.md)；版本历史见 [versioning](../versioning.md)。
 
-## 发版前（CI release-readiness 会强制校验）
+- [ ] 候选版本、实际代码和 CHANGELOG 对齐，不把已实现内容遗留在 Unreleased。
+- [ ] typecheck、lint、test、db-smoke、依赖审计与文档检查通过。
+- [ ] 新安装包构建成功；备份、SSE/导出与 T1-T5 证据均绑定同一提交及 app.asar 哈希。
+- [ ] 本地合格源码已推送；检查对应 SHA 的 CI 与高危 CodeQL 告警，未通过不打 tag。
+- [ ] 已获发布授权，执行 `pnpm release --push`；禁止 --skip-dist 组合和重复 tag。
+- [ ] 所有平台构建成功、正式 Release 和全部资产齐全，再更新“已发布”台账。
 
-1. `pnpm typecheck` / `pnpm lint` / `pnpm vitest run` 三绿。
-2. 数据层改动：`pnpm db:smoke`。
-3. `pnpm dist` 双产物生成 + `node scripts/v072-pack-verify.mjs` PASS。
-4. `node scripts/e2e/round.mjs 1`（T1-T5，OpenCode Go 网关 key 从 auth.json 读取不落盘）。
-5. 文档：`node scripts/check-docs.mjs` + `node scripts/verify-docs.mjs`。
-
-## 发布
-
-1. `pnpm release`（bump + tag + GitHub Release；CI 校验 tag == version）。
-2. CHANGELOG 同批更新；PLAN 进度推进；decision-log 记录决策。
-3. release/ 产物 = 正式交付物（安装版 + 便携版时间戳一致）。
-
-## 发布类型
-
-- PATCH：修复（CI 强制 bump）。
-- MINOR：功能批（批次完成即发）。
-- MAJOR：1.0 判据达成（versioning §1.1）。
-- 仅 docs/scripts/tests 改动：免发版，推送即可。
+`pnpm release` 默认仅本地验证，不会 bump、推送或创建 Release；`--bump=patch` 只准备版本。纯 docs/scripts/tests 改动无需额外 bump，按本地门禁、推送、CI 闭环。

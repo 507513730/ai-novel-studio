@@ -8,7 +8,7 @@ server/src/       服务层：routes/（chapters/ 七模块 + 单域路由）ser
 electron/         主进程：main.ts（纯装配）+ state/window/serverProcess/shutdown/ipc/theme/updater
 shared/           前后端共享类型（camelCase 契约，AGENTS #20）
 tests/            vitest：域契约 / 特征锁定 / 架构守护 / 组件测试
-scripts/          db-smoke / e2e（round/longbook）/ release / verify-docs / v072-pack-verify
+scripts/          db-smoke / e2e（round/longbook）/ release / verify-docs / e2e/desktop-run
 docs/             用户文档 user/ · 开发文档 development/ · 运维 operations/ · 参考 reference/ · 治理入口 · archive/
 ```
 

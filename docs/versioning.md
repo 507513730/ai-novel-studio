@@ -20,7 +20,7 @@
 **1.0 达成条件（二次修订后口径）：**
 1. **全链路真实写书验证通过**——书 #25 持续生产验证中（导演→方案流水线→审核修复→回灌→导出全链路在用）；30 万字收官在 1.x 内完成；
 2. **核心链稳定**——连续版本无 P0/P1 修复（生成/审核/修复/回灌/方案流水线；R0-R9 重构批与 v0.24.x/v0.25.x 审查批已满足）；
-3. **数据格式冻结**——DB schema v22 与方案格式进入兼容承诺期，无破坏性迁移（已满足）；
+3. **数据格式冻结**——1.0 验收时为 schema v22；当前候选迁移上限为 v23，后续通过版本化迁移保持兼容；
 4. **UI 全面升级完成**（本次判定点）——docs/ui-review.md 的 P0/P1/P2 清单随 v0.26.0 与 v1.0.0 批次落地。
 
 ## 2. 单一事实来源
@@ -29,74 +29,43 @@
 - tag 名 = `v` + version，**必须一致**，由 CI 强制校验（见 §5）。
 - 发布前检查：`node -p "require('./package.json').version"`。
 
-## 3. 发布流程（发布清单，推荐用 `pnpm release` 自动执行）
+## 3. 发布流程
 
-> **唯一入口**：`pnpm release`（scripts/release.mjs）——文档检查 → 全量验证 → 本地构建 → 提交/tag 指引，任一步失败即终止。`--push` 半自动提交推送。
+唯一版本准备/发布入口仍为 `pnpm release`，详见 [发布工作流](development/release-workflow.md)。
 
-**手动执行时按以下清单逐项打勾（缺一项即不完整）：**
+- `--bump=patch|minor|major`：只准备 package.json 与 CHANGELOG，不提交、不发布。当前候选尚未打 tag 时拒绝再次 bump。
+- `pnpm release`：本地检查、打包和备份冒烟，不等于完整 E2E 或正式发布。
+- `pnpm release --e2e`：额外跑打包态 SSE/导出与完整 T1-T5，产生绑定提交和 app.asar 哈希的证据。
+- `pnpm release --push`：以上全部门禁必过，再推 main → 等对应 SHA 的 CI → 创建新 tag → 等所有平台构建 → 核对 Release 与资产。
+- `--skip-dist` 仅供本地检查，禁止与 `--push` 组合。不能用缺失/失败/旧提交的证据发布。
 
-```powershell
-# 0) 文档更新（先于一切——脚本会强制检查，手动时不得跳过）
-#    □ CHANGELOG.md 新版本段落（## vX.Y.Z：安装方式 + 功能 + 工程）
-#    □ PLAN.md 对应段落勾选
-#    □ decision-log.md 本次关键决策
-#    □ test-report.md 验证记录
-#    □ README.md（功能变化时）/ audit-report.md（预留项状态）/ versioning.md §7（规划表）
+### 3.1 源码推送不等于正式发布
 
-# 1) 全量验证（必须全绿）
-pnpm typecheck; pnpm lint; pnpm test; pnpm build; pnpm db:smoke
+本地门禁通过的源代码按 AGENTS #60b 推送 main，以触发该 SHA 的远端 CI；有 src 变更时仍须准备未发布候选版本与 CHANGELOG，不能停留在上一 tag 的版本号。候选可以包含多个同批修复提交，不应每次修正都再 bump。
 
-# 2) 本地构建（release/ 与远程 Release 同步——每次发布都必须跑）
-pnpm dist        # 或直接 pnpm release 一并完成
+CI 结果只能在源码推送后取得。严禁将“同批 CI 闭环”误解成“未推送 SHA 必须先有远端 CI”。源码已推、E2E 未过、CI 未过、候选包已构建，均不得标记为正式发布。正式 tag/Release 操作需要用户授权。
 
-# 3) 按 §1 语义确认 package.json 版本号已 bump（提交信息含版本号）
-# 4) 提交 + 打 tag + 推送
-git add -A && git commit -m "chore: release vX.Y.Z"
-git tag vX.Y.Z
-git push origin main
-git push origin vX.Y.Z        # 触发 CI（自动构建 + 发布 Release）
+### 3.2 失败处理
 
-# 5) 发布后确认
-#    □ CI 通过（gh run list）
-#    □ Release 资产齐全（gh release view vX.Y.Z）
-#    □ 本地 release/ 产物版本号 = vX.Y.Z
-```
-
-## 3.1 合入门禁（2026-08-11 增补，P25 违规教训）
-
-> **任何功能/修复合入 main 即须 bump 版本（PATCH 起）并发版——禁止"合入未发版"状态。**
-
-- 合入 main 的唯一动作：`pnpm release --push`（自动完成：文档检查 → 验证 → 本地构建 → 提交 → tag → push）
-- 代码合入但版本未 bump = 违规（本地 release/ 与文档必然落后，P25 教训）
-- 极小改动（纯注释/文档）可免发版，但必须在同批提交中同步 PLAN.md/decision-log 并明确说明
-
-## 3.2 CI 红叉纪律（2026-08-11 增补）
-
-- **红叉不隔夜**：CI 失败当天处理（修复或按 §7 删除记录），不留历史失败
-- workflow 禁用采用 `jobs.*.if: false` + 注释说明启用条件（如 pages.yml）
-- 删除历史失败 run：`gh run delete <id>`（GitHub 支持）
+失败即停止后续发布动作；保留 run ID、提交 SHA、日志与测试结果。定位根因后修复或重试，不删除失败记录、不禁用检查、不靠匹配 stdout 的 PASS 字样覆盖非零退出码。付费 E2E 先定向诊断，首个失败即停止并记录 partial，不重复整轮烧 token。
 
 ## 4. 禁则
 
-- ❌ 禁止 force 已有 tag（`git push --force origin vX.Y.Z`）
-- ❌ 禁止跨版本打 tag（0.2.x 时代打 v0.3.0 —— 2026-08-10 事故）
-- ❌ 禁止修改已发布 Release 的版本号（要改就发下一版）
-- ❌ 禁止手工在 GitHub 页面编辑 Release（重建请走 §6）
+- 禁止 force、删除重建、复用或重指已有 tag。
+- 禁止用本地包时间戳、tag 存在或不相干提交的 CI 证明已发布。
+- 禁止删失败 run 或 `if: false` 掩盖失败。
+- 禁止将未通过门禁的候选包宣传为正式版本。
+- 测试用独立 userData、随机端口与 safeStorage 加密；禁止真实用户库和明文测试 Key。
 
-## 5. CI 强制校验
+## 5. CI 与发布资产
 
-`.github/workflows/build.yml` 在打包前执行：
-`tag vX.Y.Z == package.json version X.Y.Z`，不一致直接失败 → 不产出安装包、不创建 Release。
+Build Release 对 main/PR 执行检查，对 tag 执行跨平台构建。只有整个矩阵成功，依赖 `needs: build` 的单一 publish job 才能创建 Release，避免先发布半套资产。打 tag 前核对同一 SHA 的 Build Release、CodeQL、Release Readiness、Docs Lint，并检查未关闭高危 CodeQL 告警。
 
-## 6. 重建 Release（时间戳/资产异常时）
+正式发布必须满足：tag 对应提交与 package.json 版本一致、tag 构建成功、GitHub Release 非 draft 且有 publishedAt、Windows NSIS/portable、自更新元数据及 macOS/Linux 产物齐全。资产清单由发布脚本执行检查。
 
-```powershell
-gh release delete vX.Y.Z --yes      # 1) 删 Release（保留 tag）
-git tag -d vX.Y.Z                    # 2) 删本地 tag
-git push origin :refs/tags/vX.Y.Z   # 3) 删远程 tag
-git tag vX.Y.Z                       # 4) 在同提交上重打
-git push origin vX.Y.Z              # 5) 重推触发 CI → 全新 Release（干净 published_at）
-```
+## 6. 历史 tag 与重试
+
+已存在 tag 不得为吸收新修复而重指。源码或 lockfile 需修改时，发布新的 PATCH。仅当同一 tag/SHA 的 CI 遇到可确认的暂时环境故障时，获得授权后可重跑该 run 的失败任务；保留原始失败记录。这不是删除 tag 后重建版本。
 
 ## 7. 版本规划（当前路线）
 
@@ -150,7 +119,7 @@ git push origin vX.Y.Z              # 5) 重推触发 CI → 全新 Release（�
 | 0.24.4 | 非写书清单批 B：审核基线校准 + 写作统计/伏笔账本 + 快捷词 + 本地校对 + DOCX 导出 + 拖拽导入/跟随系统主题 + 网文要素工坊 + 演示书 | ✅ 已发布 |
 | 0.26.0 | UI 一致性与 P0 硬伤修复批（docs/ui-review.md P0/P1：栅格归位 / token 化 / 按钮 nowrap / 侧栏 active 修复 / 三态统一） | ✅ 已发布 |
 | 1.0.0 | 1.0 收官（判据见 §1.1 二次修订）：观感升级（执行页拆分+右栏重排/书架/HubChat/引导收敛）+ 稳定承诺 | ✅ 已发布 |
-| 1.1.0 | 竞品差距补强（A5 导出预览 + A1 多候选分支 + B1 词条触发注入 + B2 已写片段检索地基 + B3 存量书稿转工作书）+ CodeQL 高危修复 | ✅ 已发布 |
+| 1.1.0 | 竞品差距补强（A5 导出预览 + A1 多候选分支 + B1 词条触发注入 + B2 已写片段检索地基 + B3 存量书稿转工作书）+ CodeQL 高危修复 | ❌ tag 已存在，Release 构建失败（2026-09-05 核实） |
 | 1.1.1 | IPC 与导航安全修复、Electron 43.4.1、E2E 门禁加固（D127/D128） | ⏳ 待发布 |
 
 

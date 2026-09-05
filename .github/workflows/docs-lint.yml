@@ -1,19 +1,13 @@
 name: Docs Lint
 
 # v0.24.3（文档治理）：markdown 健康检查（乱码拦截 + 相对断链拦截）
-# 触发：PR 与 main push（仅 md / 检查脚本变更时，避免空跑）
+# 触发：PR 与所有 main push，保证指定 SHA 的必需门禁不会因 paths 过滤缺席
 
 on:
   pull_request:
-    paths:
-      - "**/*.md"
-      - "scripts/check-docs.mjs"
   push:
     branches:
       - main
-    paths:
-      - "**/*.md"
-      - "scripts/check-docs.mjs"
 
 permissions:
   contents: read

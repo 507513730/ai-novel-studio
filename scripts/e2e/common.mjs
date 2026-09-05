@@ -1,5 +1,5 @@
 // P14 D：e2e 测试公共库（API 客户端 + 断言 + 报告）
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,6 +15,8 @@ export const REPORT = process.env.E2E_REPORT ?? join(REPO_ROOT, 'release', 'e2e-
 let pass = 0
 let fail = 0
 const failures = []
+const suiteResults = []
+let currentTitle = ''
 
 export function ok(cond, name, detail = '') {
   if (cond) {
@@ -24,6 +26,11 @@ export function ok(cond, name, detail = '') {
     fail++
     failures.push(`${name}${detail ? ' — ' + detail : ''}`)
     console.log(`  ✗ ${name}${detail ? ' — ' + detail : ''}`)
+    if (process.env.E2E_FAIL_FAST === '1') {
+      const partial = { id: currentTitle.split(' ')[0], title: currentTitle, pass, fail, completed: false, failures: [...failures] }
+      if (process.env.E2E_SUITE_RESULTS) writeFileSync(process.env.E2E_SUITE_RESULTS, JSON.stringify([...suiteResults, partial]), 'utf8')
+      throw new Error('E2E 断言失败：' + name)
+    }
   }
 }
 
@@ -54,6 +61,7 @@ export async function apiTry(path, init) {
 }
 
 export function startRound(title) {
+  currentTitle = title
   pass = 0
   fail = 0
   failures.length = 0
@@ -64,7 +72,10 @@ export function finishRound(title, extra = '') {
   const line = `| ${title} | ${pass} | ${fail} | ${failures.join('; ').slice(0, 300)} | ${extra} |`
   appendFileSync(REPORT, line + '\n')
   if (fail > 0) process.exitCode = 1
-  return { pass, fail, failures: [...failures], extra }
+  const result = { completed: true, id: title.split(' ')[0], title, pass, fail, failures: [...failures], extra }
+  suiteResults.push(result)
+  if (process.env.E2E_SUITE_RESULTS) writeFileSync(process.env.E2E_SUITE_RESULTS, JSON.stringify(suiteResults), 'utf8')
+  return result
 }
 
 export function sleep(ms) {

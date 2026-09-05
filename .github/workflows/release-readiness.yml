@@ -30,8 +30,11 @@ jobs:
             HEAD="${{ github.sha }}"
           fi
           echo "base=$BASE head=$HEAD"
-          CHANGED=$(git diff --name-only "$BASE" "$HEAD" || echo "")
-          if echo "$CHANGED" | grep -qE "^(client/src|server/src|electron|shared/src)/"; then
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE=$(git hash-object -t tree -w /dev/null)
+          fi
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          if echo "$CHANGED" | grep -qE "^(client/src|server/src|electron|shared)/"; then
             echo "src_changed=true"
             echo "src_changed=true" >> "$GITHUB_OUTPUT"
           else

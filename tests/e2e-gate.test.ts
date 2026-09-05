@@ -8,6 +8,23 @@ import { pathToFileURL } from 'node:url'
 const common = pathToFileURL(join(process.cwd(), 'scripts/e2e/common.mjs')).href
 
 describe('E2E 发布门禁', () => {
+  it('首个失败保存 partial 并阻止后续付费步骤', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'novel-e2e-failfast-'))
+    const suiteFile = join(dir, 'suites.json')
+    const script = `const { startRound, ok, finishRound } = await import(${JSON.stringify(common)});
+      startRound('T1 配置'); ok(true, '通过'); finishRound('T1 配置');
+      startRound('T2 创作'); ok(false, '故障注入'); console.log('SHOULD_NOT_RUN');`
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8', env: { ...process.env, E2E_REPORT: join(dir, 'report.md'), E2E_SUITE_RESULTS: suiteFile, E2E_FAIL_FAST: '1' }
+    })
+    expect(result.status).toBe(1)
+    expect(result.stdout).not.toContain('SHOULD_NOT_RUN')
+    const suites = JSON.parse(readFileSync(suiteFile, 'utf8'))
+    expect(suites).toHaveLength(2)
+    expect(suites[0].completed).toBe(true)
+    expect(suites[1]).toMatchObject({ id: 'T2', completed: false, fail: 1 })
+  })
+
   it('SSE 和导出也必须通过统一隔离客户端', () => {
     const round = readFileSync(join(process.cwd(), 'scripts/e2e/round.mjs'), 'utf8')
     expect(round).not.toContain('127.0.0.1:3000')
