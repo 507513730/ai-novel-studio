@@ -970,3 +970,9 @@
 - 官方依据：React useEffect cleanup 可忽略迟到网络结果；来源：https://react.dev/reference/react/useEffect。
 - 验证：typecheck 通过，lint 0 error/0 warning，相关测试 81/81，全量 69 文件/460 用例通过，pnpm dist 成功。
 - 本地设计：本批不拆 StudioPage/ChapterExecutionPage 等大页面，避免在保存竞态与组件边界未稳定前扩大变更面；下一批单独按 hook→UI 顺序处理。
+## D140（2026-09-06）：v1.1.2 正式发布状态核验与文档收尾
+
+- GitHub 只读核实：`v1.1.2` Release 已于 2026-09-05T13:57:34Z 正式发布，非 draft、非 prerelease；tag 指向提交 `3bc64714dd755b8167f46b1ce26f668e2edf722e`。
+- 发布资产已上传并处于 `uploaded` 状态：Windows NSIS、Windows portable、macOS ARM64 DMG、Linux AppImage，以及对应 blockmap/update metadata。
+- 本地设计：发布后权威文档必须把“候选”改为“已发布”，并明确下一批源码进入新的 PATCH 候选；不能继续沿用发布前快照。
+- 独立 Dependabot 自动更新失败不计入发布门禁；Build Release、CodeQL、Docs Lint、Release Readiness 均已通过。

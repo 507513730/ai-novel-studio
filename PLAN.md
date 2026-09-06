@@ -6,9 +6,9 @@
 
 ---
 
-## 当前审查批次（2026-09-05，v1.1.2 候选）
+## 当前审查批次（2026-09-06，v1.1.2 发布后收尾）
 
-已核实最新正式 Release 为 v1.1.1（2026-09-05）；v1.1.0 的 tag 构建失败且没有 Release。当前 v1.1.2 候选处理写作偏好保存竞态与流程文档纠偏（D138-D139）；候选完成打包态门禁、指定 SHA 的 CI 与发布流程前不得称为已发布。历史验证基线详见 [流程审查](docs/process-review-2026-09-05.md)。
+已核实最新正式 Release 为 v1.1.2（2026-09-05，tag `3bc6471`）；v1.1.0 的 tag 构建失败且没有 Release。v1.1.2 已完成打包态门禁、指定 SHA 的 CI、正式 E2E 与跨平台 Release 资产核验；后续改动必须进入新的 PATCH 候选。历史验证基线详见 [流程审查](docs/process-review-2026-09-05.md)。
 
 全仓审查与重构已获批准；首批收紧 Electron IPC 发送 frame 与导航边界。备份协议、任务恢复、模型流式重试和前端拆分继续分批处理，详见 [审查进度](docs/review-2026-09-05.md)；不表示全仓审查完成。
 
@@ -39,7 +39,7 @@ AI 导演式长篇小说生产系统的桌面版（Electron）。借鉴两个参
 | 测试 | ✅ | vitest 366/366、db-smoke 7/7、typecheck/lint 0 error |
 | **当时主线** | 📚 | 真实写书（书 #25「帝路十章」）：全书累计 43 章 ≈11.4 万字；剩卷 74-75 共 49 章待产（应用内执行，绑定方案「帝路十章」）；1.0 后继续 |
 
-**源码版本记录（不等于 Release 状态）**：当前 v1.1.2 候选（写作偏好保存竞态修复、组件/hook 回归、流程文档纠偏，D138-D139）；v1.1.1（IPC/导航安全修复、备份快照、E2E/发布门禁与依赖审计加固，D127-D135）已正式发布。v1.1.0（竞品差距补强 + CodeQL 高危修复：A5 导出预览/A1 多候选分支/B1 词条触发注入/B2 已写片段检索地基/B3 存量书稿转工作书 + sanitization/rate-limit/adm-zip 修复，D123-D125）仅有失败 tag；之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+**源码版本记录（不等于 Release 状态）**：当前正式版本为 v1.1.2（写作偏好保存竞态修复、组件/hook 回归、流程文档纠偏，D138-D140）；v1.1.1（IPC/导航安全修复、备份快照、E2E/发布门禁与依赖审计加固，D127-D135）已正式发布。v1.1.0（竞品差距补强 + CodeQL 高危修复：A5 导出预览/A1 多候选分支/B1 词条触发注入/B2 已写片段检索地基/B3 存量书稿转工作书 + sanitization/rate-limit/adm-zip 修复，D123-D125）仅有失败 tag；之后源码改动进入 v1.1.3 或更高 PATCH 候选。之前所有版本记录见 [docs/archive/PLAN-history.md](docs/archive/PLAN-history.md) §12 与 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 
 ## 1. 用户已锁定决策（不可再问）
 

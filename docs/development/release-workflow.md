@@ -4,10 +4,11 @@
 
 | 状态 | 当前事实 | 依据 |
 |---|---|---|
-| 工作树候选 | v1.1.2 | 已由 `pnpm release --bump=patch` 准备；门禁、指定 SHA CI 和发布尚未完成 |
-| 最新已发布 | v1.1.1 | GitHub 非 draft Release，publishedAt=2026-09-05T09:38:09Z |
+| 当前源码/正式版本 | v1.1.2 | GitHub 正式 Release 已发布，tag SHA=`3bc6471` |
+| 最新已发布 | v1.1.2 | GitHub 非 draft Release，publishedAt=2026-09-05T13:57:34Z |
 | v1.1.0 | tag 存在，Release 不存在 | Build Release run 33290490484：lockfile overrides 不匹配 |
 | v1.1.1 | 已正式发布 | tag 59b5671、完整 E2E、Build Release 33958310816、资产已核对 |
+| v1.1.2 | 已正式发布 | tag 3bc6471、发布相关 CI 全通过、跨平台资产已核对 |
 
 以上为核实快照，不是持续监控；后续以实际 GitHub Release 和验收证据更新。版本历史表只发现 v1.1.0 的“已发布”声明不符合远端现状，已纠正。
 
@@ -59,4 +60,4 @@ v1.1.0 的失败 tag 保留不动。v1.1.1 已正式发布；此后的修复只�
 
 ## 发布完成快照
 
-v1.1.1 已于 2026-09-05 正式发布。后续修复不得重指此 tag；新改动进入下一 PATCH。
+v1.1.2 已于 2026-09-05 正式发布。后续修复不得重指此 tag；新改动进入下一 PATCH（预计为 v1.1.3）。
