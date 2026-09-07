@@ -7,3 +7,4 @@ onlyBuiltDependencies:
 overrides:
   adm-zip: ^0.6.0
   "fast-uri@>=3.0.0 <3.1.6": 3.1.6
+  "qs@<6.16.0": 6.16.0

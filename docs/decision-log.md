@@ -976,3 +976,12 @@
 - 发布资产已上传并处于 `uploaded` 状态：Windows NSIS、Windows portable、macOS ARM64 DMG、Linux AppImage，以及对应 blockmap/update metadata。
 - 本地设计：发布后权威文档必须把“候选”改为“已发布”，并明确下一批源码进入新的 PATCH 候选；不能继续沿用发布前快照。
 - 独立 Dependabot 自动更新失败不计入发布门禁；Build Release、CodeQL、Docs Lint、Release Readiness 均已通过。
+
+## D141（2026-09-07）：qs 运行时漏洞统一覆盖
+
+- GitHub Dependabot 只读核实：运行时 `qs@6.15.3` 命中 GHSA-4mjr-xmp4-gh2g 与 GHSA-x5fp-wj9c-mxmx，修复版本为 `6.16.0`；当前仓库没有直接使用 `qs`，它来自 Express 的传递依赖。
+- 本地设计：在 `pnpm-workspace.yaml` 的唯一 overrides 位置加入 `qs@<6.16.0: 6.16.0`，覆盖所有受影响运行时传递版本；不改 package.json 直接依赖，避免引入无关升级。
+- `@xmldom/xmldom` 告警属于 development scope，当前 `0.8.13` 未发现产品运行时引用；后续依赖刷新时再单独处理，不能把 prod 安全审计写成零告警。
+- 上游依据：[qs 非可调用 isBuffer 公告](https://github.com/ljharb/qs/security/advisories/GHSA-4mjr-xmp4-gh2g)、[qs 数组上限绕过公告](https://github.com/ljharb/qs/security/advisories/GHSA-x5fp-wj9c-mxmx)、[xmldom 公告](https://github.com/xmldom/xmldom/security/advisories/GHSA-6gmq-8vp8-gcm6)，本次通过 GitHub API 读取公告正文。
+- 适用性边界：应用未配置 extended query parser 或 urlencoded，Express 当前默认 simple；未发现业务直接调用 qs.stringify。不能把依赖版本命中等同于已证实产品可利用的 DoS。回归分别从 Express 与 body-parser 解析真实 qs 依赖，验证两个公告输入与正常查询往返。
+- 验证：typecheck、lint、71 文件/471 用例、文档检查通过；生产 audit 无已知漏洞，完整 audit 剩 1 moderate。pnpm dist 成功，本地 NSIS/portable 分别于 2026-09-07 20:12:40/20:12:44 更新（Asia/Shanghai）；仍为 1.1.2 本地重建，未发布、未运行新一轮付费 E2E，不替代 GitHub 原版资产。锁文件仅 qs 版本、完整性及两个引用变化，无直接依赖升级。
