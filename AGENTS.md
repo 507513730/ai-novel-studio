@@ -54,7 +54,7 @@
 33. **章节正文加载规范**（P9 A1/D24）：正文只经独立详情端点 `GET /:novelId/chapters/:chapterId` 按需加载；章节列表接口禁止携带 content；快速切章必须用序号/AbortController 丢弃过期响应；SSE 取消兜底必须携带流内累积内容（本地兜底，abort 后服务端事件收不到）。
 34. **客户端操作防重规范**（P9 B1）：所有异步操作（生成/审核/修复/回灌/快照/入账/增删改/开关/发布/导出）必须 per-action busy 锁 + disabled（入口先检查 busy）；以 ChapterExecutionPage `withBusy`/generateBusyRef 为范本。
 35. **发布闭环纪律**（P10 D26）：UI/导航/交互修复交付时，必须重新执行 `pnpm dist` 并验证新安装包（用户拿到的是安装包不是源码）；禁止"代码已修但未打包"状态交付。
-36. **每次改动同步打包（用户强制，2026-08-10 起）**：**任何**代码改动（前端/后端/样式/修复/优化）完成后，必须执行 `pnpm dist` 同步重建 `release\AI-Novel-Studio Setup 0.1.0.exe`（NSIS）与 `release\AI-Novel-Studio-0.1.0-portable-x64.exe`（portable），确认两个产物时间戳已更新；打包失败视为改动未完成。
+36. **每次改动同步打包（用户强制，2026-09-11 修订）**：任何代码改动完成后执行 `pnpm dist`，根据 package.json 当前版本及 build.nsis/build.portable 的 artifactName 模板确认两类产物；记录时间戳与 SHA-256。候选包与正式 Release 资产分别报告，打包失败不算交付完成。
 37. **IPC 竞态纪律**（P11-1.2/D28）：主进程 → renderer 的单向 `webContents.send` 消息（如 server-ready）在 renderer 未注册监听时发送会**静默丢失**——必须"主动拉取（invoke/handle）+ 缓存补发"双保险；renderer 侧关键启动链路加轮询兜底。
 38. **单文件规模硬约束**（v0.25.0 审查 S1）：组件文件超过 **400 行**或 **12 个 `useState`** 时，**必须先拆分再继续加功能**——禁止在既有大文件上继续追加。教训：`ChapterExecutionPage.tsx` 曾膨胀到 1989 行 / 43 个 `useState`（8 个职责域混杂、零测试覆盖），拆分成本高且易回归。拆分顺序：先抽自定义 hook（纯逻辑、可单测、风险最低），再拆 UI 子组件。
 39. **页面级错误边界**（v0.25.0 审查 L2）：路由页面必须包 `ErrorBoundary` 并传 `resetKey={pathname}`——单页崩溃不得导致整应用白屏（未保存的章节正文会随之丢失）。新增页面时照 `App.tsx` 的 `<Page name="…">` 包装写法。
@@ -88,7 +88,7 @@ docs/          校准报告 + P9 体验修复明细
 45. **图标/静态渲染纪律**（P16 P3/D45）：Playwright 中 `img` 加载 `file://` SVG/PNG 被 Chromium 拦截（导致全白截图）——渲染图形必须用内联 <svg> 元素或 data URI；应用图标源文件（SVG）必须入库 resources/icon-sources/。
 46. **提示词资产纪律**（P17-5A/D50）：新增或修改系统提示词必须走 prompt_asset（sys_* ），禁止新增 SYSTEM_* 代码常量；提示词工作台编辑后删除 invalidatePromptCache。
 47. **检索后端接口纪律**（P17-5B/D51）：知识库检索统一走 Retriever 接口（TfidfRetriever 默认 / EmbeddingRetriever 预留）；新后端实现接口不侵入上下文组装逻辑；引入 embedding 供应商时在设置页切换后端。
-48. **备份恢复纪律**（P18 B/D54）：备份 = 复制 db 三件套到目录（含 backup-info.json）；恢复必须校验 db 存在 → 替换 → 退出；恢复/清除前必须 ConfirmDialog。
+48. **备份恢复纪律**（2026-09-11 修订，D142）：备份使用服务进程内一致性快照协议及完成清单，不跨进程复制活跃库。恢复/清除保留 ConfirmDialog 与操作互斥；恢复前在独立临时副本验证数据库完整性与应用结构，拒绝未完成或不兼容备份。关闭服务并确认退出后，保留原数据库与关联文件，再替换；新服务暂停任务并确认就绪后提交，保留最近一次成功恢复前副本。失败时恢复原文件，回退失败须保留可恢复副本并明确报错。
 49. **角色模板纪律**（P18 D1/D55）：模板库统一走 base_character 表；应用到书 = INSERT character（roster），重名 409；不往书内 character 直接写模板。
 50. **证据回溯纪律**（P18 D2/D56）：拆书类生成任务的结论必须带章节证据引用（{summary, evidence[{chapterId, quote}]}）；prompt 注入章节编号、quote 逐字约束、解析器校验 chapterId；旧格式数据降级兼容。
 
@@ -114,10 +114,10 @@ docs/          校准报告 + P9 体验修复明细
 
 61b. **文档断言纪律**（D87 教训）：docs 更新必须断言验证——脚本化 replace 后 grep 命中目标串，失败即报错；版本台账（versioning §7）每次发布必须同步且与 CHANGELOG 逐条核对；发布前跑 node scripts/verify-docs.mjs（release.mjs [3/7] 已内置）。
 
-62. **CI 红叉强制闭环（v1.1.0 教训，2026-08-30）**：src 变更必须**同批通过全部 CI**，禁止只过本地三绿就 push（CI 与本地门禁不同集）。经验证的三类真实红叉及强制要求：
+62. **CI 红叉强制闭环（2026-09-11 修订）**：本地门禁和候选版本一致性通过后推送源码 SHA，等待该 SHA 的必需 CI 全绿；失败由推送者修复，以新 SHA 重新验证。正式发布仅消费通过门禁的 SHA。CI 与本地门禁不同集，禁止拿其他提交的结果代替。具体要求：
     - **release-readiness（变更 src 未 bumped 版本）**：`client/src|server/src|electron|shared/src` 一经改动，本批必须 bump `package.json` 版本 + 写 CHANGELOG `## vX.Y.Z` + 同步 versioning §7 / PLAN / onboarding 当前版本锚点；否则 CI（release-readiness）强制 fail。**禁止"改了 src 却让版本停在上一 tag"**（AGENTS #57 分层决议的强制路径）。
-    - **commitlint subject-case（标题以大写拉丁字母开头）**：提交 subject 首词不得为大写拉丁字母（`A 档…`/`B 档…`/`B3…` 即触发）——**subject 必须以中文开头**（如 `竞品差距补强…`/`推动存量书稿续写…`）；类型前缀（feat/fix/chore）保留英文，其余一律中文（AGENTS #60）。提交前用 `npx commitlint --from <base> --to HEAD --verbose` 自验。
+    - **commitlint subject-case（标题以大写拉丁字母开头）**：提交 subject 首词不得为大写拉丁字母；subject 必须以中文开头，类型前缀（feat/fix/chore）保留英文，其余一律中文（AGENTS #60）。提交前用 `pnpm exec commitlint --from <base> --to HEAD --verbose` 自验；若工具未在依赖中，先明确安装方案，不由命令隐式下载。
     - **build check 的 `pnpm audit --prod --audit-level=high` 高危**：依赖安全必须保持 0 高危——升级/实现新依赖后本地必跑 `pnpm audit --prod --audit-level=high` 确认干净；传递依赖高危用 pnpm-workspace.yaml `overrides` 修复（勿绕过）。
     - **CodeQL 高危**：禁止用"不完整多字符正则"做清洗（`/<[^>]+>/g` 之类）——用逐字符状态机（如 `services/sanitize.ts` 的 `stripHtmlTags`）；有状态/资源消耗型路由必须加 `express-rate-limit`。新增代码后自查既有 CodeQL 告警清单，避免引入同类模式。
-    - **改已发布历史提交标题前**：优先在提交前自验；确实需要 amend 已 push 的提交标题时，用 `git cherry-pick -n` + `git commit -F <UTF-8 消息文件>` 重放（保证中文/换行不乱码），`--force-with-lease` 推送，并同步重指 tag——**禁止用 filter-branch 改消息**（Windows 下 argv 传参不可靠，曾致空消息）。
-    - 若仓库无本地 commitlint 钩子：可在本地手动 `npx commitlint --from $(git rev-list --max-parents=0 HEAD)` 模拟 CI。
+    - **公开历史与正式 tag**：已发布 Release 的 tag 不删除、不强制移动。公开提交消息需修正时优先新增说明或修正提交；未发布历史是否重写另行授权，禁止用 filter-branch 改消息。
+    - 若仓库无本地 commitlint 钩子：用 `pnpm exec commitlint --from <base> --to HEAD --verbose` 模拟 CI，基点按本次待推提交范围选取。

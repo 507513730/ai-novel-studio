@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, utilityProcess } = require('electron')
-const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, copyFileSync } = require('node:fs')
+const { DatabaseSync } = require('node:sqlite')
 const { join } = require('node:path')
 const { spawn } = require('node:child_process')
 const root = join(__dirname, '../..')
@@ -16,9 +17,32 @@ const { classifyServerError } = require('./diagnostics.cjs')
 const { captureWithRetry, waitForRenderer } = require('./capture.cjs')
 const { writeRunResult } = require('./result.cjs')
 const diagnostics = []
+let failNextRestoreStart = false
+let pausedJobId = null
+let pausedObservation = null
 const originalFork = utilityProcess.fork.bind(utilityProcess)
 utilityProcess.fork = (entry, args, options) => {
+  const paused = options?.env?.AI_NOVEL_RESTORE_PAUSED === '1'
+  if (paused && failNextRestoreStart) {
+    failNextRestoreStart = false
+    entry = join(data, 'injected-startup-failure.cjs')
+    writeFileSync(entry, 'process.exit(1)\n', 'utf8')
+  }
   const worker = originalFork(entry, args, { ...options, stdio: 'pipe' })
+  if (paused && pausedJobId !== null) {
+    worker.on('message', message => {
+      if (message?.type !== 'ready') return
+      try {
+        const db = new DatabaseSync(join(data, 'ai-novel-studio.db'), { readOnly: true, timeout: 5000 })
+        try {
+          pausedObservation = {
+            status: db.prepare('SELECT status FROM job WHERE id = ?').get(pausedJobId)?.status,
+            usage: db.prepare('SELECT count(*) AS n FROM usage_log').get()?.n
+          }
+        } finally { db.close() }
+      } catch (error) { pausedObservation = { error: String(error) } }
+    })
+  }
   worker.stdout?.on('data', () => {})
   let buffered = ''
   worker.stderr?.on('data', chunk => {
@@ -95,6 +119,13 @@ app.on('browser-window-created', (_, win) => {
       writeFileSync(join(data, 'renderer.png'), captured.image.toPNG())
       console.log('[capture] PASS attempts=' + captured.attempts)
       if (process.env.E2E_BACKUP_ONLY === '1') {
+        async function currentNovels() {
+          const currentBase = await win.webContents.executeJavaScript('window.novelStudio.getServerUrl()')
+          if (!currentBase) throw Error('restored or rolled-back server URL missing')
+          const response = await fetch(currentBase + '/novels', { headers, signal: AbortSignal.timeout(10000) })
+          if (!response.ok) throw Error('current server unavailable: ' + response.status)
+          return (await response.json()).novels
+        }
         const first = await api('/novels', 'POST', { inspiration: '快照前哨兵' })
         const backup = join(data, 'snapshot-check')
         dialog.showSaveDialog = async () => ({ canceled: false, filePath: backup })
@@ -104,19 +135,47 @@ app.on('browser-window-created', (_, win) => {
         writeFileSync(join(backup, 'user.txt'), 'keep')
         const refused = await win.webContents.executeJavaScript('window.novelStudio.exportBackup()')
         if (refused.ok || readFileSync(join(backup, 'user.txt'), 'utf8') !== 'keep') throw Error('existing destination not protected')
+        for (const kind of ['empty', 'text', 'unrelated', 'future']) {
+          const invalid = join(data, 'invalid-' + kind)
+          mkdirSync(invalid)
+          copyFileSync(join(backup, 'backup-info.json'), join(invalid, 'backup-info.json'))
+          const file = join(invalid, 'ai-novel-studio.db')
+          if (kind === 'empty' || kind === 'text') writeFileSync(file, kind === 'empty' ? '' : 'not a database', 'utf8')
+          else {
+            if (kind === 'future') copyFileSync(join(backup, 'ai-novel-studio.db'), file)
+            const db = new DatabaseSync(file, { timeout: 5000 })
+            try {
+              if (kind === 'unrelated') db.exec('CREATE TABLE unrelated(id INTEGER PRIMARY KEY)')
+              else db.exec('INSERT INTO _migrations(version) SELECT MAX(version) + 1 FROM _migrations')
+            } finally { db.close() }
+          }
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [invalid] })
+          const rejected = await win.webContents.executeJavaScript('window.novelStudio.restoreBackup()')
+          if (rejected.ok || rejected.canceled) throw Error('invalid backup not rejected: ' + kind)
+          const preserved = await currentNovels()
+          if (![first.id, second.id].every(id => preserved.some(n => n.id === id))) throw Error('invalid backup damaged current data: ' + kind)
+          console.log('[backup-guard] rejected ' + kind + '; original data preserved')
+        }
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [backup] })
+        failNextRestoreStart = true
+        const failedStart = await win.webContents.executeJavaScript('window.novelStudio.restoreBackup()')
+        if (failedStart.ok || failNextRestoreStart) throw Error('restore startup failure was not injected/rejected')
+        const rolledBack = await currentNovels()
+        if (![first.id, second.id].every(id => rolledBack.some(n => n.id === id))) throw Error('failed startup did not restore original database')
+        console.log('[backup-rollback] failed startup; original database and service restored')
+        const backupDb = new DatabaseSync(join(backup, 'ai-novel-studio.db'), { timeout: 5000 })
+        try {
+          // 空章节范围任务即使激活也不调用模型；ready 前必须保持 queued。
+          pausedJobId = Number(backupDb.prepare("INSERT INTO job(type,status,payload_json) VALUES ('refine-range','queued',?)")
+            .run(JSON.stringify({ novelId: first.id, from: 0, to: 0 })).lastInsertRowid)
+        } finally { backupDb.close() }
         const restored = await win.webContents.executeJavaScript('window.novelStudio.restoreBackup()')
         if (!restored.ok) throw Error('snapshot restore failed')
-        let nextBase
-        for (let i = 0; i < 80; i++) {
-          nextBase = await win.webContents.executeJavaScript('window.novelStudio.getServerUrl()')
-          if (nextBase && nextBase !== config.base) break
-          await new Promise(r => setTimeout(r, 250))
-        }
-        if (!nextBase) throw Error('server did not restart')
-        const novels = await fetch(nextBase + '/novels', { headers }).then(r => r.json())
-        if (!novels.novels.some(n => n.id === first.id) || novels.novels.some(n => n.id === second.id)) throw Error('restored data mismatch')
-        finish(0, 'backup snapshot/restore/guard PASS')
+        if (!restored.previousBackup || !existsSync(join(restored.previousBackup, 'ai-novel-studio.db'))) throw Error('pre-restore database copy missing')
+        if (pausedObservation?.status !== 'queued' || pausedObservation?.usage !== 0) throw Error('paused startup executed jobs: ' + JSON.stringify(pausedObservation))
+        const novels = await currentNovels()
+        if (!novels.some(n => n.id === first.id) || novels.some(n => n.id === second.id)) throw Error('restored data mismatch')
+        finish(0, 'backup snapshot/invalid-input/startup-rollback/paused-jobs/previous-copy PASS')
         return
       }
       const provider = process.env.E2E_PROVIDER ?? 'opencode-go'

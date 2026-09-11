@@ -24,7 +24,7 @@ function getServerEntry(): string {
   return join(__dirname, 'server.js')
 }
 
-export function startServer(): void {
+export function startServer(paused = false): Electron.UtilityProcess {
   // P6-3 + P20（S2）：portable 版数据跟随可执行文件（与备份/恢复/清数据统一目录）
   // 随机端口（AI_NOVEL_PORT=0）——仅 dev（ELECTRON_RENDERER_URL 存在）固定 3000 供浏览器直连
   const userData = getDataDir()
@@ -33,6 +33,7 @@ export function startServer(): void {
       ...(process.env as Record<string, string>),
       AI_NOVEL_USER_DATA: userData,
       AI_NOVEL_APP_VERSION: app.getVersion(),
+      AI_NOVEL_RESTORE_PAUSED: paused ? '1' : '0',
       AI_NOVEL_PORT: process.env.ELECTRON_RENDERER_URL ? '3000' : '0',
       SERVER_TOKEN
     },
@@ -42,7 +43,7 @@ export function startServer(): void {
   setServerProcess(serverProcess)
   serverProcess.on('message', (msg: unknown) => {
     const m = msg as { type?: string; port?: number; error?: string; id?: string; value?: string }
-    if (m?.type === 'ready' && typeof m.port === 'number') {
+    if ((m?.type === 'ready' && !paused || m?.type === 'activated') && typeof m.port === 'number' && getServerProcess() === serverProcess) {
       console.log(`[main] server ready on http://127.0.0.1:${m.port}`)
       setLastServerUrl(`http://127.0.0.1:${m.port}/api`)
       const w = BrowserWindow.getAllWindows()[0] ?? null
@@ -58,7 +59,8 @@ export function startServer(): void {
   serverProcess.on('exit', (code) => {
     console.log(`[main] server process exited with code ${code}`)
     // v0.17.0（审查 M16）：异常退出清理 URL 并通知 renderer（此前只置 null——renderer 轮询已停 → 静默指向死服务）
-    const wasAlive = getServerProcess() !== null
+    if (getServerProcess() !== serverProcess) return
+    const wasAlive = true
     setServerProcess(null)
     if (wasAlive && code !== 0 && getLastServerUrl()) {
       setLastServerUrl(null)
@@ -67,6 +69,7 @@ export function startServer(): void {
       }
     }
   })
+  return serverProcess
 }
 
 function handleCrypto(m: { type: 'encrypt' | 'decrypt'; id: string; value?: string }): void {

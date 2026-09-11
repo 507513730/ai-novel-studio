@@ -30,8 +30,8 @@ const api = {
   // v0.9.2（O4）：每日自动备份信息（设置页展示最近备份时间/份数）
   getAutoBackupInfo: (): Promise<{ lastAt: string | null; count: number; keep: number }> =>
     ipcRenderer.invoke('get-auto-backup-info') as Promise<{ lastAt: string | null; count: number; keep: number }>,
-  restoreBackup: (): Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; warning?: string; error?: string }> =>
-    ipcRenderer.invoke('restore-backup') as Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; warning?: string; error?: string }>,
+  restoreBackup: (): Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; previousBackup?: string; warning?: string; error?: string }> =>
+    ipcRenderer.invoke('restore-backup') as Promise<{ ok: boolean; canceled?: boolean; restoredFrom?: string; previousBackup?: string; warning?: string; error?: string }>,
   onDataRestored: (callback: () => void): (() => void) => {
     const listener = (): void => callback()
     ipcRenderer.on('data-restored', listener)

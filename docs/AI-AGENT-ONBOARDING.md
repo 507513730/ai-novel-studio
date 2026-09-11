@@ -9,7 +9,7 @@
 - **你是什么**：本仓库（AI-Novel-Studio，Electron 桌面 AI 小说创作工作台）的 AI 协作者。你负责代码/测试/文档/查证。
 - **等级平权（重要）**：**所有 AI 协作者等级相同**——包括当前会话的你与任何其他 agent 实例，都是用户使用的工作代理、直接服务用户，无主次之分。§2 协作边界是**全体统一纪律**（发布/真实库/硬约束等需用户明确授权），不是等级差异；多 agent 协作模式见 §15。
 - **项目一句话**：把"灵感 → 长篇小说"做成可检视的工作空间——导演规划、方案流水线生产、审核修复闭环、状态回灌、创作约束、风格引擎、成本记账，全部本地运行（127.0.0.1 + 随机端口 + 零云端依赖）。
-- **当前版本**：`v1.1.2`，以 package.json 为准；最近正式 Release 为 `v1.1.2`（2026-09-05，tag `3bc6471`）。`v1.1.0` 只有失败构建对应的 tag；后续源码改动必须进入新的 PATCH 候选（见 D138-D140）。
+- **当前版本**：`v1.1.3` 候选，以 package.json 为准；最近正式 Release 为 `v1.1.2`（2026-09-05，tag `3bc6471`）。本轮已授权候选准备与源码推送/CI，正式发布另行确认（D144）。
 - **里程碑（1.0 已达成，2026-08-29）**：O1-O5 + I1-I5 全量完成（v0.9.2→v0.14.0）；学习组收官（联网查找/续写+字数分离/运行轨迹+记忆面+故事板，v0.18-0.20）；两轮全量审查修复（v0.17/v0.21）；**30 万字真实写书进行中**（书 #25，应用内生产）。
 - **1.0 判据**（docs/versioning.md §1.1，2026-08-29 用户裁定二次修订）：**UI 全面升级批次完成即达成 1.0**——全链路真实写书验证通过 + 核心链稳定 + 数据格式冻结；30 万字收官在 1.x 内完成，不再阻塞发版（问题清单见 docs/ui-review.md）。
 
@@ -97,14 +97,13 @@
 ```
 electron/           主进程：main.ts（窗口/菜单/utilityProcess/safeStorage 加密/updater/shutdown）
 server/src/         服务进程（Node 隔离）：routes/（~17 路由）services/（业务）db/（迁移+种子）prompts/
-  services 关键文件：chapterGeneration/（章节生成域：state/persistence/postProcess/orchestrator——
-                    generate.ts 已缩为兼容转发，公共签名不变）/ jobs/（job 域：repository/lifecycle/
-                    payload/executors/scheduler/progress——jobQueue.ts 与 scheduler.ts 兼容转发；claim token 守卫见 D112/D113）
-                    / director/（导演域：stages/checkpoint/artifacts/executors/pipeline——director.ts 兼容转发；
-                    产物判定唯一事实源见 artifacts.ts）/ production/（生产域：chapterPolicy/progress/pipeline——
-                    production.ts 兼容转发；批次决策见 chapterPolicy.ts）/ context（前缀冻结）
+  services 关键文件：chapterGeneration/（章节生成域：state/persistence/postProcess/orchestrator/candidates）
+                    / jobs/（job 域：repository/lifecycle/payload/executors/scheduler/progress；claim token 守卫见 D112/D113）
+                    / director/（导演域：stages/checkpoint/artifacts/executors/pipeline；
+                    产物判定唯一事实源见 artifacts.ts）/ production/（生产域：chapterPolicy/progress/pipeline；
+                    批次决策见 chapterPolicy.ts）/ context/（前缀冻结与动态检索）
                     / llm（路由+降级+记账） / planner（导演 prompt 统一） / ledger（状态账本）
-                    / scheduler / director / production / solutionRunner / debtFix / tripleReview
+                    / solutionRunner / debtFix / tripleReview（旧 generate/jobQueue/scheduler/director/production/context/llm 顶层兼容文件已删除）
                     / retrieval（TF-IDF） / styleEngine / smartContext / constraintEngine
                     / settingBrief / webSearch / currency / keyCrypto / security
 client/src/         React 19：pages/（~20 页）workspace/（工作台 8 面板）components/ editor/ utils/
@@ -123,7 +122,7 @@ docs/               architecture / decision-log / versioning / CHANGELOG / test-
 | 领域 | 约束 |
 |---|---|
 | 数据层 | **零原生依赖**：只用 `node:sqlite` 核心路径（prepare/get/all/run + exec BEGIN/COMMIT + timeout + WAL + FK）；禁用 SQLTagStore/自定义函数/applyChangeset/loadExtension（segfault 风险） |
-| 版本锁定 | electron 43.3.0 / electron-vite 5 / vite 7.3.6（不可 8）/ react 19.2.8 / ts 5.9.3 / express 5.2.1 / zod 4.4.3 / openai 7.4.0 / @tanstack/react-query 5.101.4 / codemirror 6 / electron-builder 26.15.3；**禁 LangChain**（负资产） |
+| 版本锁定 | electron 43.4.1 / electron-vite 5 / vite 7.3.6（不可 8）/ react 19.2.8 / ts 5.9.3 / express 5.2.1 / zod 4.4.3 / openai 7.4.0 / @tanstack/react-query 5.101.4 / codemirror 6 / electron-builder 26.15.3；**禁 LangChain**（负资产） |
 | 安全边界 | Express 仅 127.0.0.1 + 随机端口（dev=3000）；originGuard 白名单 + null-origin 强制 token；API Key 必须 safeStorage 加密（禁明文/禁日志）；打包态 CSP（index.html meta——webRequest 不拦 file://）；破坏性 IPC 校验 sender frame |
 | 命名 | REST 全 camelCase 与 shared/types 对齐；禁 snake_case 直出 |
 | 执行面 | 重型链路（导演/整本生产/修复）只走 job 表 + scheduler（1.5s 轮询单例串行，watchdog 超时）——API 只下发命令；重启幂等（running→queued + generating→planned 重置） |
@@ -148,6 +147,7 @@ docs/               architecture / decision-log / versioning / CHANGELOG / test-
 | **联网查找** | 开关默认关；零 key Wikipedia（zh 优先/en 兜底，仅"无结果"才降级）；知识库一键导入；世界观生成可选注入；5s 超时 + 1h 缓存 |
 | **自更新** | electron-updater（静态导入——动态 import CJS 有 interop 坑，教训④）；GitHub provider + latest.yml；打包态启用/开发模式跳过/便携版不支持 |
 | **字数分离** | 累计语义：AI 产出服务端记账（生成/流水线/修复落库累加），人工输入客户端 delta（保存 PATCH 上报）；版本恢复不重复计 |
+| **检索接入** | context/dynamic.ts 已消费 kb（非 direct 知识库 TF-IDF）、kb-trigger（关键词设定）与 kb-style（当前章节已有正文时召回前章片段）；受 include 控制，无 100 万字门槛。direct 资料走冻结区；embedding 后端仍未实现 |
 
 ## 7. 数据模型要点
 
@@ -187,6 +187,12 @@ docs/               architecture / decision-log / versioning / CHANGELOG / test-
 
 - 手动与自动备份统一使用 utilityProcess 内的 VACUUM INTO 快照；不得以 checkpoint 超时当成功，再跨进程复制活跃主库。
 - parentPort 消息必须读取 event.data；无服务、错误、超时或退出均拒绝。目标目录不得覆盖，未完成标记必须阻止恢复；轮转不得递归删除未知文件。
+
+### 恢复校验补充（2026-09-11 / D142，待发布）
+
+- 恢复先复制至独立暂存副本，在校验进程检查完整性、应用表结构、未来 schema 并试迁移；不在验证阶段启动任务或访问活动库。原备份保持不变。
+- 切换保留原数据库文件与持久恢复记录，新服务暂停 scheduler 和业务请求，确认 ready 后提交并激活。启动前处理未提交的切换；失败时保留原件供重试，不以服务 fork 返回当恢复成功。
+- 最近成功恢复前副本位于数据目录 `restore-随机编号/before/`；只轮转识别完整且没有未知内容的旧成功副本。故障验证使用独立 UDATA，包含无效输入拒绝、新服务失败回退、暂停期间任务不执行。
 
 ### 安全边界补充（2026-09-05 / D127）
 
@@ -228,7 +234,7 @@ docs/               architecture / decision-log / versioning / CHANGELOG / test-
 ### 流程
 1. 先通过 `pnpm release --bump=patch` 准备候选，提交并验证；正式发布另行执行 `pnpm release --push`，不得手工 bump 或混合两步。
 2. 若 [3/7] verify-docs 失败 → 补台账：CHANGELOG 当前版本段 + `[Unreleased]` 占位、versioning §7 行、PLAN（当前版版本记录）→ 提交 → 重跑
-3. [5/7] 本地 dist；[6/7] 提交 + tag 推送；[7/7] CI 构建 Release（等 5-10 分钟）→ `node scripts/release.mjs --release-notes-only` 补 Release body
+3. 本地 dist 并记录当前版本双包时间戳和 SHA-256；推送源码后核验该 SHA 的 CI。正式 tag 不删除或重指；获得发布授权后由 release 脚本执行完整门禁与发布收尾，不使用不存在的 `--release-notes-only` 参数。
 4. 打包态等价验收 PASS 是放行门槛（release.mjs 自动跑，失败则修）
 5. 用户应用内「设置 → 更新」自升级（差分 blockmap → 重启安装）
 

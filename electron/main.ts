@@ -2,10 +2,11 @@
 // 窗口/菜单 → window.ts；server 进程 → serverProcess.ts；IPC 与 sender 校验 → ipc.ts；
 // 主题 → theme.ts；更新 → updater.ts；优雅关闭 → shutdown.ts。
 // 本文件只负责应用生命周期编排，不含业务实现。
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import { getMainWindow, setMainWindow } from './state'
 import { createMenu, createWindow } from './window'
-import { startServer } from './serverProcess'
+import { getDataDir, startServer } from './serverProcess'
+import { recoverInterruptedRestore } from './restore'
 import { registerIpcHandlers, runAutoBackup, setStartServerRef } from './ipc'
 import { registerThemeIpc } from './theme'
 import { initUpdater, checkForUpdatesQuietly } from './updater'
@@ -24,6 +25,13 @@ app.whenReady().then(() => {
   setStartServerRef(startServer)
   registerIpcHandlers()
   registerThemeIpc()
+  try {
+    recoverInterruptedRestore(getDataDir())
+  } catch {
+    dialog.showErrorBox('数据恢复未完成', `无法安全处理上次恢复，已保留原库与恢复副本。\n请保留数据目录并联系支持，勿删除恢复文件：\n${getDataDir()}`)
+    app.quit()
+    return
+  }
   startServer()
   createWindow()
 

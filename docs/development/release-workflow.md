@@ -1,10 +1,10 @@
 # 发布工作流与证据
 
-## 状态口径（2026-09-05 核实）
+## 状态口径（2026-09-11 更新候选状态）
 
 | 状态 | 当前事实 | 依据 |
 |---|---|---|
-| 当前源码/正式版本 | v1.1.2 | GitHub 正式 Release 已发布，tag SHA=`3bc6471` |
+| 当前源码候选 | v1.1.3 | 已运行发布脚本准备候选；源码推送与 CI 已授权，正式 tag/Release 尚未授权（D144） |
 | 最新已发布 | v1.1.2 | GitHub 非 draft Release，publishedAt=2026-09-05T13:57:34Z |
 | v1.1.0 | tag 存在，Release 不存在 | Build Release run 33290490484：lockfile overrides 不匹配 |
 | v1.1.1 | 已正式发布 | tag 59b5671、完整 E2E、Build Release 33958310816、资产已核对 |

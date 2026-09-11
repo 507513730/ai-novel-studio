@@ -3,11 +3,13 @@
 // （v0.17.0 审查 M19 / v0.23.1 A6——XSS 注入 iframe 无法绕过）。
 import { app, dialog, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { getDataDir } from './serverProcess'
-import { getLastServerUrl, getMainWindow, getServerProcess, SERVER_TOKEN } from './state'
+import { getLastServerUrl, getMainWindow, SERVER_TOKEN } from './state'
 import { shutdownServer } from './shutdown'
 import { createBackupDirectory, listAutoBackups, removeAutoBackup, resolveBackupDirectory } from './backup'
+import { restoreBackup } from './restore'
+import { activateRestoredServer, validateRestoreCopy, waitForServerReady } from './restoreProcess'
 
 // v0.25.0（审查 L4）：布尔版 sender 校验（供 ipcMain.on 使用，不抛错）
 // 结构类型兼容 IpcMainInvokeEvent 与 IpcMainEvent（两者均含 sender / senderFrame）
@@ -157,8 +159,7 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  // P18 B + P20（S2）：从备份恢复（停服务 → 替换主库 → 清 wal/shm → 重启服务 → 通知刷新）
-  // 复核（52fca79，R8）：恢复前必须 await server 退出（防 SQLITE_BUSY），不触碰运行中数据库
+  // D142：暂存校验 → 保留旧库 → 暂停启动确认 → 提交并激活。
   registerDataHandler('restore-backup', async (event) => {
     try {
       assertTrustedSender(event)
@@ -171,7 +172,6 @@ export function registerIpcHandlers(): void {
       if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true }
       const src = picked.filePaths[0]
       const dir = resolveBackupDirectory(src)
-      const dbFile = join(dir, 'ai-novel-studio.db')
       // P20：版本提示（不同版本备份允许恢复——迁移层幂等补齐列；仅提示）
       const infoFile = join(dir, 'backup-info.json')
       let backupVersion = '未知'
@@ -193,30 +193,16 @@ export function registerIpcHandlers(): void {
         })
         if (ok.response !== 0) return { ok: false, canceled: true }
       }
-      // 1) 停服务（Windows 下数据库文件被 server 独占，必须释放）
-      const hadServer = getServerProcess() !== null
-      if (hadServer) {
-        // v0.17.0（审查 M18）：await 进程退出（带超时兜底）替代固定 800ms 启发式——防 SQLITE_BUSY
-        await shutdownServer()
-      }
-      // 2) 替换主库 + 清除旧 wal/shm（恢复后由 SQLite 按主库重建 WAL）
-      copyFileSync(dbFile, join(dataDir, 'ai-novel-studio.db'))
-      for (const f of ['ai-novel-studio.db-wal', 'ai-novel-studio.db-shm']) {
-        const t = join(dataDir, f)
-        if (existsSync(t)) rmSync(t, { force: true })
-      }
-      // 3) 重启服务（startServer 由 serverProcess 模块提供，经 main 注入避免环依赖）
-      if (hadServer && startServerRef) {
-        try {
-          startServerRef()
-        } catch (e) {
-          console.error('[main] restore: server restart failed:', e)
-          return { ok: true, warning: '数据已恢复，但服务重启失败，请手动重启应用', restoredFrom: dir }
-        }
-      }
-      // 4) 通知渲染端刷新（恢复后旧页面状态已失效）
+      const start = startServerRef
+      if (!start) throw new Error('恢复服务未初始化')
+      const previousBackup = await restoreBackup(dataDir, dir, app.getVersion(), {
+        validate: validateRestoreCopy,
+        stop: shutdownServer,
+        start: (paused) => waitForServerReady(() => start(paused)),
+        activate: activateRestoredServer
+      })
       getMainWindow()?.webContents.send('data-restored')
-      return { ok: true, restoredFrom: dir }
+      return { ok: true, restoredFrom: dir, previousBackup }
     } catch (e) {
       console.error('[main] restore-backup error:', e)
       return { ok: false, error: String(e) }
@@ -225,7 +211,7 @@ export function registerIpcHandlers(): void {
 }
 
 // startServer 由 main 注入（serverProcess 模块不反向依赖 ipc）
-let startServerRef: (() => void) | null = null
-export function setStartServerRef(fn: () => void): void {
+let startServerRef: ((paused?: boolean) => Electron.UtilityProcess) | null = null
+export function setStartServerRef(fn: (paused?: boolean) => Electron.UtilityProcess): void {
   startServerRef = fn
 }

@@ -4,6 +4,16 @@
 
 ## 12. 技术决策日志（调研-更新闭环的落点）
 
+### D144 · 2026-09-11 · 恢复批候选与规范授权
+
+用户已批准通过发布脚本准备 v1.1.3 候选，完成本地验证后提交推送 main 并检查对应源码 SHA 的 CI；正式 tag/GitHub Release 另行确认。已执行 `pnpm release --bump=patch`，未创建 tag。
+
+本地设计：采纳审查报告四项规范修订——按版本解析双产物并记录哈希；一致快照与暂存校验/原库保留/失败回退；先推源码再核验其 CI 且不重指正式 tag；commitlint 统一使用 pnpm exec。CI 的 commitlint 命令同步调整，依赖版本不变。章节并发下一批已批准“保留人工编辑，冲突 AI 结果保存为待采用版本”，与当前恢复批分开验证。
+
+官方查证：GitHub CLI 的 `gh run list --commit <SHA>` 可按提交过滤 workflow runs，必须核对该 SHA 的相关 workflow，而非使用仓库首页最新绿勾。来源：https://cli.github.com/manual/gh_run_list 。候选准备与正式发布状态区分属于本地流程设计。
+
+环境恢复：自动审批服务 503 后已恢复，`corepack pnpm --version` 确认为 10.34.5。Corepack 官方 README 确认 `enable --install-directory` 可在指定目录创建包管理器 shim（https://github.com/nodejs/corepack#corepack-enable）；本地设计是在已忽略的 release 下建立临时 shim，仅给验证/推送进程前置 PATH，确保 pre-push 的裸 pnpm 使用项目锁定版本，不修改全局安装、不跳过钩子。
+
 > 规则：遇到技术阻碍/不确定点时，先上网调研核实（官方文档优先），把结论记在这里（或更新对应章节），再继续实现。按时间倒序。
 
 ### D1 · 2026-08-09 · 技术栈成熟度深度审查（证据：两个并行调研 agent 抓取的官方文档/仓库/issue）
@@ -976,6 +986,22 @@
 - 发布资产已上传并处于 `uploaded` 状态：Windows NSIS、Windows portable、macOS ARM64 DMG、Linux AppImage，以及对应 blockmap/update metadata。
 - 本地设计：发布后权威文档必须把“候选”改为“已发布”，并明确下一批源码进入新的 PATCH 候选；不能继续沿用发布前快照。
 - 独立 Dependabot 自动更新失败不计入发布门禁；Build Release、CodeQL、Docs Lint、Release Readiness 均已通过。
+
+## D143（2026-09-11）：恢复批次收尾发现的依赖安全门禁
+
+- 本地生产审计发现 js-yaml 高危；全依赖审计进一步发现 xmldom 与 sharp 高危，共 10 high / 5 moderate。旧 D141 的安全结果只代表当时快照，不能沿用为本次结论。
+- 官方核实：js-yaml 4.x 修复为 4.3.2；xmldom 的多项 requireWellFormed 与解析资源消耗修复需 0.8.15；sharp 0.35.4 更新受影响 libheif。来源：https://github.com/advisories/GHSA-2883-xcg3-v3hh 、https://github.com/xmldom/xmldom/releases/tag/0.8.15 、https://sharp.pixelplumbing.com/changelog/v0.35.4 。GitHub API 遇共享 IP 限流后读取官方网页，不将失败当查证成功。
+- 本地设计：仅在 workspace overrides 精确覆盖这三项受影响版本，保持锁定直接依赖及 pnpm 10.34.5，不运行全面 update。sharp 是已有开发依赖，仍使用预构建分发，不新增原生依赖体系。Vitest 大版本迁移和 adm-zip 尚无修复版本的中危另记，不扩大本批。
+- 恢复测试与首轮打包态冒烟已通过，但旧包不包含这些安全更新；安装后需重跑安全门禁、回归与打包态恢复，不以首次包代替最终交付。
+- 最终冻结锁文件安装通过；生产/完整审计均 0 high/critical，分别余 1/3 moderate。新增真实消费测试后全量 77 文件 / 516 用例通过，typecheck/lint 通过。双包于 21:27:50/21:27:54 重建；最终 app.asar 恢复专项证据 release/e2e-runner-ZlxftE（code=0、dirty=true），哈希见 docs/review-2026-09-11.md。仍未准备新版本、未提交推送、未发布。
+
+## D142（2026-09-11）：恢复前校验与可回退切换（本地已实现）
+
+- 官方查证：Node `DatabaseSync` 支持只读打开、显式 timeout 与 close；SQLite 完整性检查和 VACUUM INTO 可用于校验暂存库并输出独立快照。文件复制不是多文件事务，`COPYFILE_EXCL` 仅保护目标不被覆盖；不能以 copy 成功推断恢复成功。
+- 来源：https://nodejs.org/docs/latest-v24.x/api/sqlite.html 、https://www.sqlite.org/pragma.html 、https://www.sqlite.org/lang_vacuum.html 、https://nodejs.org/docs/latest-v24.x/api/fs.html 、https://www.electronjs.org/docs/latest/api/utility-process 。本批已读取官方文档。
+- 本地设计：校验仅在独立进程处理暂存副本，检查物理完整性、应用表结构与未来 schema，试迁移后输出单文件；不访问真实用户库，不启动任务或模型。旧格式缺少迁移表按既有兼容策略试迁移，不新增外键历史数据拒绝策略。
+- 本地设计：原库文件保留到新服务暂停启动并确认 ready；提交前不启动 scheduler 或放行业务 API。切换保留持久标记，失败和下次启动可回退，最近一次成功恢复前副本保留供人工回退。
+- 本批用户已批准实现备份恢复加固；正式发布、硬性规范改写仍单独审阅。新增 40 条回归后全量 76 文件 / 511 用例通过；typecheck/lint/db-smoke 通过。独立 Electron app.asar 无模型冒烟已验证无效输入拒绝、启动失败回退、暂停队列与原件保留（release/e2e-runner-QFN0hi，dirty=true）。收尾依赖高危导致重新打包，最终证据见本轮审查记录，不复用首次包为安全修复证明。
 
 ## D141（2026-09-07）：qs 运行时漏洞统一覆盖
 

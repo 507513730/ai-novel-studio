@@ -39,21 +39,21 @@
   本章角色特写(P13 G2 精准筛选) → 连续性状态(回灌) → 流派约束 → 三方会审
   → 写法规则 → 任务单 → 前文摘要
 预算守卫：先裁可变区摘要，再裁冻结区角色/世界观
-注：RAG 检索注入（P17-5B）为条件启用预留（>100 万字书），当前外部资料走直塞——
-详见 docs/archive/PLAN-history.md §9.2 决策 + decision-log D51。
+注：direct 资料走冻结区；其余知识库资料已通过 context/dynamic.ts 的 kb 分支
+按相关性检索注入可变区。当前实现没有“超过 100 万字才启用”的门槛。
 ```
 
 ### 章节生成域（R1 重构后，spec §3.1）
 
 ```
-generate.ts（兼容转发，公共签名不变）
-  → chapterGeneration/orchestrator.ts（只编排：上下文 → LLM 流式 → 截断检测 → 后处理 → 落库）
+chapterGeneration/orchestrator.ts（公共生成入口：上下文 → LLM 流式 → 截断检测 → 后处理 → 落库）
       ├─ state.ts        抢占/失败恢复唯一入口（ConfigError 恢复抢占前状态）
       ├─ postProcess.ts  主角名替换 → 约束登记(质量债) → 反 AI 重写（只变换文本，禁写章节表）
       └─ persistence.ts  正文/版本/字数/状态短事务唯一入口（空正文不建版本；守卫失配回滚）
 截断检测先于一切后处理副作用；后处理全部完成后单事务落库——
 chapter.content 恒等于最新 chapter_version.content（降级原因经 GenerateResult.degradedReasons 透出）
-调用方：routes/chapters.ts（SSE）/ production.ts（整本）/ hub.ts（chapter_generate 工具）
+调用方：routes/chapters/generate.ts（SSE）/ services/production/pipeline.ts（整本）
+        / services/hub.ts（chapter_generate 工具）；旧 services/generate.ts 兼容层已删除。
 抢占身份：chapter.generation_token（R4.1）——重启恢复后旧协程落库/失败处理被守卫拒绝（D114）
 ```
 
@@ -89,9 +89,13 @@ stage 语义：post_generate（正文后增强）/ review（审核增强）/ who
 
 ```
 Retriever 接口：TfidfRetriever（默认，零依赖）/ EmbeddingRetriever（预留）
-状态：RAG 基础设施条件启用（>100 万字书或外部资料 >100 万字），当前未接入上下文组装——
-"外部资料少时直塞"是既定替代方案（PLAN-history §9.2 + D51）；引入 embedding 供应商时
-设置页切换后端，无需改上下文组装逻辑。
+context/dynamic.ts 已接入三条可变区分支（受 include 控制）：
+  kb：非 direct 的全局/书内知识库资料，经 TF-IDF Top-3 召回，无命中不注入。
+  kb-trigger：标题/摘要/当前正文命中词条关键词后注入设定（D124）。
+  kb-style：当前章节已有正文时，从此前已写章节召回相关片段（D124）。
+direct 资料另走 context/frozen.ts，不重复参与 kb 相似度检索。
+EmbeddingRetriever 仍为抛出未实现错误的预留类；当前上下文直接使用 TfidfRetriever
+的同步方法，不能把“设置页切换 embedding 后端”写成现有能力。
 ```
 
 ## 目录导览
@@ -99,13 +103,13 @@ Retriever 接口：TfidfRetriever（默认，零依赖）/ EmbeddingRetriever（
 ```
 client/src/      React：pages/（33 页含 settings/ chapter/ 子目录）workspace/（8 面板）
                  components/ editor/ utils/ hooks/
-server/src/      服务：routes/（chapters/ 七模块聚合 + 14 单域路由文件）services/（含 shared/errors 统一错误模型）services/（chapterGeneration/（章节生成域：
+server/src/      服务：routes/（含 chapters/ 章节路由域）services/（含 shared/errors 统一错误模型，chapterGeneration/（章节生成域：
                  state/persistence/postProcess/orchestrator）director/（导演域：stages/checkpoint/
                  artifacts/executors/pipeline）production/（生产域：chapterPolicy/progress/pipeline）
                  jobs/（job 域：repository/lifecycle/payload/executors/scheduler/progress）
-                 context/（上下文域：types/hash/budget/frozen/dynamic——context.ts 兼容转发）
-                 llm/（LLM 域：types/errors/routes/candidates/request/caller——llm.ts 兼容转发）
-                 generate/scheduler/production/director(兼容转发)/planner/ledger/
+                 context/（上下文域：types/hash/budget/frozen/dynamic/chapterRetrieval）
+                 llm/（LLM 域：types/errors/routes/candidates/request/caller）
+                 planner/ledger/
                  retrieval…）db/ prompts/
 electron/        主进程：窗口/菜单/安全/utilityProcess
 shared/          前后端共享类型（@shared/types）

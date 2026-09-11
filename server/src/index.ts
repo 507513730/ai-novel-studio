@@ -25,15 +25,20 @@ import { startJobScheduler as startScheduler, stopJobScheduler as stopScheduler 
 import { refreshAutoRate } from './services/currency'
 import { originGuard } from './services/security'
 import { handleUtilityCommand } from './services/utilityCommands'
+import { validateRestoreDatabase } from './services/restoreValidation'
 
 // v0.9.0（审查 #9）：错误中间件独立模块（createApp 使用 + 测试可挂载；index 模块加载有副作用，不可被测试导入）
 import { apiErrorMiddleware } from './services/apiError'
 
-export function createApp(db: DatabaseSync): express.Express {
+export function createApp(db: DatabaseSync, isPaused: () => boolean = () => false): express.Express {
   const app = express()
   // P2.2 修复 #1：CORS 白名单 + Origin 校验（替代全开 cors()）
   app.use(originGuard)
   app.use(express.json({ limit: '10mb' }))
+  app.use((req, res, next) => {
+    if (isPaused() && req.path !== '/api/health') { res.status(503).json({ error: '数据恢复确认中，请稍后重试' }); return }
+    next()
+  })
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, version: APP_VERSION, dbVersion: getSchemaVersion(db) })
@@ -85,10 +90,11 @@ function start(): void {
   applyMigrations(db, join(userData, 'ai-novel-studio.db'))
   seedIfEmpty(db)
   initPromptDb(db)
-  startScheduler(db)
+  let paused = process.env.AI_NOVEL_RESTORE_PAUSED === '1'
+  if (!paused) startScheduler(db)
   // v0.16.0：汇率启动自动获取（免 key，失败静默降级保留现值；fire-and-forget 不阻塞启动）
-  void refreshAutoRate(db)
-  const app = createApp(db)
+  if (!paused) void refreshAutoRate(db)
+  const app = createApp(db, () => paused)
 
   const port = Number(process.env.AI_NOVEL_PORT ?? 0)
   const server = app.listen(port, '127.0.0.1', () => {
@@ -111,6 +117,13 @@ function start(): void {
 
   if (isUtilityProcess()) {
     process.parentPort.on('message', (event: unknown) => {
+      const command = (event as { data?: { type?: string; id?: string } })?.data
+      if (command?.type === 'activate-restored' && typeof command.id === 'string') {
+        if (paused) { paused = false; startScheduler(db); void refreshAutoRate(db) }
+        const address = server.address()
+        if (address && typeof address === 'object') process.parentPort.postMessage({ type: 'activated', id: command.id, port: address.port })
+        return
+      }
       handleUtilityCommand(event, db, (message) => process.parentPort.postMessage(message), () => {
         try {
           stopScheduler()
@@ -133,7 +146,13 @@ function start(): void {
   }
 }
 
-if (isUtilityProcess()) {
+if (isUtilityProcess() && process.env.AI_NOVEL_RESTORE_SOURCE) {
+  try {
+    validateRestoreDatabase(process.env.AI_NOVEL_RESTORE_SOURCE, process.env.AI_NOVEL_RESTORE_OUTPUT ?? '')
+    process.parentPort.postMessage({ type: 'restore-validated' })
+    process.exit(0)
+  } catch { process.exit(1) }
+} else if (isUtilityProcess()) {
   try {
     start()
   } catch (err) {
