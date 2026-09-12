@@ -1,6 +1,6 @@
 // 章节生成持久化域（spec §3.1 / §4.1 / R4.1）：正文、版本、字数与最终状态收尾的唯一入口。
 // 契约：短事务内一致写入；守卫 = id+novel_id+generation_token+status='generating'——
-// token 被新一轮抢占覆盖（或状态离开 generating）时抛 stale claim 错误且不修改任何数据；
+// token 被新一轮抢占覆盖时拒绝；同会话正文已修改时保留 AI 候选，不覆盖人工稿。
 // 空正文不建版本；任何失败整体回滚。
 // note/title 变体（R4.3）：方案流水线产出的版本注释与标题覆盖也经此唯一入口落库。
 import { DatabaseSync } from 'node:sqlite'
@@ -12,15 +12,23 @@ export function persistGeneratedChapter(
   db: DatabaseSync,
   claim: ClaimedChapter,
   generation: PersistedGeneration
-): { wordCount: number } {
+): { wordCount: number; persisted: boolean; candidateVersionId?: number } {
   const content = generation.content
   const wordCount = countCJKChars(content)
   const GUARD = "id=? AND novel_id=? AND generation_token=? AND status='generating'"
   const guardParams = [claim.id, claim.novelId, claim.generationToken] as const
   const note = generation.note ?? (generation.aborted ? 'AI 生成（中止）' : 'AI 生成')
 
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
+    const current = db.prepare('SELECT content, generation_token FROM chapter WHERE id=? AND novel_id=?').get(claim.id, claim.novelId) as { content: string; generation_token: string } | undefined
+    if (!current || current.generation_token !== claim.generationToken) throw staleClaimError()
+    if (current.content !== claim.initialContent) {
+      const candidateVersionId = content.trim() ? persistCandidateVersion(db, claim.id, content, 'AI 待采用：生成期间正文已修改') : undefined
+      db.prepare("UPDATE chapter SET status='written' WHERE id=? AND novel_id=? AND generation_token=? AND status='generating'").run(...guardParams)
+      db.exec('COMMIT')
+      return { wordCount, persisted: false, candidateVersionId }
+    }
     if (!content.trim()) {
       // v0.17.0（审查 H2）：空内容显式置 failed（此前跳过 UPDATE → 永久卡 'generating'）
       const result = db.prepare(
@@ -28,7 +36,7 @@ export function persistGeneratedChapter(
       ).run(...guardParams)
       if (Number(result.changes) !== 1) throw staleClaimError()
       db.exec('COMMIT')
-      return { wordCount: 0 }
+      return { wordCount: 0, persisted: true }
     }
 
     db.prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)').run(
@@ -54,7 +62,7 @@ export function persistGeneratedChapter(
     if (Number(result.changes) === 0) throw staleClaimError()
 
     db.exec('COMMIT')
-    return { wordCount }
+    return { wordCount, persisted: true }
   } catch (error) {
     db.exec('ROLLBACK')
     throw error

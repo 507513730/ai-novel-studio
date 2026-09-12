@@ -69,7 +69,8 @@ describe('恢复暂存副本校验（无模型）', () => {
     if (kind === 'legacy') db.exec('DROP TABLE _migrations')
     if (kind === 'older') {
       db.exec('ALTER TABLE kb_doc DROP COLUMN keywords')
-      db.prepare('DELETE FROM _migrations WHERE version = ?').run(SCHEMA_VERSION)
+      // keywords 由 v23 引入，不能随最新版本移动这个旧库夹具的基线。
+      db.prepare('DELETE FROM _migrations WHERE version >= ?').run(23)
     }
     db.close()
     validateRestoreDatabase(source, output)

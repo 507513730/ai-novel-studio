@@ -5,6 +5,7 @@
 
 import type { Request, Response, NextFunction } from 'express'
 import { ZodError } from 'zod'
+import { ChapterSaveConflict } from './chapterSave'
 import {
   ConfigurationError,
   CancellationError,
@@ -18,6 +19,10 @@ export function apiErrorMiddleware(
   res: Response,
   _next: NextFunction
 ): void {
+  if (err instanceof ChapterSaveConflict) {
+    res.status(409).json({ error: err.message, code: err.code })
+    return
+  }
   if (err instanceof ZodError) {
     res.status(400).json({ error: '参数校验失败', issues: err.issues })
     return

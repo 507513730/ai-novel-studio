@@ -5,25 +5,30 @@ import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { ConfigError } from '../llm/errors'
 import type { ClaimedChapter } from './types'
+import { ChapterSaveConflict } from '../chapterSave'
 
-export function claimChapter(db: DatabaseSync, novelId: number, chapterId: number): ClaimedChapter {
+export function claimChapter(db: DatabaseSync, novelId: number, chapterId: number, expectedContent?: string): ClaimedChapter {
   const row = db
-    .prepare('SELECT id, status FROM chapter WHERE id = ? AND novel_id = ?')
-    .get(chapterId, novelId) as { id: number; status: string } | undefined
+    .prepare('SELECT id, status, content FROM chapter WHERE id = ? AND novel_id = ?')
+    .get(chapterId, novelId) as { id: number; status: string; content: string } | undefined
 
   if (!row) throw new Error('chapter not found')
+  if (expectedContent !== undefined && row.content !== expectedContent) throw new ChapterSaveConflict('CHAPTER_CONTENT_CONFLICT')
 
   // P2.2 修复 #4：原子抢占（防同章并发生成 → 双写/双倍费用）
   const generationToken = randomUUID()
   const result = db
     .prepare(
-      "UPDATE chapter SET status='generating', generation_token=?, updated_at=datetime('now') WHERE id=? AND novel_id=? AND status NOT IN ('generating')"
+      "UPDATE chapter SET status='generating', generation_token=?, updated_at=datetime('now') WHERE id=? AND novel_id=? AND status NOT IN ('generating') AND content=?"
     )
-    .run(generationToken, chapterId, novelId)
+    .run(generationToken, chapterId, novelId, row.content)
 
-  if (result.changes === 0) throw new Error('章节正在生成中（或状态不允许），请等待完成')
+  if (result.changes === 0) {
+    if (expectedContent !== undefined) throw new ChapterSaveConflict('CHAPTER_CONTENT_CONFLICT')
+    throw new Error('章节正在生成中（或状态不允许），请等待完成')
+  }
 
-  return { id: row.id, novelId, previousStatus: row.status, generationToken }
+  return { id: row.id, novelId, previousStatus: row.status, generationToken, initialContent: row.content }
 }
 
 // v0.24.3（写书实战纠错）：ConfigError 时章节并未真正尝试生成，恢复抢占前状态而非误标 failed。

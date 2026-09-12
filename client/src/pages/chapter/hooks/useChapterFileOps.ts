@@ -75,6 +75,7 @@ export function useChapterFileOps(options: {
       notify('标题已更新')
     } catch (err) {
       toast('error', `标题保存失败：${err instanceof Error ? err.message : String(err)}`)
+      throw err
     }
   }
 

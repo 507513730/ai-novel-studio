@@ -132,6 +132,8 @@ docs/               architecture / decision-log / versioning / CHANGELOG / test-
 
 ## 6. 核心机制速览（意图层——实现细节以代码为准）
 
+章节页（D145-D146，v1.1.3 候选）：编排在 `useChapterWorkspace`，保存串行在 `useChapterSave`；右栏分写作/检查/版本。选区 AI 结果以原章原文和选区定位，先持久化候选再人工采用；保存成功只扣本次增量，切章等待最新输入确认，空内容拒绝不清 dirty。正文及字数接口需 expectedContent/operationId，v24 持久回执保护重放；发生冲突先保留人工草稿版本再加载最新正文。修复/生成服务原文条件提交，冲突候选统一走 `persistCandidateVersion`，不能域外新增版本 INSERT；本地取消无服务端回执，不标作已保存。
+
 | 机制 | 要点 |
 |---|---|
 | **章节状态机** | planned → generating → written → reviewed → done / failed；原子抢占（NOT IN generating）；异常/空内容必复位 failed；重启重置 generating→planned |

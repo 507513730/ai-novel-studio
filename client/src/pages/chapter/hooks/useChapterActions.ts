@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { novelApi, studioApi, waitForJob } from '../../../api'
 import type { ProofreadIssue } from '../types'
 import type { ActionFeedback } from './useActionFeedback'
+import { useChapterIdentity, type ChapterIdentity } from './useChapterIdentity'
 
 // v0.26.0（批次 B）：章节生产动作编排从页面拆出（AGENTS #38 先抽 hook）——
 // 审核/校对/修复 + 方案流水线，busy/提示/错误原语来自 useActionFeedback，行为与拆分前逐字一致
@@ -16,6 +17,8 @@ export function useChapterActions(options: {
   savedContentRef: React.RefObject<string>
   dirtyRef: React.RefObject<boolean>
   fixDoneRef: React.RefObject<boolean>
+  saveContent?: () => Promise<void>
+  readContent?: () => string
 }): {
   actionBusy: string | null
   actionMsg: string | null
@@ -44,45 +47,78 @@ export function useChapterActions(options: {
   const [proofreadIssues, setProofreadIssues] = useState<ProofreadIssue[] | null>(null)
   const [solutionId, setSolutionId] = useState<number | null>(null)
   const [solutionRunSummary, setSolutionRunSummary] = useState<string | null>(null)
+  const latest = useRef(options)
+  latest.current = options
+  const identity = useChapterIdentity(novelId, selectedChapter)
+  const acceptResult = async (text: string, original: string, token: ChapterIdentity): Promise<boolean> => {
+    const detail = await novelApi.chapterDetail(id, selectedChapter!)
+    const persisted = detail.chapter.content ?? ''
+    if (!identity.isActive(token) || (latest.current.readContent?.() ?? latest.current.content) !== original || persisted !== text) {
+      await novelApi.createVersion(id, selectedChapter!, 'AI 待采用：生成期间正文已修改', text)
+      if (identity.isActive(token) && savedContentRef.current === original) {
+        savedContentRef.current = persisted
+        dirtyRef.current = true
+      }
+      notify(`章节 #${selectedChapter}：已保留当前输入，AI 结果请在版本历史查看`)
+      await invalidate()
+      return false
+    }
+    setContent(text)
+    savedContentRef.current = text
+    dirtyRef.current = false
+    return true
+  }
 
   const runReview = async (): Promise<void> => {
     if (!selectedChapter) return
+    const token = identity.capture()
     setActionError(null)
     notify('审核中…')
     try {
       const r = await novelApi.review(id, selectedChapter)
+      if (!identity.isActive(token)) { await invalidate(); return }
       setReviewResult(r.review)
       const score = r.review.score as number
       notify(`审核完成：${score} 分${(r.review.needsFix as boolean) ? '，需要修复' : ''}`)
       await invalidate()
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err))
+      if (identity.isActive(token)) setActionError(err instanceof Error ? err.message : String(err))
     }
   }
 
   // v0.24.4（A4）：轻量本地校对（确定性检查 + 单次语义 extraction，可选传当前编辑器内容）
   const runProofread = async (): Promise<void> => {
     if (!selectedChapter) return
+    const token = identity.capture()
     setActionError(null)
     setProofreadIssues(null)
     try {
       const r = await novelApi.proofread(id, selectedChapter, content || undefined)
+      if (!identity.isActive(token)) return
       setProofreadIssues(r.issues)
       notify(`校对完成：${r.issues.length} 条${r.localCount > 0 ? `（${r.localCount} 条本地确定性问题）` : ''}`)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err))
+      if (identity.isActive(token)) setActionError(err instanceof Error ? err.message : String(err))
     }
   }
 
   const fix = async (): Promise<void> => {
     if (!selectedChapter) return
+    const token = identity.capture()
     setActionError(null)
     notify('修复中…')
     try {
+      await options.saveContent?.()
+      if (!identity.isActive(token)) return
+      const original = options.readContent?.() ?? content
+      if (dirtyRef.current || savedContentRef.current !== original) throw Error('正文仍有未保存修改，请保存后再修复')
       const r = await novelApi.fix(id, selectedChapter)
-      setContent(r.content)
-      savedContentRef.current = r.content
-      dirtyRef.current = false
+      if (r.fixed === false || r.persisted === false) {
+        if (identity.isActive(token)) notify(r.candidateVersionId ? '已保留人工正文，修复结果已存入版本历史待采用' : (r.reason ?? '本次未替换正文'))
+        await invalidate()
+        return
+      }
+      if (!await acceptResult(r.content, original, token)) return
       fixDoneRef.current = true
       if (r.rescore) {
         setReviewResult({ score: r.rescore.score, needsFix: r.rescore.needsFix } as Record<string, unknown>)
@@ -94,7 +130,7 @@ export function useChapterActions(options: {
       }
       await invalidate()
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err))
+      if (identity.isActive(token)) setActionError(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -104,10 +140,15 @@ export function useChapterActions(options: {
   // P30：以方案生产正文（whole_book 步骤接力，空章节）
   const produceWithSolution = async (): Promise<void> => {
     if (!selectedChapter || !solutionId) return
+    const token = identity.capture()
     setActionError(null)
     setSolutionRunSummary(null)
     // v0.17.0（审查 A4）：此前无 try/catch——失败时异常穿透 withBusy 的 finally，按钮卡在 busy 态
     try {
+      await options.saveContent?.()
+      if (!identity.isActive(token)) return
+      const original = options.readContent?.() ?? content
+      if (dirtyRef.current || savedContentRef.current !== original) throw Error('正文仍有未保存修改，请保存后再生产')
       // v0.23.1（批次 D1）：迁 job 队列——入队 + 轮询终态（可到任务中心取消；不再占 HTTP 长连接）
       const { jobId } = await studioApi.solutionProduceChapter(solutionId, id, selectedChapter)
       const job = await waitForJob(jobId)
@@ -116,32 +157,37 @@ export function useChapterActions(options: {
       const r = (job.result ?? {}) as {
         wordCount?: number
         degraded?: boolean
+        persisted?: boolean
+        content?: string
         outputs?: Array<{ role: string; ok: boolean }>
       }
-      // 正文已由 job 服务端落库——重新拉详情回显（含可能的大纲标题更新）
-      const d = await novelApi.chapterDetail(id, selectedChapter)
-      const fresh = d.chapter.content ?? ''
-      setContent(fresh)
-      savedContentRef.current = fresh
-      dirtyRef.current = false
+      if (r.persisted === false) {
+        if (identity.isActive(token)) notify('已保留人工正文，方案结果已存入版本历史待采用')
+        await invalidate()
+        return
+      }
+      if (typeof r.content !== 'string') throw Error('方案任务未返回正文，请在版本历史检查结果')
+      if (!await acceptResult(r.content, original, token)) return
       notify(`方案生产完成：${r.wordCount ?? 0} 字${r.degraded ? '（部分步骤降级）' : ''}`)
       setSolutionRunSummary((r.outputs ?? []).map((o, i) => `${i + 1}.${o.role}${o.ok ? '' : ' ✗'}`).join(' | '))
       await invalidate()
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err))
+      if (identity.isActive(token)) setActionError(err instanceof Error ? err.message : String(err))
     }
   }
 
   const runSolutionOnChapter = async (): Promise<void> => {
     if (!selectedChapter || !solutionId) return
+    const token = identity.capture()
     setSolutionRunSummary(null)
     setActionError(null)
     try {
       const r = await studioApi.solutionRun(solutionId, id, selectedChapter)
+      if (!identity.isActive(token)) return
       setSolutionRunSummary(r.run.degraded ? `⚠ 部分步骤降级\n${r.summary}` : r.summary)
       notify(`方案完成${r.run.degraded ? '（部分降级）' : ''}`)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err))
+      if (identity.isActive(token)) setActionError(err instanceof Error ? err.message : String(err))
     }
   }
 

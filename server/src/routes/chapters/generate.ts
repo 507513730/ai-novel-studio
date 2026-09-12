@@ -71,23 +71,20 @@ export function registerChapterGenerationRoutes(router: Router, db: DatabaseSync
       })
 
       if (result.aborted) {
-        send('aborted', { content: result.content, wordCount: result.wordCount })
+        send('aborted', { content: result.content, wordCount: result.wordCount, persisted: result.persisted, candidateVersionId: result.candidateVersionId })
       } else {
         send('done', {
           content: result.content,
           wordCount: result.wordCount,
-          usage: result.usage
+          usage: result.usage,
+          persisted: result.persisted,
+          candidateVersionId: result.candidateVersionId
         })
       }
       res.end()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error('[generate] SSE error:', message)
-      // v0.23.1（批次 A5）：复位仅限自己抢占的 generating（对齐章节域守卫——
-      // 此前无守卫，理论上可把并发他方已置 written 的章节改标 failed）
-      db.prepare(
-        "UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'generating'"
-      ).run(chapterId.data)
       // v0.9.0（审查 #9）：SSE 事件只发固定文案（详细日志留服务端）
       send('error', { message: '生成失败，详情见服务端日志' })
       res.end()

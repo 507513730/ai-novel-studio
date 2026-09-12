@@ -1,193 +1,66 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { autocompletion } from '@codemirror/autocomplete'
-import { Pin } from 'lucide-react'
+import { EditorView } from '@codemirror/view'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { useEditorTheme } from '../../editor/theme'
 import { makeQuickWordSource } from '../../utils/quickWords'
 import { EmptyStateGuide, SuggestionOverlay } from './ChapterPanels'
 
-// v0.25.0（审查 S1）：从 ChapterExecutionPage 拆出的中区编辑器（工具条 + 编辑器本体）。
-// 标题内联编辑的 editingTitle / titleDraft 两个状态收归工具条内部，主页面不再感知。
-
 export type ExportFormat = 'txt' | 'md' | 'epub' | 'docx'
 export type ViewMode = 'edit' | 'read'
-
 export interface ChapterToolbarProps {
   title: string
-  summary?: string
   hanCount: number
-  humanWords: number
-  aiWords: number
-  stats: { total: number; written: number; failed: number; remaining: number }
   saving: boolean
+  dirty: boolean
+  saveError: string | null
+  hasConflict?: boolean
+  resolvingConflict?: boolean
+  onResolveConflict?: () => void
   streaming: boolean
   contentLoading: boolean
   hasChapter: boolean
-  guidance: string
-  onGuidanceChange: (v: string) => void
   onSave: () => void
-  onGenerate: () => void
   viewMode: ViewMode
   onToggleViewMode: () => void
-  onPinGuidance: () => void
+  focusMode: boolean
+  onToggleFocus: () => void
+  onTogglePanel: (panel: 'chapters' | 'assistant') => void
   exportBusy: string | null
   onExport: (format: ExportFormat) => void
   onSaveTitle: (title: string) => Promise<void>
 }
-
-export function ChapterToolbar({
-  title,
-  summary,
-  hanCount,
-  humanWords,
-  aiWords,
-  stats,
-  saving,
-  streaming,
-  contentLoading,
-  hasChapter,
-  guidance,
-  onGuidanceChange,
-  onSave,
-  onGenerate,
-  viewMode,
-  onToggleViewMode,
-  onPinGuidance,
-  exportBusy,
-  onExport,
-  onSaveTitle
-}: ChapterToolbarProps): React.JSX.Element {
-  // A2：标题内联编辑（Enter/blur 去重提交）
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleDraft, setTitleDraft] = useState('')
-  const titleSubmittedRef = useRef(false)
-
-  const saveTitle = (): void => {
-    const t = titleDraft.trim()
-    if (!t || t === title) {
-      setEditingTitle(false)
-      return
-    }
-    void onSaveTitle(t).finally(() => setEditingTitle(false))
-  }
-
-  return (
-    // v0.26.0（审查 P0-1）：允许换行 + 左组收缩保护——此前窄宽下标题/字数被压成一字一行竖排
-    <div
-      className="row flex-wrap"
-      style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', justifyContent: 'space-between', rowGap: 8 }}
-    >
-      <div className="row" style={{ minWidth: 0, flexShrink: 1 }}>
-        {editingTitle ? (
-          <input
-            style={{ width: 240 }}
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={() => {
-              // P9 B8：Enter 已提交则跳过 blur 双发
-              if (titleSubmittedRef.current) {
-                titleSubmittedRef.current = false
-                return
-              }
-              saveTitle()
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.currentTarget.blur()
-                titleSubmittedRef.current = true
-                saveTitle()
-              } else if (e.key === 'Escape') {
-                setEditingTitle(false)
-              }
-            }}
-            autoFocus
-          />
-        ) : (
-          <strong
-            style={{ cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280, minWidth: 0 }}
-            title="点击编辑标题"
-            onClick={() => {
-              setTitleDraft(title)
-              setEditingTitle(true)
-            }}
-          >
-            {title}
-          </strong>
-        )}
-        {summary && (
-          <span className="muted t-small ellipsis" style={{ maxWidth: 200 }} title={summary}>
-            {summary}
-          </span>
-        )}
-        <span className="muted t-small" style={{ flexShrink: 0 }}>｜{hanCount} 字</span>
-        {/* v0.19.0：人类/AI 字数分离 */}
-        <span
-          className="muted t-small"
-          style={{ color: 'var(--ok)', cursor: 'help', flexShrink: 0 }}
-          title="AI 字数：当前内容中 AI 来源（整章生成/重生/修复按本次覆盖，不超当前字数）。我的字数：人工输入累计（增量累加，删除不降）。"
-        >
-          ｜我的 {humanWords.toLocaleString()} · AI {aiWords.toLocaleString()}
-        </span>
-      </div>
-      <div className="row flex-wrap">
-        <button onClick={onSave} disabled={saving || contentLoading || streaming}>
-          {saving ? '保存中…' : '保存'}
-        </button>
-        <button onClick={onGenerate} disabled={streaming || contentLoading || !hasChapter}>
-          {streaming ? '生成中…' : 'AI 生成正文'}
-        </button>
-        {/* v0.24.2（F1）：阅读/复盘模式切换 */}
-        <button
-          title={viewMode === 'read' ? '返回编辑模式' : '阅读模式：干净排版预览（抽读/复盘）'}
-          disabled={streaming || contentLoading}
-          onClick={onToggleViewMode}
-        >
-          {viewMode === 'read' ? '编辑' : '阅读'}
-        </button>
-        {/* v0.22.2：正文进度轻提示 */}
-        {stats.total > 0 && (stats.remaining > 0 || stats.failed > 0) && (
-          <span className="muted t-small" style={{ alignSelf: 'center' }}>
-            进度 {stats.written}/{stats.total} 章
-            {stats.remaining > 0 ? ` · 剩 ${stats.remaining} 章待生产` : ''}
-            {stats.failed > 0 ? ` · ⚠ ${stats.failed} 章失败可重试` : ''}
-          </span>
-        )}
-        <input
-          style={{ flex: '1 1 200px', minWidth: 180 }}
-          placeholder="可选：对本次生成的额外要求（如：本章要引入新反派伏笔、节奏放慢写细节）…"
-          value={guidance}
-          disabled={streaming}
-          onChange={(e) => onGuidanceChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !streaming) onGenerate()
-          }}
-        />
-        {/* v0.15.0：反馈沉淀——把这句要求固定为硬约束（全链生效） */}
-        <button
-          className="sm"
-          title="把这句话设为书级硬约束（导演/方案/生成/修复全链强制生效）"
-          disabled={streaming || !guidance.trim()}
-          onClick={onPinGuidance}
-        >
-          <Pin size={12} className="icon-gap" /> 固定为约束
-        </button>
-        <span style={{ margin: '0 8px', color: 'var(--border)' }}>|</span>
-        {(['txt', 'md', 'epub', 'docx'] as ExportFormat[]).map((f) => (
-          <button
-            key={f}
-            className="sm"
-            style={{ color: 'var(--accent)', background: 'transparent', border: 'none' }}
-            disabled={exportBusy !== null}
-            onClick={() => onExport(f)}
-          >
-            {exportBusy === f ? '导出中…' : f.toUpperCase()}
-          </button>
-        ))}
-      </div>
+export function ChapterToolbar(p: ChapterToolbarProps): React.JSX.Element {
+  const [draft, setDraft] = useState<string | null>(null)
+  const [titleBusy, setTitleBusy] = useState(false)
+  const [titleError, setTitleError] = useState<string | null>(null)
+  const state = p.saveError ? 'error' : p.dirty ? 'dirty' : 'saved'
+  const status = !p.hasChapter ? '请选择章节' : p.contentLoading ? '加载中…' : p.streaming ? '正在生成' : p.saving ? '保存中…' : p.saveError ? '保存失败' : p.dirty ? '未保存' : '已保存'
+  return <header className="chapter-toolbar">
+    <div className="chapter-toolbar-title">
+      {draft === null ? <button disabled={!p.hasChapter || p.contentLoading} title="修改章节标题" onClick={() => setDraft(p.title)}>{p.title}</button> :
+        <form onSubmit={event => {
+          event.preventDefault()
+          if (titleBusy || !draft.trim()) return
+          setTitleBusy(true)
+          void p.onSaveTitle(draft.trim()).then(() => { setDraft(null); setTitleError(null) }).catch(error => setTitleError(String(error))).finally(() => setTitleBusy(false))
+        }}><input aria-label="章节标题" value={draft} disabled={titleBusy} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setDraft(null) }} autoFocus />
+          <button disabled={titleBusy || !draft.trim()}>确定</button><button type="button" disabled={titleBusy} onClick={() => setDraft(null)}>取消</button></form>}
+      {titleError && <span role="alert">{titleError}</span>}
+      <div className="chapter-toolbar-meta">{p.hanCount.toLocaleString()} 字 · <span role="status" className="chapter-save-status" data-state={state} title={p.saveError ?? undefined}>{status}</span></div>
     </div>
-  )
+    <div className="chapter-toolbar-actions">
+      <button className="workspace-mobile-tools" onClick={() => p.onTogglePanel('chapters')}>章节</button>
+      <button className="workspace-mobile-tools" onClick={() => p.onTogglePanel('assistant')}>助手</button>
+      <button onClick={p.onSave} disabled={p.saving || p.contentLoading || p.streaming || !p.hasChapter}>{p.saveError ? '重试保存' : '保存'}</button>
+      {p.hasConflict && <button disabled={p.resolvingConflict || p.streaming || p.contentLoading} onClick={p.onResolveConflict}>保存草稿副本并载入最新正文</button>}
+      <button disabled={p.streaming || p.contentLoading} onClick={p.onToggleViewMode}>{p.viewMode === 'read' ? '编辑' : '阅读'}</button>
+      <button aria-pressed={p.focusMode} onClick={p.onToggleFocus}>{p.focusMode ? '退出专注' : '专注'}</button>
+      <details className="chapter-export"><summary>导出</summary><div className="chapter-export-menu">{(['txt', 'md', 'epub', 'docx'] as ExportFormat[]).map(f => <button key={f} disabled={p.exportBusy !== null} onClick={event => { p.onExport(f); event.currentTarget.closest('details')?.removeAttribute('open') }}>{f.toUpperCase()}</button>)}</div></details>
+    </div>
+  </header>
 }
 
 export interface EditorPaneProps {
@@ -229,16 +102,17 @@ export function EditorPane({
 }: EditorPaneProps): React.JSX.Element {
   const editorTheme = useEditorTheme()
   return (
-    <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
+    <div className="chapter-editor-surface">
       <CodeMirror
         value={content}
-        editable={!streaming}
+        editable={!streaming && !contentLoading && hasChapter}
         onChange={onContentChange}
         onUpdate={(u) => onEditorUpdate(u)}
         height="100%"
         theme={editorTheme}
         // v0.24.4（A2）：快捷词补全（";触发词" → 展开文本，设置页维护词典）
-        extensions={[markdown(), autocompletion({ override: [makeQuickWordSource(quickWords)] })]}
+        basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLine: false }}
+        extensions={[EditorView.lineWrapping, markdown(), autocompletion({ override: [makeQuickWordSource(quickWords)] })]}
         style={{ height: '100%' }}
         ref={editorRef}
       />

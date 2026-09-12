@@ -68,13 +68,13 @@ describe(`${PREFIX} · PATCH delta 累计`, () => {
       const patch1 = await fetch(`${base}/api/novels/1/chapters/1`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: '他推开门走了进去。', aiWordsDelta: 9, humanWordsDelta: 0 })
+        body: JSON.stringify({ content: '他推开门走了进去。', aiWordsDelta: 9, humanWordsDelta: 0, expectedContent: '', operationId: 'save-1' })
       })
       expect(patch1.status).toBe(200)
       const patch2 = await fetch(`${base}/api/novels/1/chapters/1`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: '他推开门走了进去。夜色笼罩小城。', humanWordsDelta: 7 })
+        body: JSON.stringify({ content: '他推开门走了进去。夜色笼罩小城。', humanWordsDelta: 7, expectedContent: '他推开门走了进去。', operationId: 'save-2' })
       })
       expect(patch2.status).toBe(200)
       const row = db.prepare('SELECT ai_words, human_words FROM chapter WHERE id = 1').get() as {
@@ -95,7 +95,7 @@ describe(`${PREFIX} · PATCH delta 累计`, () => {
       const r = await fetch(`${base}/api/novels/1/chapters/1`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: '正文内容。', aiWordsDelta: 0, humanWordsDelta: 0 })
+        body: JSON.stringify({ content: '正文内容。', aiWordsDelta: 0, humanWordsDelta: 0, expectedContent: '', operationId: 'save-1' })
       })
       expect(r.status).toBe(200)
       const row = db.prepare('SELECT ai_words, human_words FROM chapter WHERE id = 1').get() as {

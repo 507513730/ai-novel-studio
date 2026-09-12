@@ -1,4 +1,6 @@
-import { useMemo } from 'react'
+import { WorkspaceTabs, type WorkspaceTab } from './WorkspaceTabs'
+import { AiDraftsPanel } from './AiDraftsPanel'
+import type { useAiDrafts } from './hooks/useAiDrafts'
 import { HubChat } from '../../components/HubChat'
 import type { ChapterSummary } from '../../types'
 import { DebtFixBadge } from './DebtFixBadge'
@@ -6,7 +8,6 @@ import {
   BackfillResultPanel,
   ContextPanel,
   PendingPanel,
-  ProgressMatrix,
   ProofreadPanel,
   ResourceDetailPanel
 } from './ChapterPanels'
@@ -21,6 +22,14 @@ import type { useChapterCandidates } from './hooks/useChapterCandidates'
 // 主行动卡（生成）强调，质量/查看动作收进分组卡 + 双列网格，次级动作不再与主行动等权平铺
 
 interface ExecutionPanelProps {
+  tab: WorkspaceTab
+  onTab: (tab: WorkspaceTab) => void
+  ai: ReturnType<typeof useAiDrafts>
+  onSelectChapter: (id: number) => void
+  guidance: string
+  onGuidanceChange: (text: string) => void
+  onPinGuidance: () => void
+  onContinue: () => void
   novelId: number
   selectedChapter: number | null
   content: string
@@ -45,6 +54,7 @@ interface ExecutionPanelProps {
 }
 
 export function ExecutionPanel({
+  tab, onTab, ai, onSelectChapter, guidance, onGuidanceChange, onPinGuidance, onContinue,
   novelId,
   selectedChapter,
   content,
@@ -64,52 +74,21 @@ export function ExecutionPanel({
   const busy = actionBusy !== null
   const hasContent = content.length > 0
 
-  // P12 A3：本章进度矩阵信号（从现有状态推导，不新增请求；原页面逻辑随重排迁入）
-  const progressSegments = useMemo<Array<[string, boolean]>>(() => {
-    const chapter = signals.chapter
-    const taskReady = Boolean(chapter?.goal && Object.keys(chapter.goal).length > 0)
-    const contextReady = artifacts.ctxSections !== null
-    const draftStarted = content.trim().length > 0
-    const draftSaved =
-      ['written', 'reviewed', 'done'].includes(chapter?.status ?? '') ||
-      signals.savedContentRef.current.trim().length > 0
-    const reviewed = actions.reviewResult !== null || ['reviewed', 'done'].includes(chapter?.status ?? '')
-    const reviewable = ['reviewed', 'done'].includes(chapter?.status ?? '')
-    return [
-      ['任务单', taskReady],
-      ['上下文', contextReady],
-      ['草稿', draftStarted],
-      ['保存', draftSaved],
-      ['审核', reviewed],
-      ['修复', signals.fixDoneRef.current],
-      ['回灌', signals.backfillDoneRef.current || actions.reviewResult !== null],
-      ['快照', signals.snapshotDoneRef.current],
-      ['可审', reviewable]
-    ]
-  }, [signals.chapter, artifacts.ctxSections, content, actions.reviewResult, signals.fixDoneRef, signals.backfillDoneRef, signals.snapshotDoneRef, signals.savedContentRef])
-
   return (
-    <div
-      style={{
-        width: 320,
-        borderLeft: '1px solid var(--border)',
-        padding: 12,
-        overflowY: 'auto',
-        background: 'var(--bg-panel)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10
-      }}
-    >
-      <h2 style={{ fontSize: 15, marginBottom: 0 }}>执行面板</h2>
-
-      {/* P12 A3：本章进度矩阵 */}
-      {selectedChapter && <ProgressMatrix segments={progressSegments} />}
-
+    <aside className="workspace-assistant" aria-label="写作助手">
+      <WorkspaceTabs value={tab} onChange={onTab}>
+      <div hidden={tab !== 'write'}>
+        <section className="workspace-section">
+          <h3>本章任务</h3>
+          <p>{signals.chapter?.summary || '选择章节，查看任务并开始写作。'}</p>
+          <label htmlFor="chapter-guidance">本次写作要求</label>
+          <textarea id="chapter-guidance" value={guidance} onChange={e => onGuidanceChange(e.target.value)} disabled={streaming} placeholder="补充情节、节奏或人物要求…" />
+          <button className="sm" disabled={streaming || !guidance.trim()} onClick={onPinGuidance}>固定为书级约束</button>
+        </section>
       {/* 主行动卡：当前最该做的事（accent 边强调） */}
       <div
-        className="panel"
-        style={{ background: 'var(--bg-card)', padding: 14, borderColor: 'var(--accent)', marginBottom: 0 }}
+        className="workspace-section"
+        style={{ paddingBlock: 12, marginBottom: 12 }}
       >
         <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>当前推荐</div>
         {streaming ? (
@@ -120,17 +99,17 @@ export function ExecutionPanel({
           <button
             className="primary"
             style={{ width: '100%', padding: '10px 14px', fontSize: 14 }}
-            onClick={onGenerate}
-            disabled={!selectedChapter || busy || contentLoading}
+            onClick={hasContent ? onContinue : onGenerate}
+            disabled={!selectedChapter || busy || contentLoading || ai.running !== null}
           >
-            {contentLoading ? '正文加载中…' : '生成正文'}
+            {contentLoading ? '正文加载中…' : hasContent ? '从光标续写' : '生成正文'}
           </button>
         )}
         <div className="muted" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
           {streaming
             ? '生成中可随时取消，已生成部分会保留在编辑器中'
             : selectedChapter
-              ? '根据写作上下文与本章任务单生成本章正文'
+              ? hasContent ? '续写结果先预览，采用后才写入正文' : '根据本章任务与写作要求生成正文'
               : '请先在左侧选择章节'}
         </div>
         {/* v1.0 后续（A1 多候选分支生成）：串行生成 2 份候选并排对比，选定为正文 */}
@@ -145,7 +124,7 @@ export function ExecutionPanel({
                 message: '将串行生成 2 份候选构想（各自成为一条版本快照，需消耗 2 次生成额度）。生成后可在面板对比，选定一份作为正文，其余保留在版本历史。继续？',
                 confirmText: '生成 2 份候选',
                 danger: true,
-                action: () => void candidates.generateCandidates(2, buildInclude())
+                action: () => { onTab('versions'); void candidates.generateCandidates(2, buildInclude()) }
               })
             }
           >
@@ -154,55 +133,7 @@ export function ExecutionPanel({
         )}
       </div>
 
-      {/* 分组：质量与连续性 */}
-      <div className="panel" style={{ background: 'var(--bg-card)', padding: 10 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 8 }}>质量与连续性</div>
-        <div className="action-grid">
-          <button
-            className="sm"
-            onClick={() => void actions.withBusy('review', () => actions.runReview())}
-            disabled={busy || !selectedChapter || !hasContent}
-          >
-            {actionBusy === 'review' ? '审核中…' : 'AI 审核'}
-          </button>
-          <button
-            className="sm"
-            onClick={() => void actions.withBusy('proofread', actions.runProofread)}
-            disabled={busy || !selectedChapter || !hasContent}
-          >
-            {actionBusy === 'proofread' ? '校对中…' : '本地校对'}
-          </button>
-          <button
-            className="sm"
-            onClick={() => void actions.withBusy('fix', () => actions.fix())}
-            disabled={busy || !selectedChapter || !hasContent}
-          >
-            {actionBusy === 'fix' ? '修复中…' : '修复 + 重审'}
-          </button>
-          <button
-            className="sm"
-            onClick={() => void actions.withBusy('backfill', () => artifacts.backfill())}
-            disabled={busy || !selectedChapter || !hasContent}
-          >
-            {actionBusy === 'backfill' ? '回灌中…' : '状态回灌'}
-          </button>
-        </div>
-        {actions.proofreadIssues !== null && (
-          <div style={{ marginTop: 8 }}>
-            <ProofreadPanel issues={actions.proofreadIssues} onClose={() => actions.setProofreadIssues(null)} />
-          </div>
-        )}
-        {/* v1.0 后续（A1 多候选分支生成）：候选并排对比面板 */}
-        {candidates.openCandidatesPanel && candidates.candidates && candidates.candidates.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <CandidatesPanel
-              candidates={candidates.candidates}
-              busy={candidates.candidatesBusy}
-              onAdopt={(c) => void candidates.adoptCandidate(c)}
-              onClose={candidates.closeCandidates}
-            />
-          </div>
-        )}
+        {hasContent && <button className="sm" disabled={busy || streaming || contentLoading} onClick={onGenerate}>重新生成整章…</button>}
         {/* P21-3：跑创作方案 + P30：以方案生产正文 */}
         <div className="col gap-2" style={{ marginTop: 10 }}>
           <div className="row gap-2">
@@ -267,9 +198,65 @@ export function ExecutionPanel({
           )}
         </div>
       </div>
+      <div hidden={tab !== 'check'}>
+      {/* 分组：质量与连续性 */}
+      <div className="workspace-section" style={{ background: 'var(--bg-card)', padding: 10 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 8 }}>质量与连续性</div>
+        <div className="action-grid">
+          <button
+            className="sm"
+            onClick={() => void actions.withBusy('review', () => actions.runReview())}
+            disabled={busy || !selectedChapter || !hasContent}
+          >
+            {actionBusy === 'review' ? '审核中…' : 'AI 审核'}
+          </button>
+          <button
+            className="sm"
+            onClick={() => void actions.withBusy('proofread', actions.runProofread)}
+            disabled={busy || !selectedChapter || !hasContent}
+          >
+            {actionBusy === 'proofread' ? '校对中…' : '本地校对'}
+          </button>
+          <button
+            className="sm"
+            onClick={() => void actions.withBusy('fix', () => actions.fix())}
+            disabled={busy || !selectedChapter || !hasContent}
+          >
+            {actionBusy === 'fix' ? '修复中…' : '修复 + 重审'}
+          </button>
+          <button
+            className="sm"
+            onClick={() => void actions.withBusy('backfill', () => artifacts.backfill())}
+            disabled={busy || !selectedChapter || !hasContent}
+          >
+            {actionBusy === 'backfill' ? '回灌中…' : '状态回灌'}
+          </button>
+        </div>
+        {actions.proofreadIssues !== null && (
+          <div style={{ marginTop: 8 }}>
+            <ProofreadPanel issues={actions.proofreadIssues} onClose={() => actions.setProofreadIssues(null)} />
+          </div>
+        )}
+
+      </div>
+
+      </div>
+      <div hidden={tab !== 'versions'}>
+        <AiDraftsPanel ai={ai} chapterId={selectedChapter} onSelect={onSelectChapter} />
+        {/* v1.0 后续（A1 多候选分支生成）：候选并排对比面板 */}
+        {candidates.openCandidatesPanel && candidates.candidates && candidates.candidates.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <CandidatesPanel
+              candidates={candidates.candidates}
+              busy={candidates.candidatesBusy}
+              onAdopt={(c) => void candidates.adoptCandidate(c)}
+              onClose={candidates.closeCandidates}
+            />
+          </div>
+        )}
 
       {/* 分组：查看与记录（渐进披露——查看类动作弱化为双列小按钮） */}
-      <div className="panel" style={{ background: 'var(--bg-card)', padding: 10 }}>
+      <div className="workspace-section" style={{ background: 'var(--bg-card)', padding: 10 }}>
         <div style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 8 }}>查看与记录</div>
         <div className="action-grid">
           <button className="sm" onClick={() => void artifacts.loadPending()} disabled={busy}>
@@ -302,6 +289,7 @@ export function ExecutionPanel({
         </div>
       </div>
 
+      </div>
       {actionError && (
         <div className="error-msg" style={{ fontSize: 12 }}>
           {actionError}
@@ -357,7 +345,7 @@ export function ExecutionPanel({
         <ResourceDetailPanel detail={artifacts.resourceDetail} onClose={() => artifacts.setResourceDetail(null)} />
       )}
 
-      {/* D2：AI 对话侧栏（折叠） */}
+      {/* AI 对话按需展开 */}
       <details style={{ marginTop: 2 }}>
         <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>AI 对话（对话即创作）</summary>
         <div
@@ -373,6 +361,7 @@ export function ExecutionPanel({
           <HubChat novelId={novelId} />
         </div>
       </details>
-    </div>
+      </WorkspaceTabs>
+    </aside>
   )
 }

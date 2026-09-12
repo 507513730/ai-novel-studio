@@ -276,6 +276,8 @@ const OUTPUT_INSTRUCTION: Record<string, string> = {
 }
 
 export interface ProductionChapterResult {
+  persisted?: boolean
+  candidateVersionId?: number
   content: string
   wordCount: number
   title: string | null
@@ -515,7 +517,7 @@ export async function runProductionChapter(
 
   // v0.22.0（审查 N1·本地设计决策）：整章替换→覆盖语义（防重生膨胀）。
   // R4.3：落库统一走章节生成域 persistence（版本注释/标题变体经 PersistedGeneration 传入）。
-  const { wordCount } = persistGeneratedChapter(db, claim, {
+  const { wordCount, persisted, candidateVersionId } = persistGeneratedChapter(db, claim, {
     content,
     aborted: false,
     note: 'AI 生产（方案流水线）',
@@ -525,6 +527,8 @@ export async function runProductionChapter(
   return {
     content,
     wordCount,
+    persisted,
+    candidateVersionId,
     title: title || null,
     outputs,
     degraded: degradedReasons.length > 0,

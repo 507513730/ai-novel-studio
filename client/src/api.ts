@@ -36,6 +36,13 @@ export function authHeaders(): Record<string, string> {
 const DEFAULT_TIMEOUT = 30_000
 const LONG_TIMEOUT = 120_000
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly code?: string, public readonly currentContent?: string) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 export async function apiFetch(path: string, init?: RequestInit): Promise<unknown> {
   // v0.9.0（审查 M4）：合并 headers 而非覆盖——此前 `...init` 在 init.headers 存在时
   // 会整体覆盖 authHeaders()（丢 X-App-Token / Content-Type）
@@ -44,8 +51,8 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<unknow
     headers: { ...authHeaders(), ...(init?.headers ?? {}) },
     signal: init?.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT)
   })
-  const body = (await res.json().catch(() => null)) as { error?: string } | null
-  if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`)
+  const body = (await res.json().catch(() => null)) as { error?: string; code?: string; currentContent?: string } | null
+  if (!res.ok) throw new ApiError(body?.error ?? `HTTP ${res.status}`, res.status, body?.code, body?.currentContent)
   return body
 }
 
@@ -56,8 +63,8 @@ async function j<T>(path: string, init?: RequestInit, timeout = DEFAULT_TIMEOUT)
     headers: { ...authHeaders(), ...(init?.headers ?? {}) },
     signal: init?.signal ?? AbortSignal.timeout(timeout)
   })
-  const body = (await res.json().catch(() => null)) as { error?: string } | null
-  if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`)
+  const body = (await res.json().catch(() => null)) as { error?: string; code?: string; currentContent?: string } | null
+  if (!res.ok) throw new ApiError(body?.error ?? `HTTP ${res.status}`, res.status, body?.code, body?.currentContent)
   return body as T
 }
 
@@ -182,7 +189,7 @@ export const novelApi = {
   chapters: (id: number): Promise<{ chapters: ChapterSummary[] }> => j(`/novels/${id}/chapters`),
   chapterDetail: (id: number, chapterId: number): Promise<{ chapter: ChapterSummary & { content: string } }> =>
     j(`/novels/${id}/chapters/${chapterId}`),
-  chapterPatch: (id: number, chapterId: number, patch: Record<string, unknown>): Promise<{ ok: boolean }> =>
+  chapterPatch: (id: number, chapterId: number, patch: Record<string, unknown>): Promise<{ ok: boolean; replayed?: boolean; currentContent?: string }> =>
     j(`/novels/${id}/chapters/${chapterId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   chaptersGenerate: (id: number, volId: number, guidance?: string): Promise<{ chapters: unknown[] }> =>
     js(`/novels/${id}/volumes/${volId}/chapters/generate`, { method: 'POST', body: guidance ? JSON.stringify({ guidance }) : undefined }),
@@ -206,14 +213,14 @@ export const novelApi = {
     j(`/novels/${id}/chapters/${chapterId}/context-preview`),
   versions: (id: number, chapterId: number): Promise<{ versions: Array<{ id: number; note: string; createdAt: string; wordCount: number; preview: string }> }> =>
     j(`/novels/${id}/chapters/${chapterId}/versions`),
-  createVersion: (id: number, chapterId: number, note?: string): Promise<{ versionId: number }> =>
-    j(`/novels/${id}/chapters/${chapterId}/versions`, { method: 'POST', body: JSON.stringify({ note }) }),
+  createVersion: (id: number, chapterId: number, note?: string, content?: string): Promise<{ versionId: number }> =>
+    j(`/novels/${id}/chapters/${chapterId}/versions`, { method: 'POST', body: JSON.stringify({ note, content }) }),
   // v0.9.0：修复乱码注释（此前 P20 U1 注释为编码损坏）
   // P20（U1）：版本详情 / 恢复
   chapterVersionDetail: (id: number, chapterId: number, versionId: number): Promise<{ version: { id: number; content: string; note: string; createdAt: string } }> =>
     j(`/novels/${id}/chapters/${chapterId}/versions/${versionId}`),
-  chapterVersionRestore: (id: number, chapterId: number, versionId: number): Promise<{ content: string; wordCount: number }> =>
-    js(`/novels/${id}/chapters/${chapterId}/versions/${versionId}/restore`, { method: 'POST' }),
+  chapterVersionRestore: (id: number, chapterId: number, versionId: number, mutation: { expectedContent: string; operationId: string }): Promise<{ content: string; wordCount: number; currentContent?: string; replayed?: boolean }> =>
+    js(`/novels/${id}/chapters/${chapterId}/versions/${versionId}/restore`, { method: 'POST', body: JSON.stringify(mutation) }),
   // v0.24.2（F3）：版本对比当前（行级 diff）
   chapterVersionDiff: (id: number, chapterId: number, versionId: number): Promise<VersionDiffInfo> =>
     j(`/novels/${id}/chapters/${chapterId}/versions/${versionId}/diff`),
@@ -227,7 +234,7 @@ export const novelApi = {
     foreshadows: Array<{ id: number; content: string; status: string; chapterId: number | null; chapterTitle: string | null }>
     facts: Array<{ id: number; content: string; chapterId: number | null; chapterTitle: string | null }>
   }> => j(`/novels/${id}/foreshadows`),
-  fix: (id: number, chapterId: number): Promise<{ fixed: boolean; round: number; content: string; rescore?: { score: number; needsFix: boolean; passed: boolean } }> =>
+  fix: (id: number, chapterId: number): Promise<{ fixed: boolean; round: number; content: string; reason?: string; persisted?: boolean; candidateVersionId?: number; staleReview?: boolean; rescore?: { score: number; needsFix: boolean; passed: boolean } }> =>
     js(`/novels/${id}/chapters/${chapterId}/fix`, { method: 'POST' }),
   backfill: (id: number, chapterId: number): Promise<Record<string, unknown>> =>
     js(`/novels/${id}/chapters/${chapterId}/backfill`, { method: 'POST' }),
@@ -459,8 +466,8 @@ export const agentsApi = {
 export interface GenerateHandlers {
   onThinking?: (text: string) => void
   onDelta?: (text: string) => void
-  onDone?: (payload: { content: string; wordCount: number; usage: Record<string, number> }) => void
-  onAborted?: (payload: { content: string; wordCount: number }) => void
+  onDone?: (payload: { content: string; wordCount: number; usage: Record<string, number>; persisted?: boolean; candidateVersionId?: number }) => void | Promise<void>
+  onAborted?: (payload: { content: string; wordCount: number; persisted?: boolean; candidateVersionId?: number; localFallback?: boolean }) => void | Promise<void>
   onError?: (message: string) => void
   onContext?: (payload: Record<string, unknown>) => void
 }
@@ -487,7 +494,7 @@ export async function generateChapterSse(
     // P2.2 修复 #2：AbortError（用户取消）→ onAborted；其他网络错误 → onError
     // P9 A2：fetch 阶段被取消 → 兜底携带累积内容（此时尚未收到任何流，accumulated 为空）
     if (signal?.aborted) {
-      handlers.onAborted?.({ content: accumulated, wordCount: accumulated.length })
+      await handlers.onAborted?.({ content: accumulated, wordCount: accumulated.length, localFallback: true })
     } else {
       handlers.onError?.(err instanceof Error ? err.message : String(err))
     }
@@ -501,6 +508,7 @@ export async function generateChapterSse(
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buf = ''
+  let terminal = false
   try {
     for (;;) {
       const { done, value } = await reader.read()
@@ -532,28 +540,40 @@ export async function generateChapterSse(
         } else if (type === 'context') handlers.onContext?.(payload)
         // v0.9.0（审查 M4）：结构校验替代 as never——服务端降级路径省略 usage 时不再 TypeError
         else if (type === 'done') {
-          handlers.onDone?.({
+          terminal = true
+          await handlers.onDone?.({
             content: String(payload.content ?? ''),
             wordCount: Number(payload.wordCount ?? 0),
+            persisted: payload.persisted === false ? false : undefined,
+            candidateVersionId: typeof payload.candidateVersionId === 'number' ? payload.candidateVersionId : undefined,
             usage: {
               cacheHit: Number((payload.usage as { cacheHit?: unknown } | undefined)?.cacheHit ?? 0)
             }
           })
+          return
         } else if (type === 'aborted') {
-          handlers.onAborted?.({
+          terminal = true
+          await handlers.onAborted?.({
             content: String(payload.content ?? ''),
-            wordCount: Number(payload.wordCount ?? 0)
+            wordCount: Number(payload.wordCount ?? 0),
+            persisted: payload.persisted === false ? false : undefined,
+            candidateVersionId: typeof payload.candidateVersionId === 'number' ? payload.candidateVersionId : undefined
           })
-        } else if (type === 'error') handlers.onError?.(String(payload.message ?? '未知错误'))
+          return
+        } else if (type === 'error') {
+          terminal = true
+          handlers.onError?.(String(payload.message ?? '未知错误'))
+          return
+        }
       }
     }
   } catch (err) {
     // P2.2 修复 #2：读取中断（用户取消或连接断开）
     // P9 A2：abort 后客户端停止读取，服务端 aborted 事件收不到 → 兜底携带已累积内容
-    if (signal?.aborted) {
-      handlers.onAborted?.({ content: accumulated, wordCount: accumulated.length })
+    if (signal?.aborted && !terminal) {
+      await handlers.onAborted?.({ content: accumulated, wordCount: accumulated.length, localFallback: true })
     } else {
       handlers.onError?.(err instanceof Error ? err.message : String(err))
     }
-  }
+  } finally { reader.releaseLock() }
 }

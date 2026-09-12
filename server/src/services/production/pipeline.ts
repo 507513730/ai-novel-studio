@@ -4,6 +4,8 @@
 // 执行面隔离：由 scheduler 的 production 执行器驱动，API 不得直接调用。
 import { DatabaseSync } from 'node:sqlite'
 import { generateChapter } from '../chapterGeneration/orchestrator'
+import { persistCandidateVersion } from '../chapterGeneration/persistence'
+import { ChapterSaveConflict } from '../chapterSave'
 import { callLlmJson } from '../jsonSafe'
 import { ConfigError } from '../llm/errors'
 import { buildChapterReviewContext, buildBackfillContext, buildFixContext, buildPatchContext, applyPatches } from '../context/dynamic'
@@ -59,24 +61,38 @@ export async function runProductionPipeline(
         ? parseSolutionSteps(bound.steps_json).some((s) => s.stage === 'whole_book')
         : false
       if (bound && isWholeBook) {
+        const beforeSolution = db.prepare('SELECT content FROM chapter WHERE id=? AND novel_id=?').get(ch.id, novelId) as { content: string } | undefined
+        if (!beforeSolution) throw new Error('chapter not found')
         progress.currentAction = '方案流水线生产'
         onProgress(progress)
         try {
           const prod = await runProductionChapter(db, bound.id, novelId, ch.id)
-          gen = { content: prod.content, wordCount: prod.wordCount, aborted: false, usage: { input: 0, output: 0, cacheHit: 0, cacheMiss: 0 } }
+          gen = { content: prod.content, wordCount: prod.wordCount, persisted: prod.persisted, candidateVersionId: prod.candidateVersionId, aborted: false, usage: { input: 0, output: 0, cacheHit: 0, cacheMiss: 0 } }
         } catch (err) {
           // 流水线失败 → 回退默认生成（v0.8.0：不再静默——用户以为流水线生效实际走了默认生成）
           console.warn(`[production] 方案流水线回退默认生成（第 ${i + 1} 章）: ${err instanceof Error ? err.message : String(err)}`)
-          gen = await generateChapter(db, novelId, ch.id)
+          gen = await generateChapter(db, novelId, ch.id, { expectedContent: beforeSolution.content })
         }
       } else {
         gen = await generateChapter(db, novelId, ch.id)
+      }
+      if (gen.persisted === false) {
+        progress.failed += 1
+        progress.currentAction = '正文已修改，AI 结果保留为待采用版本'
+        onProgress(progress)
+        continue
       }
       if (isGenerationSubstandard(gen)) {
         progress.currentAction = '生成重试（第 1 次不达标）'
         onProgress(progress)
         await new Promise((r) => setTimeout(r, 2000))
-        gen = await generateChapter(db, novelId, ch.id)
+        gen = await generateChapter(db, novelId, ch.id, { expectedContent: gen.content })
+      }
+      if (gen.persisted === false) {
+        progress.failed += 1
+        progress.currentAction = '正文已修改，AI 结果保留为待采用版本'
+        onProgress(progress)
+        continue
       }
       if (isGenerationSubstandard(gen)) {
         progress.failed += 1
@@ -87,9 +103,16 @@ export async function runProductionPipeline(
 
       const chapterOutcome = await reviewFixBackfill(db, novelId, ch.id, gen.content, progress, onProgress)
       progress.done = i + 1
-      progress.currentAction = `完成（评分 ${chapterOutcome.score}）`
+      if (chapterOutcome.conflicted) progress.failed += 1
+      progress.currentAction = chapterOutcome.conflicted ? '正文已修改，生产结果待人工处理' : `完成（评分 ${chapterOutcome.score}）`
       onProgress(progress)
     } catch (err) {
+      if (err instanceof ChapterSaveConflict) {
+        progress.failed += 1
+        progress.currentAction = '正文已修改，停止生成重试'
+        onProgress(progress)
+        continue
+      }
       // v0.24.3（写书实战纠错）：配置级错误对每章都是必然失败——熔断整批直接上抛
       // （job → failed + 可操作指引），禁止逐章空转标 failed
       // （历史：任务 28/29 共 27 章被误标 failed 而 job 状态仍为 done）
@@ -114,7 +137,7 @@ async function reviewFixBackfill(
   generatedContent: string,
   progress: ProductionProgress,
   onProgress: (p: ProductionProgress) => void
-): Promise<{ score: number }> {
+): Promise<{ score: number; conflicted?: boolean }> {
   // 2. 审核
   progress.currentAction = 'AI 审核'
   onProgress(progress)
@@ -231,15 +254,20 @@ async function reviewFixBackfill(
 
   // 4. 写回修复后的正文（如有）—— v0.22.0（审查 N1）：整章 AI 内容→覆盖 ai_words
   // R0-F6：守卫推进 reviewed——仅从生成域落库的 written 状态推进
+  let committed: number | bigint
   if (finalContent !== generatedContent) {
     const fc = (finalContent.match(/[\u4e00-\u9fff]/g) ?? []).length
-    db.prepare(
-      "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, status = 'reviewed', updated_at = datetime('now') WHERE id = ? AND status = 'written'"
-    ).run(finalContent, fc, fc, chapterId)
+    committed = db.prepare(
+      "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, human_words = 0, status = 'reviewed', updated_at = datetime('now') WHERE id = ? AND novel_id = ? AND status = 'written' AND content = ?"
+    ).run(finalContent, fc, fc, chapterId, novelId, generatedContent).changes
   } else {
-    db.prepare(
-      "UPDATE chapter SET status = 'reviewed', updated_at = datetime('now') WHERE id = ? AND status = 'written'"
-    ).run(chapterId)
+    committed = db.prepare(
+      "UPDATE chapter SET status = 'reviewed', updated_at = datetime('now') WHERE id = ? AND novel_id = ? AND status = 'written' AND content = ?"
+    ).run(chapterId, novelId, generatedContent).changes
+  }
+  if (!committed) {
+    if (finalContent !== generatedContent) persistCandidateVersion(db, chapterId, finalContent, 'AI 待采用：生产修复期间正文已修改')
+    return { score: 0, conflicted: true }
   }
 
   // 5. 回灌
@@ -310,6 +338,11 @@ async function backfillChapterState(
   )
   db.exec('BEGIN')
   try {
+    const current = db.prepare('SELECT content FROM chapter WHERE id=? AND novel_id=?').get(chapterId, novelId) as { content: string } | undefined
+    if (!current || current.content !== finalContent) {
+      db.exec('COMMIT')
+      return
+    }
     for (const f of backfill.newFacts) if (f.content) insertFact.run(novelId, chapterId, f.content)
     for (const f of backfill.foreshadows) if (f.content) insertForeshadow.run(novelId, chapterId, f.content)
     for (const p of backfill.paidForeshadows) {

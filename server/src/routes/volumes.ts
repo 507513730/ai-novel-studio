@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
+import { commitChapterSave } from '../services/chapterSave'
 import { callLlmJson } from '../services/jsonSafe'
 import { JSON_FORMAT } from '../prompts'
 // v0.23.1（批次 B1）：卷/节拍/章节清单 prompt+解析收敛 planner（此前三处内联副本，
@@ -365,7 +366,9 @@ export function createVolumesRouter(db: DatabaseSync): Router {
           content: z.string().optional(),
           // v0.19.0：人类/AI 字数分离——编辑器按来源累计，保存时上报增量
           aiWordsDelta: z.number().int().nonnegative().optional(),
-          humanWordsDelta: z.number().int().nonnegative().optional()
+          humanWordsDelta: z.number().int().nonnegative().optional(),
+          expectedContent: z.string().optional(),
+          operationId: z.string().min(1).max(200).optional()
         })
         .parse(req.body)
       const sets: string[] = []
@@ -407,11 +410,17 @@ export function createVolumesRouter(db: DatabaseSync): Router {
         params.push(input.humanWordsDelta)
       }
       sets.push("updated_at = datetime('now')")
-      db.prepare(`UPDATE chapter SET ${sets.join(', ')} WHERE id = ? AND novel_id = ?`).run(
+      const write = (): void => { db.prepare(`UPDATE chapter SET ${sets.join(', ')} WHERE id = ? AND novel_id = ?`).run(
         ...params,
         chapterId,
         novelId
-      )
+      ) }
+      if (input.content !== undefined || input.aiWordsDelta !== undefined || input.humanWordsDelta !== undefined) {
+        const protocol = z.object({ expectedContent: z.string(), operationId: z.string().min(1).max(200) }).parse(input)
+        res.json(commitChapterSave(db, novelId, chapterId, protocol, { kind: 'patch', ...input }, write))
+        return
+      }
+      write()
       res.json({ ok: true })
     } catch (err) {
       next(err)

@@ -2,9 +2,12 @@
 import type { Router } from 'express'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
+import { rateLimit } from 'express-rate-limit'
 import { diffLines } from '../../services/diff'
+import { commitChapterSave } from '../../services/chapterSave'
 
 export function registerChapterVersionRoutes(router: Router, db: DatabaseSync): void {
+  const snapshotLimit = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false })
   // ---------- A3 版本历史 ----------
   router.get('/:novelId/chapters/:chapterId/versions', (req, res) => {
     const chapterId = Number(req.params.chapterId)
@@ -32,11 +35,11 @@ export function registerChapterVersionRoutes(router: Router, db: DatabaseSync): 
     })
   })
 
-  router.post('/:novelId/chapters/:chapterId/versions', (req, res, next) => {
+  router.post('/:novelId/chapters/:chapterId/versions', snapshotLimit, (req, res, next) => {
     try {
       const chapterId = Number(req.params.chapterId)
       const novelId = Number(req.params.novelId)
-      const input = z.object({ note: z.string().optional().default('手动快照') }).parse(req.body)
+      const input = z.object({ note: z.string().max(200).optional().default('手动快照'), content: z.string().max(500_000).optional() }).parse(req.body)
       const chapter = db
         .prepare('SELECT content FROM chapter WHERE id = ? AND novel_id = ?')
         .get(chapterId, novelId) as { content: string } | undefined
@@ -46,7 +49,7 @@ export function registerChapterVersionRoutes(router: Router, db: DatabaseSync): 
       }
       const result = db
         .prepare('INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, ?)')
-        .run(chapterId, chapter.content, input.note)
+        .run(chapterId, input.content ?? chapter.content, input.note)
       res.status(201).json({ versionId: Number(result.lastInsertRowid) })
     } catch (err) {
       next(err)
@@ -95,8 +98,9 @@ export function registerChapterVersionRoutes(router: Router, db: DatabaseSync): 
     }
   })
 
-  router.post('/:novelId/chapters/:chapterId/versions/:versionId/restore', (req, res, next) => {
+  router.post('/:novelId/chapters/:chapterId/versions/:versionId/restore', snapshotLimit, (req, res, next) => {
     try {
+      const protocol = z.object({ expectedContent: z.string(), operationId: z.string().min(1).max(200) }).parse(req.body)
       const chapterId = Number(req.params.chapterId)
       const novelId = Number(req.params.novelId)
       const versionId = Number(req.params.versionId)
@@ -107,22 +111,24 @@ export function registerChapterVersionRoutes(router: Router, db: DatabaseSync): 
         res.status(404).json({ error: 'version not found' })
         return
       }
-      // 当前内容先存为新版本（不丢改动），再替换
-      const current = db
-        .prepare('SELECT content, title FROM chapter WHERE id = ? AND novel_id = ?')
-        .get(chapterId, novelId) as { content: string; title: string } | undefined
-      if (current && current.content.trim()) {
-        db.prepare("INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, '恢复前快照')").run(
-          chapterId,
-          current.content
-        )
+      if (!row.content.trim()) {
+        res.status(400).json({ error: '不能恢复空正文版本' })
+        return
       }
-      // v0.22.0（审查 N1·本地设计决策）：版本恢复=整章替换→覆盖计数器（恢复内容归 AI，"不重复计"语义）
       const restoredWordCount = (row.content.match(/[\u4e00-\u9fff]/g) ?? []).length
-      db.prepare(
-        "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, human_words = 0, updated_at = datetime('now') WHERE id = ? AND novel_id = ?"
-      ).run(row.content, restoredWordCount, restoredWordCount, chapterId, novelId)
-      res.json({ content: row.content, wordCount: restoredWordCount })
+      const result = commitChapterSave(db, novelId, chapterId, protocol, { kind: 'restore', versionId, ...protocol }, () => {
+        const current = db
+          .prepare('SELECT content FROM chapter WHERE id = ? AND novel_id = ?')
+          .get(chapterId, novelId) as { content: string }
+        if (current.content.trim()) {
+          db.prepare("INSERT INTO chapter_version (chapter_id, content, note) VALUES (?, ?, '恢复前快照')").run(chapterId, current.content)
+        }
+        // 版本恢复按整章替换计数，与快照和回执同事务。
+        db.prepare(
+          "UPDATE chapter SET content = ?, word_count = ?, ai_words = ?, human_words = 0, updated_at = datetime('now') WHERE id = ? AND novel_id = ?"
+        ).run(row.content, restoredWordCount, restoredWordCount, chapterId, novelId)
+      })
+      res.json({ ...result, content: row.content, wordCount: restoredWordCount })
     } catch (err) {
       next(err)
     }

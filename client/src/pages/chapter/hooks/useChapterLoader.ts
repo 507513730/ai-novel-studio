@@ -9,6 +9,7 @@ import { novelApi } from '../../../api'
 export interface ChapterLoaderDeps {
   novelId: number
   selectedChapter: number | null
+  reloadKey?: number
   setContent: React.Dispatch<React.SetStateAction<string>>
   savedContentRef: React.MutableRefObject<string>
   dirtyRef: React.MutableRefObject<boolean>
@@ -27,6 +28,7 @@ export function useChapterLoader(deps: ChapterLoaderDeps): {
   const {
     novelId,
     selectedChapter,
+    reloadKey,
     setContent,
     savedContentRef,
     dirtyRef,
@@ -40,8 +42,14 @@ export function useChapterLoader(deps: ChapterLoaderDeps): {
 
   // P9 A1：选中章节变化 → 按需加载正文（竞态序号丢弃过期响应）
   useEffect(() => {
-    if (!selectedChapter) return
     const seq = ++detailSeqRef.current
+    let cancelled = false
+    if (!selectedChapter) {
+      loadedChapterRef.current = null
+      contentLoadingRef.current = false
+      setContentLoading(false)
+      return
+    }
     contentLoadingRef.current = true
     setContentLoading(true)
     setContent('')
@@ -52,23 +60,24 @@ export function useChapterLoader(deps: ChapterLoaderDeps): {
     void novelApi
       .chapterDetail(novelId, selectedChapter)
       .then((d) => {
-        if (seq !== detailSeqRef.current) return
+        if (cancelled || seq !== detailSeqRef.current) return
         setContent(d.chapter.content ?? '')
         savedContentRef.current = d.chapter.content ?? ''
         loadedChapterRef.current = selectedChapter
       })
       .catch((err) => {
-        if (seq !== detailSeqRef.current) return
+        if (cancelled || seq !== detailSeqRef.current) return
         onSwitchError(`正文加载失败：${err instanceof Error ? err.message : String(err)}（重新选择章节可重试）`)
       })
       .finally(() => {
-        if (seq === detailSeqRef.current) {
+        if (!cancelled && seq === detailSeqRef.current) {
           contentLoadingRef.current = false
           setContentLoading(false)
         }
       })
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChapter])
+  }, [novelId, selectedChapter, reloadKey])
 
   return { contentLoading, contentLoadingRef }
 }

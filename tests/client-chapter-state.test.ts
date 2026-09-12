@@ -32,7 +32,7 @@ function sessionProps(overrides: Partial<Parameters<typeof useEditorSession>[0]>
     editorRef: { current: null },
     streamingRef: { current: false },
     contentLoadingRef: { current: false },
-    loadedChapterRef: { current: null },
+    loadedChapterRef: { current: 7 },
     savedContentRef: { current: '' },
     dirtyRef: { current: false },
     invalidate: async () => undefined,
@@ -44,7 +44,7 @@ function sessionProps(overrides: Partial<Parameters<typeof useEditorSession>[0]>
 }
 
 describe('useEditorSession（R7）', () => {
-  it('空内容保护：服务端已有正文时跳过保存且不发请求（P9 A1）', async () => {
+  it('空内容保护：服务端已有正文时拒绝保存并保留未保存标记（D145）', async () => {
     const savedContentRef = { current: '已有正文' }
     const loadedChapterRef = { current: 7 }
     const dirtyRef = { current: true }
@@ -52,10 +52,10 @@ describe('useEditorSession（R7）', () => {
       useEditorSession(sessionProps({ savedContentRef, loadedChapterRef, dirtyRef }))
     )
     await act(async () => {
-      await result.current.saveContent()
+      await expect(result.current.saveContent()).rejects.toThrow('正文为空')
     })
     expect(chapterPatchMock).not.toHaveBeenCalled()
-    expect(dirtyRef.current).toBe(false)
+    expect(dirtyRef.current).toBe(true)
     expect(result.current.content).toBe('')
   })
 
@@ -70,8 +70,9 @@ describe('useEditorSession（R7）', () => {
     expect(chapterPatchMock).toHaveBeenCalledTimes(1)
     expect(chapterPatchMock.mock.calls[0][2]).toMatchObject({ content: '' })
 
+    savedContentRef.current = '已有正文'
     const b = renderHook(() => useEditorSession(sessionProps({ savedContentRef, loadedChapterRef, dirtyRef: { current: true } })))
-    b.result.current.setContent('已有正文')
+    act(() => b.result.current.setContent('已有正文'))
     await act(async () => {
       await b.result.current.saveContent()
     })
@@ -100,8 +101,8 @@ describe('useEditorSession（R7）', () => {
     const toast = vi.fn()
     chapterPatchMock.mockRejectedValue(new Error('网络中断'))
     const { result } = renderHook(() => useEditorSession(sessionProps({ onActionError, toast })))
-    result.current.setContent('新内容')
-    await expect(result.current.saveContent({ force: true })).rejects.toThrow('网络中断')
+    act(() => result.current.setContent('新内容'))
+    await act(async () => { await expect(result.current.saveContent({ force: true })).rejects.toThrow('网络中断') })
     expect(onActionError).toHaveBeenCalledWith('保存失败：网络中断')
     expect(toast).toHaveBeenCalledWith('error', '保存失败：网络中断')
   })
@@ -116,6 +117,48 @@ describe('useEditorSession（R7）', () => {
 })
 
 describe('useChapterLoader（R7）', () => {
+  it('加载失败后改变reloadKey可重新加载同章', async () => {
+    chapterDetailMock.mockRejectedValueOnce(Error('临时离线')).mockResolvedValue({ chapter: { content: '重试正文' } })
+    const props = { novelId: 1, selectedChapter: 7, savedContentRef: { current: '' },
+      loadedChapterRef: { current: null as number | null }, setContent: vi.fn(), dirtyRef: { current: false },
+      contentLoadingRef: { current: false }, resetSessionBits: vi.fn(), onSwitchError: vi.fn() }
+    const { rerender } = renderHook(({ reloadKey }) => useChapterLoader({ ...props, reloadKey }), { initialProps: { reloadKey: 0 } })
+    await act(async () => { await Promise.resolve() })
+    expect(props.loadedChapterRef.current).toBeNull()
+    expect(props.onSwitchError).toHaveBeenCalledWith(expect.stringContaining('临时离线'))
+    rerender({ reloadKey: 1 })
+    await act(async () => { await Promise.resolve() })
+    expect(chapterDetailMock).toHaveBeenCalledTimes(2)
+    expect(props.savedContentRef.current).toBe('重试正文')
+    expect(props.loadedChapterRef.current).toBe(7)
+  })
+  it('卸载后迟到的正文响应不写共享引用', async () => {
+    let resolve!: (value: { chapter: { content: string } }) => void
+    chapterDetailMock.mockReturnValue(new Promise(yes => { resolve = yes }))
+    const savedContentRef = { current: '' }
+    const loadedChapterRef = { current: null as number | null }
+    const setContent = vi.fn()
+    const { unmount } = renderHook(() => useChapterLoader({ novelId: 1, selectedChapter: 7,
+      savedContentRef, loadedChapterRef, setContent, dirtyRef: { current: false }, contentLoadingRef: { current: false },
+      resetSessionBits: vi.fn(), onSwitchError: vi.fn() }))
+    unmount()
+    setContent.mockClear()
+    await act(async () => { resolve({ chapter: { content: '过期正文' } }) })
+    expect(setContent).not.toHaveBeenCalled()
+    expect(loadedChapterRef.current).toBeNull()
+    expect(savedContentRef.current).toBe('')
+  })
+  it('小说身份变更即重新加载，即使章节编号相同', async () => {
+    chapterDetailMock.mockResolvedValue({ chapter: { content: '正文' } })
+    const props = { selectedChapter: 7, savedContentRef: { current: '' }, loadedChapterRef: { current: null as number | null },
+      setContent: vi.fn(), dirtyRef: { current: false }, contentLoadingRef: { current: false },
+      resetSessionBits: vi.fn(), onSwitchError: vi.fn() }
+    const { rerender } = renderHook(({ novelId }) => useChapterLoader({ ...props, novelId }), { initialProps: { novelId: 1 } })
+    await act(async () => { await Promise.resolve() })
+    rerender({ novelId: 2 })
+    await act(async () => { await Promise.resolve() })
+    expect(chapterDetailMock).toHaveBeenLastCalledWith(2, 7)
+  })
   it('加载落定：正文/已存快照/loadedChapter 回填，loading 结束', async () => {
     const savedContentRef = { current: '' }
     const loadedChapterRef = { current: null as number | null }

@@ -6,11 +6,13 @@ import type { ChapterSummary } from '../../types'
 export const ChapterListItem = memo(function ChapterListItem({
   c,
   selected,
-  onSelect
+  onSelect,
+  pendingAi = false
 }: {
   c: ChapterSummary
   selected: boolean
   onSelect: () => void
+  pendingAi?: boolean
 }): React.JSX.Element {
   const stColor =
     c.status === 'reviewed' || c.status === 'done'
@@ -44,9 +46,10 @@ export const ChapterListItem = memo(function ChapterListItem({
           style={{ width: 7, height: 7, borderRadius: 4, background: stColor, display: 'inline-block', flexShrink: 0 }}
         />
         <span className="muted t-small">
-          {c.status} {c.volumeTitle ? `· ${c.volumeTitle}` : ''}
+          {({ planned: '待写', generating: '生成中', written: '已写', reviewed: '已审核', done: '已完成', failed: '失败', imported: '已导入' } as Record<string, string>)[c.status] ?? c.status} {c.volumeTitle ? `· ${c.volumeTitle}` : ''}
         </span>
       </div>
+      {pendingAi && <span className="muted t-small" style={{ color: 'var(--warn)' }}>AI 结果待采用</span>}
       <div style={{ fontSize: 'var(--fs-11)', marginTop: 2, color: 'var(--text-faint)' }}>
         {c.status === 'planned' && '下一步：生成正文'}
         {c.status === 'written' && '下一步：AI 审核'}

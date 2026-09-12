@@ -3,12 +3,14 @@
 // ② 普通失败继续下一章并计 failed；③ ConfigError 熔断整批且未尝试章节保持 planned。
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
-const { generateChapterMock, callLlmJsonMock } = vi.hoisted(() => ({
+const { generateChapterMock, callLlmJsonMock, runProductionChapterMock } = vi.hoisted(() => ({
   generateChapterMock: vi.fn(),
+  runProductionChapterMock: vi.fn(),
   callLlmJsonMock: vi.fn()
 }))
 vi.mock('../server/src/services/chapterGeneration/orchestrator', () => ({ generateChapter: (...a: unknown[]) => generateChapterMock(...a) }))
 vi.mock('../server/src/services/jsonSafe', () => ({ callLlmJson: (...a: unknown[]) => callLlmJsonMock(...a) }))
+vi.mock('../server/src/services/solutionRunner', () => ({ runProductionChapter: (...a: unknown[]) => runProductionChapterMock(...a) }))
 
 import { DatabaseSync } from 'node:sqlite'
 import { applyMigrations } from '../server/src/db/migrate'
@@ -57,6 +59,7 @@ function succeedWithContent(db: DatabaseSync): void {
 
 beforeEach(() => {
   generateChapterMock.mockReset()
+  runProductionChapterMock.mockReset()
   callLlmJsonMock.mockReset()
   // 审核/回灌默认成功：高分免修 + 空回灌
   callLlmJsonMock.mockImplementation((_db: unknown, _t: string, _o: unknown, _p: unknown, label: string) => {
@@ -67,6 +70,83 @@ beforeEach(() => {
 })
 
 describe('整本生产幂等与熔断（R4.3）', () => {
+  it('方案等待期间人工保存后方案失败，默认生成回退拒绝原基线', async () => {
+    const db = makeDb()
+    const { novelId, chapterIds } = seedNovelWithChapters(db, 1)
+    const steps = JSON.stringify([{ agentId: 1, role: '正文', stage: 'whole_book' }])
+    const solutionId = Number(db.prepare("INSERT INTO solution(name,steps_json,enabled) VALUES('生产方案',?,1)").run(steps).lastInsertRowid)
+    db.prepare('UPDATE novel SET current_solution_id=? WHERE id=?').run(solutionId, novelId)
+    const actual = await vi.importActual<typeof import('../server/src/services/chapterGeneration/orchestrator')>('../server/src/services/chapterGeneration/orchestrator')
+    generateChapterMock.mockImplementation(actual.generateChapter)
+    runProductionChapterMock.mockImplementation(async () => {
+      await Promise.resolve()
+      db.prepare("UPDATE chapter SET content='人工稿', status='written' WHERE id=?").run(chapterIds[0])
+      throw new Error('方案失败')
+    })
+    try {
+      const progress = await runProductionPipeline(db, novelId, () => {})
+      expect(runProductionChapterMock).toHaveBeenCalledTimes(1)
+      expect(generateChapterMock).toHaveBeenCalledWith(db, novelId, chapterIds[0], { expectedContent: '' })
+      expect(progress.failed).toBe(1)
+      expect(progress.currentAction).toBe('正文已修改，停止生成重试')
+      expect(db.prepare('SELECT content,status,generation_token FROM chapter WHERE id=?').get(chapterIds[0])).toMatchObject({ content: '人工稿', status: 'written', generation_token: null })
+      expect(callLlmJsonMock).not.toHaveBeenCalled()
+    } finally { db.close() }
+  })
+
+  it('低字数重试等待期间人工保存，真实生成入口拒绝旧基线且不重新抢占', async () => {
+    const db = makeDb()
+    const { novelId, chapterIds } = seedNovelWithChapters(db, 1)
+    const actual = await vi.importActual<typeof import('../server/src/services/chapterGeneration/orchestrator')>('../server/src/services/chapterGeneration/orchestrator')
+    generateChapterMock.mockImplementationOnce(async () => {
+      db.prepare("UPDATE chapter SET content='短稿', status='written' WHERE id=?").run(chapterIds[0])
+      return { ...GOOD_GENERATION, content: '短稿', wordCount: 2 }
+    }).mockImplementationOnce(actual.generateChapter)
+    try {
+      const progress = await runProductionPipeline(db, novelId, p => {
+        if (p.currentAction === '生成重试（第 1 次不达标）') db.prepare("UPDATE chapter SET content='人工稿', status='written' WHERE id=?").run(chapterIds[0])
+      })
+      expect(progress.failed).toBe(1)
+      expect(progress.currentAction).toBe('正文已修改，停止生成重试')
+      expect(generateChapterMock).toHaveBeenLastCalledWith(db, novelId, chapterIds[0], { expectedContent: '短稿' })
+      expect(db.prepare('SELECT content,status,generation_token FROM chapter WHERE id=?').get(chapterIds[0])).toMatchObject({ content: '人工稿', status: 'written', generation_token: null })
+      expect(callLlmJsonMock).not.toHaveBeenCalled()
+    } finally { db.close() }
+  })
+
+  it('生产修复迟到不覆盖人工稿，候选落库并停止回灌', async () => {
+    const db = makeDb()
+    const { novelId, chapterIds } = seedNovelWithChapters(db, 1)
+    succeedWithContent(db)
+    callLlmJsonMock.mockImplementation(async (_db: unknown, _t: string, _o: unknown, _p: unknown, label: string) => {
+      if (label === 'production-review') return { score: 20, issues: [{ severity: 'high', problem: '矛盾', suggestion: '修改' }], needsFix: true }
+      if (label === 'production-patch') {
+        db.prepare('UPDATE chapter SET content=? WHERE id=?').run('人工修订', chapterIds[0])
+        return { patches: [{ target: GOOD_GENERATION.content, replacement: '新'.repeat(300) }] }
+      }
+      if (label === 'production-rescore') return { score: 90 }
+      throw new Error(`unexpected call: ${label}`)
+    })
+    try {
+      await runProductionPipeline(db, novelId, () => {})
+      expect(db.prepare('SELECT content FROM chapter WHERE id=?').get(chapterIds[0])?.content).toBe('人工修订')
+      expect(db.prepare('SELECT content FROM chapter_version WHERE chapter_id=?').get(chapterIds[0])?.content).toBe('新'.repeat(300))
+      expect(callLlmJsonMock.mock.calls.some(args => args[4] === 'production-backfill')).toBe(false)
+    } finally { db.close() }
+  })
+
+  it('生成域报告冲突时不再重试模型或审核', async () => {
+    const db = makeDb()
+    const { novelId } = seedNovelWithChapters(db, 1)
+    generateChapterMock.mockResolvedValue({ ...GOOD_GENERATION, persisted: false, wordCount: 1, candidateVersionId: 1 })
+    try {
+      const progress = await runProductionPipeline(db, novelId, () => {})
+      expect(progress.failed).toBe(1)
+      expect(generateChapterMock).toHaveBeenCalledTimes(1)
+      expect(callLlmJsonMock).not.toHaveBeenCalled()
+    } finally { db.close() }
+  })
+
   it('kill 后恢复：已有正文的章节不再调用模型；空章节继续生产', async () => {
     const db = makeDb()
     const { novelId, chapterIds } = seedNovelWithChapters(db, 2)

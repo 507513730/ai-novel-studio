@@ -145,7 +145,7 @@ describe('章节执行路由契约（R5 拆分回归）', () => {
       expect(diff.status).toBe(200)
       expect(((await diff.json()) as { versionId: number }).versionId).toBe(versionId)
 
-      const restore = await fetch(`${base_}/versions/${versionId}/restore`, { method: 'POST' })
+      const restore = await fetch(`${base_}/versions/${versionId}/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ expectedContent: '全新正文内容', operationId: 'restore-1' }) })
       expect(restore.status).toBe(200)
       const restored = (await restore.json()) as { content: string; wordCount: number }
       expect(restored.content).toBe('天地玄黄，宇宙洪荒。')

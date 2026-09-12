@@ -8,7 +8,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Annotation, type AnnotationType } from '@codemirror/state'
-import { novelApi } from '../../../api'
+import { useChapterSave } from './useChapterSave'
 import { countCjk } from '../types'
 
 // v0.19.0：AI 写入标记（字数分离：区分 AI 插入与人工输入）
@@ -24,6 +24,7 @@ export interface EditorSessionDeps {
   loadedChapterRef: React.MutableRefObject<number | null>
   savedContentRef: React.MutableRefObject<string>
   dirtyRef: React.MutableRefObject<boolean>
+  readContent?: () => string
   invalidate: () => Promise<void>
   toast: (type: 'ok' | 'error' | 'info', msg: string) => void
   // 非静默保存结果提示（页面接 actionMsg；2s 自动清除）
@@ -36,6 +37,10 @@ export function useEditorSession(deps: EditorSessionDeps): {
   content: string
   setContent: React.Dispatch<React.SetStateAction<string>>
   saving: boolean
+  saveError: string | null
+  hasConflict: boolean
+  resolveConflict: () => Promise<void>
+  resolvingConflict: boolean
   wordStats: { ai: number; human: number }
   setWordStats: React.Dispatch<React.SetStateAction<{ ai: number; human: number }>>
   aiDeltaRef: React.MutableRefObject<number>
@@ -52,25 +57,19 @@ export function useEditorSession(deps: EditorSessionDeps): {
     changes: { inserted?: string }
   }) => void
   saveContent: (opts?: { silent?: boolean; force?: boolean }) => Promise<void>
+  readContent: () => string
   hanCount: number
 } {
-  const {
-    novelId,
-    selectedChapter,
-    editorRef,
-    streamingRef,
-    contentLoadingRef,
-    loadedChapterRef,
-    savedContentRef,
-    dirtyRef,
-    invalidate,
-    toast,
-    notify,
-    onActionError
-  } = deps
+  const { editorRef, streamingRef } = deps
 
-  const [content, setContent] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [content, updateContent] = useState('')
+  const contentRef = useRef(content)
+  const setContent: React.Dispatch<React.SetStateAction<string>> = (next) => {
+    const value = typeof next === 'function' ? next(contentRef.current) : next
+    contentRef.current = value
+    updateContent(value)
+  }
+  const readContent = () => editorRef.current?.view?.state.doc.toString() ?? contentRef.current
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; cursor: number }>({ text: '', cursor: -1 })
   const selectionRef = useRef({ text: '', cursor: -1 })
   // ============ v0.19.0：字数分离（人类/AI）============
@@ -164,65 +163,15 @@ export function useEditorSession(deps: EditorSessionDeps): {
     }
   }
 
-  const saveContent = async (opts?: { silent?: boolean; force?: boolean }): Promise<void> => {
-    if (!selectedChapter) return
-    if (contentLoadingRef.current || streamingRef.current) return
-    const view = editorRef.current?.view
-    const text = view ? view.state.doc.toString() : content
-    setContent(text)
-    // P9 A1：空内容保护——服务端已有正文时禁止空覆盖、禁止置 written
-    if (!text.trim()) {
-      const hasSaved = loadedChapterRef.current === selectedChapter && savedContentRef.current.trim().length > 0
-      if (hasSaved && !opts?.force) {
-        dirtyRef.current = false
-        if (!opts?.silent) notify('内容为空，跳过保存')
-        return
-      }
-    }
-    // 脏检查：与已保存内容一致则不请求
-    if (
-      !opts?.force &&
-      loadedChapterRef.current === selectedChapter &&
-      text === savedContentRef.current
-    ) {
-      dirtyRef.current = false
-      return
-    }
-    setSaving(true)
-    try {
-      const patch: Record<string, unknown> = { content: text }
-      if (text.trim()) patch.status = 'written'
-      // v0.19.0：字数分离增量上报（累计后清零；0 增量不发）
-      const aiD = aiDeltaRef.current
-      const humanD = humanDeltaRef.current
-      if (aiD > 0) {
-        patch.aiWordsDelta = aiD
-        aiDeltaRef.current = 0
-      }
-      if (humanD > 0) {
-        patch.humanWordsDelta = humanD
-        humanDeltaRef.current = 0
-      }
-      await novelApi.chapterPatch(novelId, selectedChapter, patch)
-      savedContentRef.current = text
-      dirtyRef.current = false
-      await invalidate()
-      if (!opts?.silent) notify('已保存')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      toast('error', `保存失败：${msg}`)
-      onActionError(`保存失败：${msg}`)
-      // 上抛：切章/快捷键调用方依赖中断语义（P9 A4/A1）
-      throw err
-    } finally {
-      setSaving(false)
-    }
-  }
+  const { saving, saveContent, saveError, hasConflict, resolveConflict, resolvingConflict } = useChapterSave({ ...deps, content, setContent, readContent, aiDeltaRef, humanDeltaRef,
+    onSavedDeltas: (ai, human) => setWordStats(s => ({ ai: Math.max(0, s.ai - ai), human: Math.max(0, s.human - human) })) })
 
   return {
     content,
     setContent,
     saving,
+    saveError,
+    hasConflict, resolveConflict, resolvingConflict,
     wordStats,
     setWordStats,
     aiDeltaRef,
@@ -235,6 +184,7 @@ export function useEditorSession(deps: EditorSessionDeps): {
     insertAi,
     trackHumanWords,
     saveContent,
+    readContent,
     hanCount
   }
 }

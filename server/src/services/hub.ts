@@ -156,18 +156,15 @@ function toolsFor(_db: DatabaseSync): HubTool[] {
           const result = (await runToolWithSignal(
             (signal) => generateChapter(db2, novelId, chapterId, { signal }),
             TOOL_TIMEOUT_MS
-          )) as { wordCount: number; aborted: boolean }
+          )) as { wordCount: number; aborted: boolean; persisted?: boolean; candidateVersionId?: number }
           return JSON.stringify({
             chapter: ch.title,
             wordCount: result.wordCount,
-            ok: result.wordCount > 200,
-            note: result.aborted ? '生成被中止' : '生成完成'
+            ok: result.persisted !== false && result.wordCount > 200,
+            candidateVersionId: result.candidateVersionId,
+            note: result.persisted === false ? '正文已修改，AI 结果保留为待采用版本' : result.aborted ? '生成被中止' : '生成完成'
           })
         } catch (err) {
-          // v0.17.0（审查 H4）：失败复位（generateChapter 已自复位，此处双保险防绕过）
-          db2.prepare(
-            "UPDATE chapter SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'generating'"
-          ).run(chapterId)
           return JSON.stringify({ error: `生成失败: ${err instanceof Error ? err.message : String(err)}` })
         }
       }

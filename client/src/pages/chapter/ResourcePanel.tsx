@@ -34,7 +34,8 @@ export function ResourcePanel({
   onSelectChapter,
   onShowDetail,
   onNewChapter,
-  onOpenWorkspace
+  onOpenWorkspace,
+  pendingChapterIds = []
 }: {
   novelId: number
   hidden: boolean
@@ -46,6 +47,7 @@ export function ResourcePanel({
   onShowDetail: (detail: ResourceDetail) => void
   onNewChapter: () => void
   onOpenWorkspace: () => void
+  pendingChapterIds?: number[]
 }): React.JSX.Element {
   const [resourceTab, setResourceTab] = useState<ResourceTabKey>('chapters')
   const [resourceChars, setResourceChars] = useState<Array<{ id: number; name: string; status: string; profile: Record<string, unknown> }> | null>(null)
@@ -90,8 +92,8 @@ export function ResourcePanel({
 
   return (
     <div
+      className="workspace-resource"
       style={{
-        width: 260,
         borderRight: '1px solid var(--border)',
         padding: 12,
         overflowY: 'auto',
@@ -99,8 +101,8 @@ export function ResourcePanel({
         display: hidden ? 'none' : undefined
       }}
     >
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-        <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4, marginBottom: 12 }}>
           {TABS.map(([k, label, Icon]) => (
             <button
               key={k}
@@ -133,6 +135,7 @@ export function ResourcePanel({
               key={c.id}
               c={c}
               selected={selectedChapter === c.id}
+              pendingAi={pendingChapterIds.includes(c.id)}
               onSelect={() => onSelectChapter(c.id)}
             />
           ))}

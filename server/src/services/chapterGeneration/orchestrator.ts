@@ -13,6 +13,7 @@ import { persistGeneratedChapter } from './persistence'
 import { postProcessGeneratedContent } from './postProcess'
 
 export interface GenerateOptions {
+  expectedContent?: string
   signal?: AbortSignal
   onDelta?: (text: string) => void
   onThinking?: (text: string) => void
@@ -22,6 +23,8 @@ export interface GenerateOptions {
 }
 
 export interface GenerateResult {
+  persisted?: boolean
+  candidateVersionId?: number
   content: string
   wordCount: number
   aborted: boolean
@@ -42,7 +45,7 @@ export async function generateChapter(
   chapterId: number,
   opts: GenerateOptions = {}
 ): Promise<GenerateResult> {
-  const claim = claimChapter(db, novelId, chapterId)
+  const claim = claimChapter(db, novelId, chapterId, opts.expectedContent)
 
   // v0.17.0（审查 H2）：抢占后全链路 try/catch——任何异常/空内容都复位状态，杜绝永久卡 'generating'
   try {
@@ -155,6 +158,8 @@ export async function generateChapter(
     return {
       content,
       wordCount: persisted.wordCount,
+      persisted: persisted.persisted,
+      candidateVersionId: persisted.candidateVersionId,
       aborted,
       usage: { input: usageInput, output: usageOutput, cacheHit, cacheMiss },
       degradedReasons: processed.degradedReasons

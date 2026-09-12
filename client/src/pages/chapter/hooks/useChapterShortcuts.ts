@@ -94,8 +94,8 @@ export function useChapterShortcuts(deps: {
     const unsubs = [
       onShortcut('save', () => void l.current?.saveContent().catch(() => undefined)),
       onShortcut('generate', () => void l.current?.generate()),
-      onShortcut('review', () => void l.current?.withBusy('review', () => void l.current?.runReview())),
-      onShortcut('backfill', () => void l.current?.withBusy('backfill', () => void l.current?.backfill())),
+      onShortcut('review', () => void l.current?.withBusy('review', () => l.current?.runReview())),
+      onShortcut('backfill', () => void l.current?.withBusy('backfill', () => l.current?.backfill())),
       onShortcut('focus-mode', () => setFocusMode((v) => !v))
     ]
     return () => unsubs.forEach((u) => u())

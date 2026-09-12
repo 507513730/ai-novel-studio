@@ -349,7 +349,7 @@ export async function t5() {
     ok(c1.id > 0 && c2.id > 0, 'T5 手动建章')
     await api(`/novels/${novelId}/chapters/${c1.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ content: '油灯在桌上静静燃着。他伸手碰了碰灯罩，指尖传来一阵温热。', status: 'written', aiWordsDelta: 30 })
+      body: JSON.stringify({ content: '油灯在桌上静静燃着。他伸手碰了碰灯罩，指尖传来一阵温热。', expectedContent: '', operationId: crypto.randomUUID(), status: 'written', aiWordsDelta: 30 })
     })
 
     // ---- 全书检索（F2） ----
@@ -363,7 +363,7 @@ export async function t5() {
     ok(snap.ok && snap.body.versionId > 0, '版本快照', snap.error ?? '')
     await api(`/novels/${novelId}/chapters/${c1.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ content: '油灯在桌上静静燃着。他把灯芯挑亮了一分，指尖传来一阵温热。' })
+      body: JSON.stringify({ content: '油灯在桌上静静燃着。他把灯芯挑亮了一分，指尖传来一阵温热。', expectedContent: '油灯在桌上静静燃着。他伸手碰了碰灯罩，指尖传来一阵温热。', operationId: crypto.randomUUID() })
     })
     const diff = await apiTry(`/novels/${novelId}/chapters/${c1.id}/versions/${snap.body.versionId}/diff`)
     ok(diff.ok && diff.body.lines.some((l) => l.type === 'add' || l.type === 'del'), '版本 diff（增删行）', diff.error ?? '')

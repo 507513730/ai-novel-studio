@@ -3,6 +3,7 @@ import { novelApi } from '../../../api'
 import type { VersionDiffInfo } from '../../../types'
 import type { ChapterVersion, CtxSection, MemoryData, PendingData, ResourceDetail } from '../types'
 import type { VersionActions } from '../VersionHistoryPanel'
+import { useChapterIdentity } from './useChapterIdentity'
 
 // v0.26.0（批次 B）：章节产物面板（待确认/记忆面/版本/上下文/资源详情）从页面拆出（AGENTS #38 先抽 hook）
 // 回灌动作与其产物确认同置于此（confirmStates 需要关闭待确认浮层）
@@ -16,6 +17,8 @@ export function useChapterArtifacts(options: {
   setContent: (v: string) => void
   savedContentRef: React.RefObject<string>
   dirtyRef: React.RefObject<boolean>
+  readContent: () => string
+  saveContent: () => Promise<void>
   onActionError: (msg: string | null) => void
 }): {
   pending: PendingData | null
@@ -53,17 +56,30 @@ export function useChapterArtifacts(options: {
 } {
   const { novelId, selectedChapter, notify, withBusy, confirmFn, invalidate, setContent, savedContentRef, dirtyRef, onActionError } = options
   const id = novelId
+  const identity = useChapterIdentity(novelId, selectedChapter)
+  const latest = useRef(options)
+  latest.current = options
+  const requests = useRef<Record<string, number>>({})
+  const begin = (key: string): (() => boolean) => {
+    const token = identity.capture()
+    const sequence = (requests.current[key] ?? 0) + 1
+    requests.current[key] = sequence
+    return () => identity.isActive(token) && requests.current[key] === sequence
+  }
+  const restoreBusy = useRef(false)
 
   // 待确认区（B0）
   const [pending, setPending] = useState<PendingData | null>(null)
   const [showPending, setShowPending] = useState(false)
   const loadPending = async (): Promise<void> => {
+    const valid = begin('pending')
     try {
       const r = await novelApi.pending(id)
+      if (!valid()) return
       setPending(r)
       setShowPending(true)
     } catch (err) {
-      onActionError(err instanceof Error ? err.message : String(err))
+      if (valid()) onActionError(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -72,9 +88,11 @@ export function useChapterArtifacts(options: {
   const [showMemory, setShowMemory] = useState(false)
   const [memoryBusy, setMemoryBusy] = useState(false)
   const loadMemory = async (): Promise<void> => {
+    const valid = begin('memory')
     setMemoryBusy(true)
     try {
       const r = await novelApi.memory(id)
+      if (!valid()) return
       setMemory(r)
       setShowMemory(true)
     } catch (err) {
@@ -87,11 +105,13 @@ export function useChapterArtifacts(options: {
   const memoryPatchBusyRef = useRef(false)
   const [memoryPatchBusy, setMemoryPatchBusy] = useState(false)
   const patchCharState = async (name: string, state: string, remove: boolean): Promise<void> => {
+    const valid = begin('patchMemory')
     if (memoryPatchBusyRef.current) return
     memoryPatchBusyRef.current = true
     setMemoryPatchBusy(true)
     try {
       await novelApi.memoryCharacter(id, { name, state, remove })
+      if (!valid()) return
       await loadMemory()
     } catch (err) {
       onActionError(err instanceof Error ? err.message : String(err))
@@ -101,11 +121,13 @@ export function useChapterArtifacts(options: {
     }
   }
   const patchFactionState = async (name: string, state: string): Promise<void> => {
+    const valid = begin('patchMemory')
     if (memoryPatchBusyRef.current) return
     memoryPatchBusyRef.current = true
     setMemoryPatchBusy(true)
     try {
       await novelApi.memoryFaction(id, { name, state })
+      if (!valid()) return
       await loadMemory()
     } catch (err) {
       onActionError(err instanceof Error ? err.message : String(err))
@@ -121,8 +143,10 @@ export function useChapterArtifacts(options: {
   const [versionDiff, setVersionDiff] = useState<VersionDiffInfo | null>(null)
   const loadVersions = async (): Promise<void> => {
     if (!selectedChapter) return
+    const valid = begin('versions')
     try {
       const r = await novelApi.versions(id, selectedChapter)
+      if (!valid()) return
       setVersions(r.versions)
       setShowVersions(true)
       setVersionDiff(null)
@@ -133,8 +157,12 @@ export function useChapterArtifacts(options: {
 
   const snapshotNow = async (): Promise<void> => {
     if (!selectedChapter) return
+    const active = begin('snapshot')
     try {
+      await options.saveContent()
+      if (!active()) return
       await novelApi.createVersion(id, selectedChapter, '手动快照')
+      if (!active()) return
       notify('已创建版本快照')
       await loadVersions()
     } catch (err) {
@@ -147,8 +175,10 @@ export function useChapterArtifacts(options: {
   const [ctxToggles, setCtxToggles] = useState<Record<string, boolean> | null>(null)
   const loadContextPreview = async (): Promise<void> => {
     if (!selectedChapter) return
+    const valid = begin('context')
     try {
       const r = await novelApi.contextPreview(id, selectedChapter)
+      if (!valid()) return
       setCtxSections(r.sections)
       setCtxToggles((prev) => {
         if (prev) return prev
@@ -172,9 +202,11 @@ export function useChapterArtifacts(options: {
   const versionActions: VersionActions = {
     view: (v) => {
       if (!selectedChapter) return
+      const valid = begin('versionView')
       void withBusy(`vview-${v.id}`, async () => {
         try {
           const r = await novelApi.chapterVersionDetail(id, selectedChapter, v.id)
+          if (!valid()) return
           setResourceDetail({ title: `版本 #${v.id}（${v.note} · ${v.createdAt}）`, body: r.version.content })
         } catch (err) {
           onActionError(err instanceof Error ? err.message : String(err))
@@ -183,6 +215,7 @@ export function useChapterArtifacts(options: {
     },
     restore: (v) => {
       if (!selectedChapter) return
+      const active = begin('restore')
       confirmFn({
         title: '恢复版本',
         message: `恢复为版本 #${v.id}？当前内容会先存入新版本，然后被替换。`,
@@ -190,24 +223,41 @@ export function useChapterArtifacts(options: {
         danger: true,
         action: () =>
           void withBusy(`vrestore-${v.id}`, async () => {
+            if (!active() || restoreBusy.current) return
+            restoreBusy.current = true
             try {
-              const r = await novelApi.chapterVersionRestore(id, selectedChapter, v.id)
-              setContent(r.content)
-              savedContentRef.current = r.content
+              await options.saveContent()
+              if (!active()) return
+              const original = latest.current.readContent()
+              const r = await novelApi.chapterVersionRestore(id, selectedChapter, v.id, {
+                expectedContent: original, operationId: crypto.randomUUID()
+              })
+              if (!active()) { await invalidate(); return }
+              const currentContent = r.currentContent ?? r.content
+              savedContentRef.current = currentContent
+              if (latest.current.readContent() !== original || currentContent !== r.content) {
+                dirtyRef.current = latest.current.readContent() !== currentContent
+                notify('版本已恢复，当前新增输入已保留，请核对后保存')
+                await invalidate()
+                return
+              }
+              setContent(currentContent)
               dirtyRef.current = false
               notify(`已恢复版本 #${v.id}（${r.wordCount} 字），原内容已存为新版本`)
               await invalidate()
             } catch (err) {
-              onActionError(err instanceof Error ? err.message : String(err))
-            }
+              if (active()) onActionError(err instanceof Error ? err.message : String(err))
+            } finally { restoreBusy.current = false }
           })
       })
     },
     diff: (v) => {
       if (!selectedChapter) return
+      const valid = begin('diff')
       void withBusy(`vdiff-${v.id}`, async () => {
         try {
           const d = await novelApi.chapterVersionDiff(id, selectedChapter, v.id)
+          if (!valid()) return
           setVersionDiff(d)
         } catch (err) {
           onActionError(err instanceof Error ? err.message : String(err))
@@ -228,10 +278,13 @@ export function useChapterArtifacts(options: {
   const [backfillResult, setBackfillResult] = useState<Record<string, unknown> | null>(null)
   const backfill = async (): Promise<void> => {
     if (!selectedChapter) return
+    const valid = begin('backfill')
+    const original = options.readContent()
     onActionError(null)
     notify('回灌提取中…')
     try {
       const r = await novelApi.backfill(id, selectedChapter)
+      if (!valid() || latest.current.readContent() !== original) return
       setBackfillResult(r)
       notify('回灌完成：角色状态 / 新事实 / 伏笔已进入待确认区')
     } catch (err) {

@@ -6,7 +6,8 @@
 // - 成本确认：生成前 themed confirm（未保存 + 成本合并一次确认，v0.22.0）
 import { useEffect, useRef, useState } from 'react'
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror'
-import { generateChapterSse } from '../../../api'
+import { generateChapterSse, novelApi } from '../../../api'
+import { useChapterIdentity } from './useChapterIdentity'
 import { estimateCost, estimateTokens, fmtCost } from '../../../utils/costEstimate'
 
 export interface GenerationControllerDeps {
@@ -67,6 +68,7 @@ export function useGenerationController(deps: GenerationControllerDeps): {
   const rAFRef = useRef<number | null>(null)
   // 批1-#3（v0.7.2）：内容已由 onDone/onAborted/onError 落定的标记——落定后不再 flush rAF 缓冲（防尾段重复追加）
   const contentSettledRef = useRef(false)
+  const identity = useChapterIdentity(novelId, selectedChapter)
 
   // P2.2 🟢14：组件卸载时中止生成流（防止继续 setState + 浪费额度）
   useEffect(() => {
@@ -80,6 +82,7 @@ export function useGenerationController(deps: GenerationControllerDeps): {
     if (generateBusyRef.current) return
     const view = editorRef.current?.view
     const current = view ? view.state.doc.toString() : content
+    const owner = identity.capture()
     // v0.22.0（审查 ALOW）：themed confirm 统一（未保存 + 成本合并一次确认）
     const est = estimateCost(current, 4096)
     const unsaved = current.trim() && current !== savedContentRef.current
@@ -87,15 +90,37 @@ export function useGenerationController(deps: GenerationControllerDeps): {
       title: '生成正文',
       message: (unsaved ? '当前章节有未保存内容，重新生成将丢弃它。\n\n' : '') + `将生成正文（输出预算约 4096 tokens）。输入上下文估算 ${est.tokens.toLocaleString()} tokens，预计${fmtCost(est.cost)}。`,
       confirmText: '生成',
-      action: () => void generateContinue(current)
+      action: () => {
+        if (!identity.isActive(owner)) return
+        if ((editorRef.current?.view?.state.doc.toString() ?? content) !== current) {
+          onActionError('确认期间正文已变化，请重新发起生成')
+          return
+        }
+        void generateContinue(current)
+      }
     })
     return
   }
 
   // v0.22.0：确认后的生成主体（拆出：themed confirm 为异步触发；原 generate 主体逻辑不变）
   const generateContinue = async (current: string): Promise<void> => {
-    if (!selectedChapter) return
+    if (!selectedChapter || generateBusyRef.current) return
+    const owner = identity.capture()
+    const active = () => identity.isActive(owner)
     const prevContent = current
+    const prevSaved = savedContentRef.current
+    const retainConflict = async (): Promise<void> => {
+      const detail = await novelApi.chapterDetail(novelId, selectedChapter)
+      if (!active()) return
+      const serverText = detail.chapter.content ?? ''
+      const text = prevContent !== prevSaved ? prevContent : serverText
+      setContent(text)
+      savedContentRef.current = serverText
+      dirtyRef.current = text !== serverText
+      setStreamStat(null)
+      onGenerated('正文已变化，AI 结果保留在版本历史，人工稿未覆盖')
+      await invalidate()
+    }
     generateBusyRef.current = true
     streamingRef.current = true
     setStreaming(true)
@@ -110,11 +135,13 @@ export function useGenerationController(deps: GenerationControllerDeps): {
         selectedChapter,
         {
           onDelta: (text) => {
+            if (!active()) return
             // P20（U6）：rAF 合并——每帧只触发一次 setState + 统计（避免高频 delta 全页重渲染）
             pendingDeltaRef.current += text
             if (rAFRef.current !== null) return
             rAFRef.current = requestAnimationFrame(() => {
               rAFRef.current = null
+              if (!active()) return
               const batch = pendingDeltaRef.current
               pendingDeltaRef.current = ''
               setContent((prev) => prev + batch)
@@ -128,6 +155,7 @@ export function useGenerationController(deps: GenerationControllerDeps): {
             })
           },
           onDone: async (payload) => {
+            if (!active()) return
             // 批1-#3：内容已全量落定——清缓冲防重复追加
             if (rAFRef.current !== null) {
               cancelAnimationFrame(rAFRef.current)
@@ -135,6 +163,7 @@ export function useGenerationController(deps: GenerationControllerDeps): {
             }
             pendingDeltaRef.current = ''
             contentSettledRef.current = true
+            if (payload.persisted === false) { await retainConflict(); return }
             setContent(payload.content)
             savedContentRef.current = payload.content
             dirtyRef.current = false
@@ -145,12 +174,30 @@ export function useGenerationController(deps: GenerationControllerDeps): {
             abortRef.current = null
           },
           onAborted: async (payload) => {
+            if (!active()) return
             if (rAFRef.current !== null) {
               cancelAnimationFrame(rAFRef.current)
               rAFRef.current = null
             }
             pendingDeltaRef.current = ''
             contentSettledRef.current = true
+            if (payload.localFallback) {
+              // 本地取消没有服务端落库回执，先保留流中累积的版本再核对正文。
+              try {
+                if (payload.content.trim()) await novelApi.createVersion(novelId, selectedChapter, 'AI 待采用：本地取消时的累积内容', payload.content)
+                await retainConflict()
+                if (active()) onGenerated('已取消；累积结果已保留为待采用版本，正文以服务端核对结果为准')
+              } catch {
+                if (active()) {
+                  setContent(payload.content || prevContent)
+                  savedContentRef.current = prevSaved
+                  dirtyRef.current = true
+                  onActionError('取消后的保存状态未确认，累积内容保留在编辑器，请先复制备份并核对版本')
+                }
+              }
+              return
+            }
+            if (payload.persisted === false) { await retainConflict(); return }
             setContent(payload.content)
             savedContentRef.current = payload.content
             dirtyRef.current = false
@@ -161,6 +208,7 @@ export function useGenerationController(deps: GenerationControllerDeps): {
             abortRef.current = null
           },
           onError: (message) => {
+            if (!active()) return
             // P9 A3：失败恢复生成前的内容（残留增量一并丢弃）
             if (rAFRef.current !== null) {
               cancelAnimationFrame(rAFRef.current)
@@ -176,6 +224,7 @@ export function useGenerationController(deps: GenerationControllerDeps): {
           },
           // P20（D1）：context 事件接入——预算/缓存诊断显示
           onContext: (payload) => {
+            if (!active()) return
             const p = payload as { budgetUsed?: number; budgetLimit?: number; frozenHash?: string }
             setStreamStat(
               `上下文 ${((p.budgetUsed ?? 0) / 1000).toFixed(1)}k / ${((p.budgetLimit ?? 0) / 1000).toFixed(1)}k tokens · 冻结 ${String(p.frozenHash ?? '').slice(0, 8)}`

@@ -78,6 +78,23 @@ describe('generateChapterSse 取消保留（P9 A2）', () => {
     await generateChapterSse(1, 2, { onAborted }, controller.signal)
 
     expect(onAborted).toHaveBeenCalledTimes(1)
-    expect(onAborted.mock.calls[0][0]).toEqual({ content: '', wordCount: 0 })
+    expect(onAborted.mock.calls[0][0]).toEqual({ content: '', wordCount: 0, localFallback: true })
+  })
+
+  it('终态冲突处理后不再因取消重复执行本地兜底，并等待异步处理完成', async () => {
+    const controller = new AbortController()
+    vi.stubGlobal('fetch', vi.fn(async () => mockFetchStream([
+      { event: 'done', data: { content: '候选正文', persisted: false, candidateVersionId: 5 } }
+    ], controller.signal)))
+    let handled = false
+    const onAborted = vi.fn()
+    await generateChapterSse(1, 2, { onDone: async payload => {
+      expect(payload.persisted).toBe(false)
+      controller.abort()
+      await Promise.resolve()
+      handled = true
+    }, onAborted }, controller.signal)
+    expect(handled).toBe(true)
+    expect(onAborted).not.toHaveBeenCalled()
   })
 })

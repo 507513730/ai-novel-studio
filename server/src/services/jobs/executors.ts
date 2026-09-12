@@ -148,6 +148,9 @@ const solutionChapterExecutor: JobExecutor<SolutionChapterPayload> = async ({ db
     progress: 100,
     status: 'done',
     resultJson: JSON.stringify({
+      content: r.content,
+      persisted: r.persisted,
+      candidateVersionId: r.candidateVersionId,
       wordCount: r.wordCount,
       title: r.title,
       degraded: r.degraded,

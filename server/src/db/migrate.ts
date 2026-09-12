@@ -494,6 +494,17 @@ const MIGRATIONS: Array<{ version: number; statements: string[] }> = [
     // 与相似度检索并存：相似度按相关性召回（超窗兜底），触发式切中关键词即注入（NovelAI Lorebook 机制）。
     version: 23,
     statements: [`ALTER TABLE kb_doc ADD COLUMN keywords TEXT NOT NULL DEFAULT ''`]
+  },
+  {
+    // D146：正文保存/恢复回执与正文同事务提交，重放不重复累计字数。
+    version: 24,
+    statements: [`CREATE TABLE IF NOT EXISTS chapter_save_receipt (
+      chapter_id INTEGER NOT NULL REFERENCES chapter(id) ON DELETE CASCADE,
+      operation_id TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (chapter_id, operation_id)
+    )`]
   }
 ]
 

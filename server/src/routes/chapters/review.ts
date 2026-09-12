@@ -124,12 +124,14 @@ export function registerChapterReviewRoutes(router: Router, db: DatabaseSync): v
       const novelId = Number(req.params.novelId)
       const chapterId = Number(req.params.chapterId)
       const r = await fixChapterOnce(db, novelId, chapterId)
-      if (r.reason) {
+      if (r.reason && !r.candidateVersionId) {
         res.status(400).json({ error: r.reason })
         return
       }
       res.json({
         fixed: r.fixed,
+        candidateVersionId: r.candidateVersionId,
+        reason: r.reason,
         round: r.round,
         content: r.content,
         rescore: { score: r.score, needsFix: !r.passed, passed: r.passed }

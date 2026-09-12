@@ -6,6 +6,7 @@ export interface ClaimedChapter {
   novelId: number
   previousStatus: string
   generationToken: string
+  initialContent: string
 }
 
 export interface PersistedGeneration {
